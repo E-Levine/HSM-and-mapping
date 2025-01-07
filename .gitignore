@@ -54,4 +54,3 @@ Output/*
 TEMP*
 Reference files/KML/*
 Reference files/Grids/*
-!Reference files/Grids/*.zip

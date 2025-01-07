@@ -7,7 +7,7 @@
 #
 ##Establish the site code and version for this project. (Required for both code chunks.)
 #
-Site_code <- c("TB") #two-letter site code used throughout for identifying files
+Site_code <- c("SL") #two-letter site code used throughout for identifying files
 Version <- c("v1") #current version number of the model for the specified site
 #
 #
