@@ -11,4 +11,14 @@ All files other than R code and R project files will be saved locally due to the
 - Run the first chunk from "1_SetUp_Folders": "Folder set up" section.
 - Copy the KML files into the appropriate "Reference files/KML/Site code_version" folder.
 - Run the second chunk from "1_SetUp_Folder": "File separation" section. Skip this step if files are already separated.
+- Determine data layers to include in model. Gather data as needed and add to the approriate "Site code_verion/Data" folder.
+- Update the "Setup_data" file as need for the model and based on the data being used. (Refer to the *Set up data* section for more guidance.)
+- Run the third chunk from "1_SetUp_Folder": "Parameter assignment" section. Update the code as approraite for the model.
 - Proceed to the "HSM_Creation" R code file.  
+
+### Set up data
+A basis "Setup_data" file is located within the "Reference files" folder. This file operates as both a control for consistency among models as needed (i.e., naming conventions) and as a tool to track model parameters in individual models. Data should only be ADDED to this file, not removed to maintain consistency among versions. Updated versions of the file will be added to the proper Site code_version folder for documentation to track parameters and scoring used within specific models. <br>
+*Current data types included/accounted for:*
+- Long_Names: Long names for sites, parameters, layer types, and data types.
+- Section_Order: Prioirty order for sections within sites. Used to assign section designations in the case of overlapping spatial polygons.
+- Parameter_Order: Prioirty order for data layers used within the model. Used to assign parameter order for model weighting.
