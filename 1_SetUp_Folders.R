@@ -45,34 +45,58 @@ for (i in 1:nrow(Polygons)) {
 #
 ##Creation of reference file for completing the model
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(readxl, tidyverse, install = TRUE)
+pacman::p_load(readxl, tidyverse, openxlsx, install = TRUE)
 #
 ##List of information required (Y/N) 
-#Set if the information is needed for the current iteration of Site*Version
+#Set if the information is needed for the current iteration of Site*Version. Information needs to already exist and be defined within the base Setup_data file.
 Long_Names <- c("Y")
 Order_of_Sections <- c("Y")
+Order_of_Parameters <- c("Y")
 Shellfish_Harvest_Area_Designations <- c("N")
 #
 if(file.exists("Reference files/Setup_data.xlsx")){
   #Load sheets if file exists and if data is required. If data isn't required, state as such.
-  if(Long_Names == "Y"){Names <- read_excel("Reference files/Setup_data.xlsx", sheet = "Long_Names")} else {Names <- "Not needed"}
-  if(Order_of_Sections == "Y"){Section_Order <- read_excel("Reference files/Setup_data.xlsx", sheet = "Section_Order")} else {Section_Order <- "Not needed"}
-  if(Shellfish_Harvest_Area_Designations == "Y"){SHA  <- read_excel("Reference files/Setup_data.xlsx", sheet = "Testing")} else {SHA <- "Not needed"}
-  print("Excel file found. Required sheets loaded into data frames")
+  if(Long_Names == "Y"){Names <- read_excel("Reference files/Setup_data.xlsx", sheet = "Long_Names") %>% as.data.frame()} else {Names <- "Long names not needed"}
+  if(Order_of_Sections == "Y"){Sections <- read_excel("Reference files/Setup_data.xlsx", sheet = "Section_Order") %>% as.data.frame() %>% mutate(Order = as.integer(Order))} else {Sections <- "Section order not needed"}
+  if(Order_of_Parameters == "Y"){Parameters <- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Order") %>% as.data.frame() %>% mutate(Priority = as.integer(Priority))} else {Parameters <- "Parameter order not needed"}
+  if(Shellfish_Harvest_Area_Designations == "Y"){SHAreas  <- read_excel("Reference files/Setup_data.xlsx", sheet = "Testing")} else {SHAreas <- "Test not needed"}
+  print("Excel file found. Required sheets loaded into data frames.")
 } else {
-  if(Long_Names == "Y"){Names <- data.frame(Type = character(), Designation = character(), LongName = character(), stringsAsFactors = FALSE)} else {Names <- "Not needed."}
-  if(Order_of_Sections == "Y"){Section_Orders <- data.frame(Site = character(), Section = character(), Order = integer(), stringsAsFactors = FALSE)} else {Section_Orders <- "Not needed."}
-  if(Shellfish_Harvest_Area_Designations == "Y"){SHA <- data.frame()} else {SHA <- "Not needed."}
-  print("Excel file not found. Required dataframe created.")
+  print("Excel file not found. Please find the data file and check for required data.")
+} 
+#
+#
+##Limit data to site data and designated data
+if(Long_Names == "Y"){Names <- Names %>% subset(Designation == Site_Code | Needed == "Y")} else {Names <- Names}
+if(Order_of_Sections == "Y"){Sections%>% subset(Site == Site_Code & !is.na(Order))} else {Sections <- Sections}
+if(Order_of_Parameters == "Y"){Parameters %>% subset(!is.na(Priority))} else {Parameters <- Parameters}
+if(Shellfish_Harvest_Area_Designations == "Y"){SHAreas <- "In progress. Code needs to be updated."} else {SHAreas <- SHAreas}
+#
+#
+###Function to check list of objects, identify which are data frames or text.
+#List of all possible data frames
+df_list <- list("Long_Names" = Names, 
+                "Section_Order" = Sections, 
+                "Parameter_Order" = Parameters, 
+                "SHA" = SHAreas)
+#
+Identify_dataframes <- function(object_list){
+  #Empty object to fill
+  dataframes <- ls()
+  notdataframes <- ls()
+  #Identify objects that are data frames
+  df_types <- sapply(object_list, is.data.frame)
+  #Return names of objects that are data frames 
+  dataframes <<- names(df_types[df_types == TRUE])
+  notdataframes <<- names(df_types[df_types == FALSE])
 }
 #
-##Check data frames for required data.
-Names
-Section_Order
-SHA
-#
-##Add required data if missing. 
+##Return list of data included and excluded from model.
+Identify_dataframes(df_list)
+paste("These data are to be included in the model: ", paste(unlist(dataframes), collapse = ", "))
+paste("These data are NOT included in the model: ", paste(unlist(notdataframes), collapse = ", "))
 #
 ##Write data used to the version tracking files (Data/Site_Code_Version).
+selected_data <- df_list[(names(df_list) %in% dataframes == TRUE)]
+write.xlsx(selected_data, file = paste0(Site_Code, "_", Version, "/Data/", Site_Code, "_", Version, "_model_setup.xlsx"), sheetName = names(selected_data))
 #
-##Add any missing data back to the primary SetUp file for consistency. 
