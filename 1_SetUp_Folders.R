@@ -13,9 +13,14 @@ Version <- c("v1") #current version number of the model for the specified site
 #
 ####Folder set up####
 ##Code checks if folders exist before creating folders for organizing by site and version. 
-if(!dir.exists(paste0("Data/",Site_Code, "_", Version))){dir.create(paste0("Data/",Site_Code, "_", Version))}
-if(!dir.exists(paste0("Output/",Site_Code, "_", Version))){dir.create(paste0("Output/",Site_Code, "_", Version))}
-if(!dir.exists(paste0("Reference files/KML/",Site_Code, "_", Version))){dir.create(paste0("Output/",Site_Code, "_", Version))}
+if(!dir.exists(paste0(Site_code, "_", Version))){dir.create(paste0(Site_code, "_", Version)) 
+  print(paste(Site_code, " version ", Version, " folder created."))} else {print(paste(Site_code, " version ", Version, " folder altready exists."))}
+if(!dir.exists(paste0(Site_code, "_", Version,"/Data"))){dir.create(paste0(Site_code, "_", Version, "/Data"))
+  print(paste(Site_code, " version ", Version, " Data folder created."))} else {print(paste(Site_code, " version ", Version, " Data folder already exists."))}
+if(!dir.exists(paste0(Site_code, "_", Version, "/Output"))){dir.create(paste0(Site_code, "_", Version, "/Output"))
+  print(paste(Site_code, " version ", Version, " Output folder created."))} else {print(paste(Site_code, " version ", Version, " Output folder already exists."))}
+if(!dir.exists(paste0("Reference files/KML/",Site_code, "_", Version))){dir.create(paste0("Reference files/KML/",Site_code, "_", Version))
+  print(paste(Site_code, " version ", Version, " KML folder created."))}  else {print(paste(Site_code, " version ", Version, " KML folder already exists."))}
 #
 #
 #
