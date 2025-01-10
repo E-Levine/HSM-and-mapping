@@ -58,7 +58,7 @@ Shellfish_Harvest_Area_Designations <- c("N")
 ##Gather required data.
 Gather_setup_data(Long_Names, Order_of_Sections, Order_of_Parameters, Shellfish_Harvest_Area_Designations)
 #
-#List of all possible data frames. Secondary check of possible data-confirm Y is enetered above for anyting needed. 
+#List of all possible data frames. Secondary check of possible data-confirm Y is entered above for anything needed. 
 df_list <- list("Long_Names" = Names, 
                 "Section_Order" = Sections, 
                 "Parameter_Order" = Parameters, 
