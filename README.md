@@ -7,6 +7,7 @@ All files other than R code and R project files will be saved locally due to the
 *Set up steps:*
 - Create local fork of the repo. (Fork should contain project; code "1"; folders: Data, HSM code, Output, Reference files").
 - Determine two-letter site code and section names.
+- Identify the approriate StateGrid and add the required pico-grid fodler to the "Reference files/Grids" folder.
 - Create or locate the necessary KML files (refer to "Site_Section_KML_creation_SOP" found in the Reference documentation for file creation).
 - Run the first chunk from "1_SetUp_Folders": "Folder set up" section.
 - Copy the KML files into the appropriate "Reference files/KML/Site code_version" folder.
