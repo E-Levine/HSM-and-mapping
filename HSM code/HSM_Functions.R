@@ -6,12 +6,15 @@
 #
 KML_separation <- function(kml_file){
 Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
+filelist <- list()
 for (i in 1:nrow(Polygons)) {
+  name <- Polygons$Name[1]
   polygon <- kml_file %>% filter(Name == Polygons$Name[i]) #Get the current unique polygon
   filename <- paste0("Reference files/KML/", Site_Code, "_", Version, "/",Polygons$Name[i], ".kml") # Write to separate KML file
-  st_write(polygon, filename, driver = "kml")
-  return(print(paste("Polygon", i, "to", filename)))
+  st_write(polygon, filename, driver = "kml", append = FALSE)
+  filelist[i] <- paste("Polygon", name, "to", filename)
 }
+return(filelist)
 }
 #
 #
