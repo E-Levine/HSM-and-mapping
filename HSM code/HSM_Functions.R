@@ -37,14 +37,16 @@ if(file.exists("Reference files/Setup_data.xlsx")){
 ##Function to check list of objects, identify which are data frames or text.
 Identify_dataframes <- function(object_list){
   #Empty object to fill
-  dataframes <- ls()
-  notdataframes <- ls()
+  dataframes <- list()
+  notdataframes <- list()
   #Identify objects that are data frames
   df_types <- sapply(object_list, is.data.frame)
   #Return names of objects that are data frames 
-  dataframes <<- names(df_types[df_types == TRUE])
-  notdataframes <<- names(df_types[df_types == FALSE])
+  dataframes <- names(df_types[df_types == TRUE])
+  notdataframes <- names(df_types[df_types == FALSE])
   selected_data <<- object_list[(names(object_list) %in% dataframes == TRUE)]
-  return(paste("These data are to be included in the model: ", paste(unlist(dataframes), collapse = ", ")),
-         paste("These data are NOT included in the model: ", paste(unlist(notdataframes), collapse = ", ")))
+  t_line1 <- paste("These data are to be included in the model: ", paste(unlist(dataframes), collapse = ", "))
+  t_line2 <- paste("These data are NOT included in the model: ", paste(unlist(notdataframes), collapse = ", "))
+  dfoutput <<- sprintf("%s\n%s", t_line1, t_line2)
+  cat(dfoutput)
 }

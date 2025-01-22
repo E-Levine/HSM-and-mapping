@@ -7,6 +7,7 @@ All files other than R code and R project files will be saved locally due to the
 *Set up steps:*
 - Create local fork of the repo. (Fork should contain project; code "1"; folders: Data, HSM code, Output, Reference files").
 - Determine two-letter site code and section names.
+- Identify the approriate StateGrid and add the required pico-grid fodler to the "Reference files/Grids" folder.
 - Create or locate the necessary KML files (refer to "Site_Section_KML_creation_SOP" found in the Reference documentation for file creation).
 - Run the first chunk from "1_SetUp_Folders": "Folder set up" section.
 - Copy the KML files into the appropriate "Reference files/KML/Site code_version" folder.
@@ -17,8 +18,8 @@ All files other than R code and R project files will be saved locally due to the
 - Proceed to the "HSM_Creation" R code file.  
 
 ### Set up data
-A basis "Setup_data" file is located within the "Reference files" folder. This file operates as both a control for consistency among models as needed (i.e., naming conventions) and as a tool to track model parameters in individual models. Data should only be ADDED to this file, not removed to maintain consistency among versions. Updated versions of the file will be added to the proper Site code_version folder for documentation to track parameters and scoring used within specific models. <br>
+A base "Setup_data" file is located within the "Reference files" folder. This file operates as both a control for consistency among models (i.e., naming conventions) and as a tool to track model parameters in individual models. Data should only be ADDED to this file, not removed to maintain consistency among versions. However, data can be updated to include or exclude data from models. Updated versions of the file will be added to the proper Site code_version folder for documentation to track parameters and scoring used within specific models. Check the base file for data needed, add missing data, and updated exitsing data to inlclude or exclude where appropriate. <br>
 *Current data types included/accounted for:*
-- Long_Names: Long names for sites, parameters, layer types, and data types.
-- Section_Order: Prioirty order for sections within sites. Used to assign section designations in the case of overlapping spatial polygons.
-- Parameter_Order: Prioirty order for data layers used within the model. Used to assign parameter order for model weighting.
+- Long_Names: Long names for sites, parameters, layer types, and data types. Requires a Yes/No desgnation for inclusion or exclusion in models.
+- Section_Order: Prioirty order for sections within sites. Used to assign section designations in the case of overlapping spatial polygons. Data is filtered based on site code.
+- Parameter_Order: Prioirty order for data layers used within the model. Used to assign parameter order for model weighting. Parameters to included should be assigned a priority number and data to exclude should be prioritized as "NA".
