@@ -19,6 +19,9 @@ Version <- c("v1") #Model version
 State_Grid <- c("H4")
 Alt_Grid <- c(NA) #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
 #
+##Parameters
+Sections_designatied <- c("Y") #Y/N are section designations used
+#
 #
 #
 ####Load files####
@@ -56,11 +59,12 @@ for (i in seq_along(unique(SectionList))) {
   assign(paste0("Section",i), temp)
 }
 #
-#Sections have been loaded into objects for use. Next steps to limit grid cells and assign Section. Then move into function.
+#END OF FILE LOADING
 #
 #
 ####Limit to desired area, assign sections####
 #
+####ADD CODE TO RUN IF Sections_designated == Y or skip if == N
 ##Limit to site area
 if(!is.na(Alt_Grid)){
   Site_Grid <- rbind(PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,], 
@@ -72,3 +76,29 @@ if(!is.na(Alt_Grid)){
 }
 #
 ##Assign sections 
+#Create empty list
+temp_sections <- list()
+ for (i in mget(ls(pattern = "Section[0-9]"))) {
+   #Assign grid cells to section based on overlap with section layer
+  temp <- Site_Grid[lengths(st_intersects(Site_Grid, i)) > 0,] %>% #Limit to section area
+    mutate(Site = Site_Code, #Add Site code, section code
+           Section = OrderSections$Section[OrderSections$KML_Name == i$Name]) %>%
+    #Add site long name
+    left_join(df_list[[1]] %>% filter(Type == "Site") %>% dplyr::select(Designation, LongName) %>% rename(Site = Designation))
+  temp_sections[[length(temp_sections) + 1]] <- temp
+  #Add all data together into one output
+  Section_grid <- do.call(rbind, temp_sections) %>% 
+    mutate(Section = factor(Section, levels = unique(df_list[[2]]$Section[order(df_list[[2]]$Order)]), ordered = TRUE)) %>% #Relevel Section based on specified order
+    arrange(Section) %>% group_by(PGID) %>% slice(1) #Keep only one Section-assignment per grid cell
+ }
+rm(temp, i, temp_sections)
+gc()
+#
+##Output head of updated data frame and map of sections
+head(Section_grid)
+tm_shape(Section_grid) + tm_fill(col = "Section")
+#
+#
+###END OF SECTION ASSIGNMENT
+#
+#
