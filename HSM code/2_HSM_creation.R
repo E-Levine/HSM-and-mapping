@@ -9,7 +9,7 @@
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
                sf, raster, terra,
-               leaflet, tmap, open
+               leaflet, tmap, openxlsx,
                install = TRUE) #Mapping and figures
 #
 #
@@ -24,15 +24,29 @@ Alt_Grid <- c(NA) #Two-letter StateGrid ID, enter NA if no secondary StateGrid n
 ####Load files####
 #
 ##Base grid files
-Grid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",State_Grid,"/Florida_PicoGrid_WGS84_",State_Grid,"_clip.shp"))
-if(!is.na(Alt_Grid)){Alt_MicroGrid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",Alt_State_Grid,"/Florida_PicoGrid_WGS84_",Alt_State_Grid,"_clip.shp"))}
+PicoGrid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",State_Grid,"/Florida_PicoGrid_WGS84_",State_Grid,"_clip.shp"))
+if(!is.na(Alt_Grid)){Alt_PicoGrid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",Alt_Grid,"/Florida_PicoGrid_WGS84_",Alt_Grid,"_clip.shp"))}
 #
 #Check grid(s), view map(s)  to confirm area
-head(Grid)
+head(PicoGrid)
 if(!is.na(Alt_Grid)){head(Alt_Grid)} else {print("No additional grid is being used.")}
 #
+#
+##Excel setup information
+load_working_info <- function(Site_version){
+  filename <- paste0(Site_version, "/Data/", Site_version, "_model_setup.xlsx") 
+  sheets <- excel_sheets(filename)
+  df_list <<- lapply(sheets, function(sheet){
+    read_excel(filename, sheet = sheet)
+  })
+  names(df_list) <- sheets
+  return(df_list)
+}
+load_working_info(paste0(Site_Code, "_", Version))
+#
+#
 ##Load site KML and section KMLs as needed
-OrderSections <- read_excel(paste0(Site_Code, "_", Version, "/Data/", Site_Code, "_", Version, "_model_setup.xlsx"), sheet = "Section_Order")
+OrderSections <- df_list[[2]]
 Site_area <- st_read(paste0("Reference files/KML/",Site_Code, "_", Version,"/", Site_Code, ".kml"))
 plot(Site_area[1]) #Output site area plot
 
@@ -40,7 +54,21 @@ SectionList <- unlist((OrderSections %>% arrange(Order))[,"KML_Name"]) #Output l
 for (i in seq_along(unique(SectionList))) {
   temp <- st_read(paste0("Reference files/KML/",Site_Code, "_", Version,"/", unique(SectionList)[i], ".kml"))
   assign(paste0("Section",i), temp)
-  
 }
 #
-#Sections have been loaded into objects for us. Next steps to limit grid cells and assign Section. Then move into function.
+#Sections have been loaded into objects for use. Next steps to limit grid cells and assign Section. Then move into function.
+#
+#
+####Limit to desired area, assign sections####
+#
+##Limit to site area
+if(!is.na(Alt_Grid)){
+  Site_Grid <- rbind(PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,], 
+                     Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, Estuary_area))> 0,])
+  rm(PicoGrid, Alt_PicoGrid)
+} else {
+  Site_Grid <- PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,] 
+  rm(PicoGrid)
+}
+#
+##Assign sections 
