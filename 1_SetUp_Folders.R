@@ -14,14 +14,14 @@ source("HSM code/HSM_Functions.R")
 #
 ####Folder set up####
 ##Code checks if folders exist before creating folders for organizing by site and version. 
-if(!dir.exists(paste0(Site_code, "_", Version))){dir.create(paste0(Site_code, "_", Version)) 
-  print(paste(Site_code, " version ", Version, " folder created."))} else {print(paste(Site_code, " version ", Version, " folder already exists."))}
-if(!dir.exists(paste0(Site_code, "_", Version,"/Data"))){dir.create(paste0(Site_code, "_", Version, "/Data"))
-  print(paste(Site_code, " version ", Version, " Data folder created."))} else {print(paste(Site_code, " version ", Version, " Data folder already exists."))}
-if(!dir.exists(paste0(Site_code, "_", Version, "/Output"))){dir.create(paste0(Site_code, "_", Version, "/Output"))
-  print(paste(Site_code, " version ", Version, " Output folder created."))} else {print(paste(Site_code, " version ", Version, " Output folder already exists."))}
-if(!dir.exists(paste0("Reference files/KML/",Site_code, "_", Version))){dir.create(paste0("Reference files/KML/",Site_code, "_", Version))
-  print(paste(Site_code, " version ", Version, " KML folder created."))}  else {print(paste(Site_code, " version ", Version, " KML folder already exists."))}
+if(!dir.exists(paste0(Site_Code, "_", Version))){dir.create(paste0(Site_Code, "_", Version)) 
+  print(paste(Site_Code, " version ", Version, " folder created."))} else {print(paste(Site_Code, " version ", Version, " folder already exists."))}
+if(!dir.exists(paste0(Site_Code, "_", Version,"/Data"))){dir.create(paste0(Site_Code, "_", Version, "/Data"))
+  print(paste(Site_Code, " version ", Version, " Data folder created."))} else {print(paste(Site_Code, " version ", Version, " Data folder already exists."))}
+if(!dir.exists(paste0(Site_Code, "_", Version, "/Output"))){dir.create(paste0(Site_Code, "_", Version, "/Output"))
+  print(paste(Site_Code, " version ", Version, " Output folder created."))} else {print(paste(Site_Code, " version ", Version, " Output folder already exists."))}
+if(!dir.exists(paste0("Reference files/KML/",Site_Code, "_", Version))){dir.create(paste0("Reference files/KML/",Site_Code, "_", Version))
+  print(paste(Site_code, " version ", Version, " KML folder created."))}  else {print(paste(Site_Code, " version ", Version, " KML folder already exists."))}
 #
 #
 #
@@ -33,12 +33,14 @@ if(!dir.exists(paste0("Reference files/KML/",Site_code, "_", Version))){dir.crea
 ##Ensure the KML_all file has been copied to the appropriate folder created in the step above (Site and version) before proceeding.
 ##Run the following code if site and section polygons need to be separated (i.e. One file from Google Earth)
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(sf, tidyverse, install = TRUE) #Mapping and figures
+pacman::p_load(sf, tidyverse, stringr, install = TRUE) #Mapping and figures
 #
-kml_file <- st_read(paste0("Reference files/KML/", Site_Code, "_", Version, "/", Site_Code,"_all.kml")) #Load file
+#Does file need to be separated or existing files gathered? 
+#If separated, status = "separated"; if existing, status = list of name of existing files from Reference files/KML.
+KML_status <- c("SL", "SL-Central", "SL-North", "SL-South")
 #
 KML_separation(kml_file)
-##Confirm all polygons needed are listed in the output. If any are missing, they are missing from the "all" file. 
+##If file was separated, confirm all polygons needed are listed in the output. If any are missing, they are missing from the "all" file. 
 #Confirm names are accurate, updated as needed within the local directory or return to the KML file creation step.
 #
 #
