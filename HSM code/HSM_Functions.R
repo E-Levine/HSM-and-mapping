@@ -4,17 +4,37 @@
 #
 ###  File separation
 #
-KML_separation <- function(kml_file){
-Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
-filelist <- list()
-for (i in 1:nrow(Polygons)) {
-  name <- Polygons$Name[1]
-  polygon <- kml_file %>% filter(Name == Polygons$Name[i]) #Get the current unique polygon
-  filename <- paste0("Reference files/KML/", Site_Code, "_", Version, "/",Polygons$Name[i], ".kml") # Write to separate KML file
-  st_write(polygon, filename, driver = "kml", append = FALSE)
-  filelist[i] <- paste("Polygon", name, "to", filename)
-}
-return(filelist)
+KML_separation <- function(Status_of_KML){
+  if(length(Status_of_KML) == 1){
+    kml_file <- st_read(paste0("Reference files/KML/PreProcessing/", Site_Code, "_", Version, "/", Site_Code,"_all.kml")) #Load file
+    Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
+    filelist <- list()
+    for (i in 1:nrow(Polygons)) {
+      name <- Polygons$Name[1]
+      polygon <- kml_file %>% filter(Name == Polygons$Name[i]) #Get the current unique polygon
+      filename <- paste0("Reference files/KML/", Site_Code, "_", Version, "/",Polygons$Name[i], ".kml") # Write to separate KML file
+      st_write(polygon, filename, driver = "kml", append = FALSE)
+      filelist[i] <- paste("Polygon", name, "to", filename)
+      }
+    return(filelist)
+  } else {
+    search_strings  <- Status_of_KML
+    # List of available files 
+    files <- list.files("Reference files/KML/", full.names = TRUE)
+    #
+    for (file in files) {
+      # Get the filename without the path
+      filename <- basename(file)
+      
+      # Check if any of the search strings are in the filename
+      if (any(str_detect(filename, search_strings))) {
+        # Copy the file to locationB
+        file.copy(file, file.path(paste0("Reference files/KML/", Site_Code, "_", Version, "/"), filename))
+        }
+    }
+    # Print a message indicating completion
+    message(paste0("Files copied from [Reference files/KML/] to [Reference files/KML/", Site_Code, "_", Version, "/]."))
+  }
 }
 #
 #
