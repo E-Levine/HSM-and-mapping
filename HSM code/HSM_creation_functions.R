@@ -18,7 +18,6 @@ load_working_info <- function(SiteCode, VersionID){
 }
 #
 #
-#
 #### Function to load grid(s) and site area, clips to overlap, saves final grid, and keeps final grid for use
 get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesignated){
   #
@@ -92,4 +91,8 @@ get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesig
   #
   return(list(paste0("Sections included in site:"), SectionList, Section_plot))
 }
+#
+#
+#
+#### Assigning polygon data #####
 #
