@@ -13,15 +13,8 @@ source("HSM code/HSM_Functions.R")
 #Proceed to folder setup, file separation, and parameter assignment as needed
 #
 ####Folder set up####
-##Code checks if folders exist before creating folders for organizing by site and version. 
-if(!dir.exists(paste0(Site_Code, "_", Version))){dir.create(paste0(Site_Code, "_", Version)) 
-  print(paste(Site_Code, " version ", Version, " folder created."))} else {print(paste(Site_Code, " version ", Version, " folder already exists."))}
-if(!dir.exists(paste0(Site_Code, "_", Version,"/Data"))){dir.create(paste0(Site_Code, "_", Version, "/Data"))
-  print(paste(Site_Code, " version ", Version, " Data folder created."))} else {print(paste(Site_Code, " version ", Version, " Data folder already exists."))}
-if(!dir.exists(paste0(Site_Code, "_", Version, "/Output"))){dir.create(paste0(Site_Code, "_", Version, "/Output"))
-  print(paste(Site_Code, " version ", Version, " Output folder created."))} else {print(paste(Site_Code, " version ", Version, " Output folder already exists."))}
-if(!dir.exists(paste0("Reference files/KML/",Site_Code, "_", Version))){dir.create(paste0("Reference files/KML/",Site_Code, "_", Version))
-  print(paste(Site_code, " version ", Version, " KML folder created."))}  else {print(paste(Site_Code, " version ", Version, " KML folder already exists."))}
+##Function checks if folders exist before creating folders for organizing by site and version. 
+create_folders(Site_Code, Version)
 #
 #
 #
@@ -36,7 +29,7 @@ if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(sf, tidyverse, stringr, install = TRUE) #Mapping and figures
 #
 #Does file need to be separated or existing files gathered? 
-#If separated, status = "separated"; if existing, status = list of name of existing files from Reference files/KML.
+#If requiring separation of one file into one per section, status = "separated"; if existing, status = list of names of existing files from Reference files/KML.
 KML_status <- c("SL", "SL-Central", "SL-North", "SL-South")
 #
 KML_separation(kml_file)
@@ -55,20 +48,16 @@ pacman::p_load(readxl, tidyverse, openxlsx, install = TRUE)
 Long_Names <- c("Y")
 Order_of_Sections <- c("Y")
 Order_of_Parameters <- c("Y")
+FL_Oysters <- c("Y")
 Shellfish_Harvest_Area_Designations <- c("N")
 #
-##Gather required data.
-Gather_setup_data(Long_Names, Order_of_Sections, Order_of_Parameters, Shellfish_Harvest_Area_Designations)
-#
-#List of all possible data frames. Secondary check of possible data-confirm Y is entered above for anything needed. 
-df_list <- list("Long_Names" = Names, 
-                "Section_Order" = Sections, 
-                "Parameter_Order" = Parameters, 
-                "SHA" = SHAreas)
+##Gather required data.##Code does not need to be changed. 
+Gather_setup_data(Long_Names, Order_of_Sections, Order_of_Parameters, FL_Oysters, Shellfish_Harvest_Area_Designations)
+#Check output list of all possible data frames. Confirm data needed is listed. If changes are needed, update Y/N status above, then re-run Gather_setup_data()
 #
 ##Return list of data included and excluded from model.
 Identify_dataframes(df_list)
 #
-##Write data used to the version tracking files (Data/Site_Code_Version).
+##If above data is correct, run line to write data used to the version tracking files (Data/Site_Code_Version).
 write.xlsx(selected_data, file = paste0(Site_Code, "_", Version, "/Data/", Site_Code, "_", Version, "_model_setup.xlsx"), sheetName = names(selected_data))
 #
