@@ -1,6 +1,6 @@
-##Functions used for habitat suitability mapping project
+##Functions used for habitat suitability mapping project set up
 ##
-####SetUp_Folders####
+#### SetUp_Folders
 create_folders <- function(Site_Code, Version) {
   # Create main folder
   main_folder <- paste0(Site_Code, "_", Version)
@@ -36,7 +36,10 @@ create_folders <- function(Site_Code, Version) {
     }
 }
 #
-####File separation####
+#
+#
+#
+#### File separation
 #
 KML_separation <- function(Status_of_KML){
   if(length(Status_of_KML) == 1){
@@ -73,7 +76,8 @@ KML_separation <- function(Status_of_KML){
 #
 #
 #
-####Parameter Assignment####
+#### Parameter Assignment
+#
 ##Function to read excel files and limit to required setup data
 Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters, FL_Oysters, Shellfish_Harvest_Area_Designations){
 if(file.exists("Reference files/Setup_data.xlsx")){
@@ -94,6 +98,7 @@ if(file.exists("Reference files/Setup_data.xlsx")){
 } 
   }
 #
+#
 ##Function to check list of objects, identify which are data frames or text.
 Identify_dataframes <- function(object_list){
   #Empty object to fill
@@ -111,3 +116,6 @@ Identify_dataframes <- function(object_list){
   cat(dfoutput)
   selected_data[["Data not included"]] <<- notdataframes
 }
+#
+#
+#
