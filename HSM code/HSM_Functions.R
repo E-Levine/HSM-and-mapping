@@ -17,7 +17,23 @@ create_folders <- function(Site_Code, Version) {
     print(paste(Site_Code, " version ", Version, " Data folder created."))
   } else {
     print(paste(Site_Code, " version ", Version, " Data folder already exists."))
+  }
+  # Create Data/Layers folder
+    layers_folder <- paste0(main_folder, "/Data/Layers")
+    if (!dir.exists(layers_folder)) {
+      dir.create(layers_folder) 
+      print(paste(Site_Code, " version ", Version, " Layers folder created."))
+    } else {
+      print(paste(Site_Code, " version ", Version, " Layers folder already exists."))
     }
+    # Create KML folder (in Data/Layers)
+      kml_folder <- paste0(main_folder, "/Data/Layers/KML")
+      if (!dir.exists(kml_folder)) {
+        dir.create(kml_folder)  
+        print(paste(Site_Code, " version ", Version, " KML folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " KML folder already exists."))
+      }
   # Create Output folder
   output_folder <- paste0(main_folder, "/Output")
   if (!dir.exists(output_folder)) {
@@ -25,14 +41,38 @@ create_folders <- function(Site_Code, Version) {
     print(paste(Site_Code, " version ", Version, " Output folder created."))
   } else {
     print(paste(Site_Code, " version ", Version, " Output folder already exists."))
+  }
+    # Create Output/Data files folder
+    outputData_folder <- paste0(main_folder, "/Output/Data files")
+    if (!dir.exists(outputData_folder)) {
+      dir.create(outputData_folder) 
+      print(paste(Site_Code, " version ", Version, " Output Data files folder created."))
+    } else {
+      print(paste(Site_Code, " version ", Version, " Output Data files folder already exists."))
     }
-  # Create KML folder
-  kml_folder <- paste0("Reference files/KML/KML_", main_folder)
-  if (!dir.exists(kml_folder)) {
-    dir.create(kml_folder)  
-    print(paste(Site_Code, " version ", Version, " KML folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " KML folder already exists."))
+    # Create Output/Figure files folder
+    outputFigure_folder <- paste0(main_folder, "/Output/Figure files")
+    if (!dir.exists(outputFigure_folder)) {
+      dir.create(outputFigure_folder) 
+      print(paste(Site_Code, " version ", Version, " Output Figure files folder created."))
+    } else {
+      print(paste(Site_Code, " version ", Version, " Output Figure files folder already exists."))
+    }
+    # Create Output/Map files folder
+    outputMap_folder <- paste0(main_folder, "/Output/Map files")
+    if (!dir.exists(outputMap_folder)) {
+      dir.create(outputMap_folder) 
+      print(paste(Site_Code, " version ", Version, " Output Map files folder created."))
+    } else {
+      print(paste(Site_Code, " version ", Version, " Output Map files folder already exists."))
+    }
+    # Create Output/Shapefiles folder
+    outputShape_folder <- paste0(main_folder, "/Output/Figure files")
+    if (!dir.exists(outputShape_folder)) {
+      dir.create(outputShape_folder) 
+      print(paste(Site_Code, " version ", Version, " Output Shapefiles folder created."))
+    } else {
+      print(paste(Site_Code, " version ", Version, " Output Shapefiles folder already exists."))
     }
 }
 #
@@ -43,21 +83,24 @@ create_folders <- function(Site_Code, Version) {
 #
 KML_separation <- function(Status_of_KML){
   if(length(Status_of_KML) == 1){
+    #If separation required:
+    
     kml_file <- st_read(paste0("Reference files/KML/PreProcessing/", Site_Code, "_", Version, "/", Site_Code,"_all.kml")) #Load file
     Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
     filelist <- list()
     for (i in 1:nrow(Polygons)) {
       name <- Polygons$Name[1]
       polygon <- kml_file %>% filter(Name == Polygons$Name[i]) #Get the current unique polygon
-      filename <- paste0("Reference files/KML/", Site_Code, "_", Version, "/",Polygons$Name[i], ".kml") # Write to separate KML file
+      filename <- paste0("Reference files/KML/", Polygons$Name[i], ".kml") #Write to separate KML file within References/KML folder
       st_write(polygon, filename, driver = "kml", append = FALSE)
+      st_write(polygon, paste0(Site_Code, "_", Version, "/Data/Layers/KML/", Polygons$Name[i], ".kml"), driver = "kml", append = FALSE) #Write to HSM folder for records.
       filelist[i] <- paste("Polygon", name, "to", filename)
       }
     return(filelist)
   } else {
     search_strings  <- Status_of_KML
     # List of available files 
-    files <- list.files("Reference files/KML/", full.names = TRUE)
+    files <- list.files("Reference files/KML", full.names = TRUE)
     #
     for (file in files) {
       # Get the filename without the path
@@ -66,11 +109,11 @@ KML_separation <- function(Status_of_KML){
       # Check if any of the search strings are in the filename
       if (any(str_detect(filename, search_strings))) {
         # Copy the file to locationB
-        file.copy(file, file.path(paste0("Reference files/KML/", Site_Code, "_", Version, "/"), filename))
+        file.copy(file, file.path(paste0(Site_Code, "_", Version, "/Data/Layers/KML/"), filename))
         }
     }
     # Print a message indicating completion
-    message(paste0("Files copied from [Reference files/KML/] to [Reference files/KML/", Site_Code, "_", Version, "/]."))
+    message(paste0("Files copied from [Reference files/KML/] to [", Site_Code, "_", Version, "/Data/Layers/KML]."))
   }
 }
 #

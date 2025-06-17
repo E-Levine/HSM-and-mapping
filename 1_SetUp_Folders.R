@@ -23,7 +23,7 @@ create_folders(Site_Code, Version)
 #
 ####File separation####
 #
-##Ensure the KML_all file has been copied to the appropriate folder created in the step above (Site and version) before proceeding.
+##Ensure the [KML]_all file has been copied to Reference Files/KML/PreProcessing before proceeding and named using the Site Code and version ID + "_all"
 ##Run the following code if site and section polygons need to be separated (i.e. One file from Google Earth)
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(sf, tidyverse, stringr, install = TRUE) #Mapping and figures
@@ -32,7 +32,7 @@ pacman::p_load(sf, tidyverse, stringr, install = TRUE) #Mapping and figures
 #If requiring separation of one file into one per section, status = "separated"; if existing, status = list of names of existing files from Reference files/KML.
 KML_status <- c("SL", "SL-Central", "SL-North", "SL-South")
 #
-KML_separation(kml_file)
+KML_separation(KML_status)
 ##If file was separated, confirm all polygons needed are listed in the output. If any are missing, they are missing from the "all" file. 
 #Confirm names are accurate, updated as needed within the local directory or return to the KML file creation step.
 #
