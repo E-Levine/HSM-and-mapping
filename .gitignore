@@ -57,3 +57,4 @@ Reference files/Grids/*/*
 Reference files/Grids/*
 !Reference files/Grids/*/.gitkeep*
 Data layers/*
+!**.gitkeep
