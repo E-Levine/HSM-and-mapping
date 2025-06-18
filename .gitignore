@@ -59,7 +59,8 @@ rsconnect/
 
 #Keep the zip folder of KML files but ignore everything else:
 
-!Reference\ files/KML/*Existing_KMLs.zip*
+!Reference\ files/KML/Existing_KML/*
+!Reference\ files/KML/Existing_KML*
 !Reference\ files/HSI\ curve\ examples
 Reference\ files/KML/* 
 Reference\ files/KML/PreProcessing/*
