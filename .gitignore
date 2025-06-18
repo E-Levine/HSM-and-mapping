@@ -60,6 +60,7 @@ Reference\ files/*
 !Reference\ files/Oyster\ State\ Grid
 !Reference\ files/KML\ file\ creation\ SOP
 !Reference\ files/HSI\ curve\ examples/*
+!Reference\ files/KML/PreProcessing/.gitkeep*
 !Reference\ files/KML/KMLs/*
 !Reference\ files/Grids/*/.gitkeep*
 Reference\ files/Grids/*/*
