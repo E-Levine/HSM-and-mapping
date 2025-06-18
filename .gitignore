@@ -59,9 +59,8 @@ rsconnect/
 !Reference\ files/Oyster\ State\ Grid
 !Reference\ files/KML\ file\ creation\ SOP
 !Reference\ files/HSI\ curve\ examples/*
-
 !Reference\ files/KML/KMLs*
-Reference\ files/KML/*.*
+Reference\ files/KML/*.kml
 !Reference\ files/KML/PreProcessing/.gitkeep*
 
 !Reference\ files/Grids/*/.gitkeep*
