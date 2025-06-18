@@ -1,7 +1,7 @@
 ####Water Quality Data Compilation and Cleaning###
 #
 ##Compile WQ data - Select parameters, combine station and WQ data
-##If other data sources are needed. Submit an issue/request to EWilliams (or via the github repo:https://github.com/E-Levine/Water-Quality-Processing)
+##If other data sources are needed. Submit an issue/request to repo admin
 ##Output of cleaned data
 #
 #
@@ -15,12 +15,12 @@ pacman::p_load(plyr, tidyverse, readxl, writexl, #Df manipulation, basic summary
                sf, raster, spData, 
                tmap, tmaptools, htmltools, htmlwidgets,
                install = TRUE) 
-#remotes::install_github("rstudio/htmltools") #After Rtools install: write('PATH="${RTOOLS40_HOME}\\usr\\bin;${PATH}"', file = "~/.Renviron", append = TRUE);; Sys.which("make")
 #
 ####Compilation setup####
 #
 #Set parameters - run for each data source type
-Estuary_code <- c("WC") #Two letter estuary code
+Site_code <- c("SL")       #Two letter estuary code
+Version <- c("v1")         #Version ID for the model data will be used in
 Data_source <- c("Portal") #Source of data: "Portal", "WA" , or "FIM"
 #
 #Years of data (used in file names):
@@ -32,26 +32,26 @@ End_year <- c("2024")
 ####Load files####
 #
 ##Read in Excel site file
-Location_data <- if(Data_source == "Portal"){as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_Site data_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z")))
-  } else if(Data_source == "WA"){as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_Site data_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z"),
+Location_data <- if(Data_source == "Portal"){as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_Site data_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z")))
+  } else if(Data_source == "WA"){as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_Site data_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z"),
                                           col_types = c("text", "text", "text", "text", "text", "text", "numeric", "numeric", "text", "date", "numeric", "text",
                                                         "text", "text", "text", "numeric", "text", "text", "text", "numeric", "text")))
-  } else if(Data_source == "FIM"){as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z", "NULL")))
+  } else if(Data_source == "FIM"){as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z", "NULL")))
     } else {paste0("Code not yet updated for ", Data_source," data.")}
 #
 #Skip to "Estuary area" if using WA or FIM data.
 #Read in Excel results file (for 1 file) - skip to next section if only 1 results file
-Results_data <- as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_Results_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z")))
+Results_data <- as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_Results_", Start_year, "_", End_year,".xlsx"), na = c("NA", " ", "", "Z")))
 #Read in Excel results file (for 2 files)
-Results1 <- as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_Results_", Start_year, "_", "2007",".xlsx"), na = c("NA", " ", "", "Z")))
-Results2 <- as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_Results_", "2008", "_", "2014",".xlsx"), na = c("NA", " ", "", "Z")))
-Results3 <- as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_Results_", "2015", "_", "2019",".xlsx"), na = c("NA", " ", "", "Z")))
-Results4 <- as.data.frame(read_excel(paste0("Data/Raw_data/", Estuary_code, "_", Data_source,"_Results_", "2020", "_", End_year,".xlsx"), na = c("NA", " ", "", "Z")))
+Results1 <- as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_Results_", Start_year, "_", "2007",".xlsx"), na = c("NA", " ", "", "Z")))
+Results2 <- as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_Results_", "2008", "_", "2014",".xlsx"), na = c("NA", " ", "", "Z")))
+Results3 <- as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_Results_", "2015", "_", "2019",".xlsx"), na = c("NA", " ", "", "Z")))
+Results4 <- as.data.frame(read_excel(paste0("Data/Raw-data/", Site_code, "_", Data_source,"_Results_", "2020", "_", End_year,".xlsx"), na = c("NA", " ", "", "Z")))
 Results_data <- rbind(Results1, Results2, Results3, Results4)
 #If more files are needed, copy and edit the proper number of Results# lines of code and make sure to add all versions to the Results_data <- rbind() line.
 #
 ##Estuary area  
-Estuary_area <- st_read(paste0("../Reference files/KML/", Estuary_code, ".kml"))
+Estuary_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
 plot(Estuary_area[2])
 #
 ##State Outline
@@ -76,11 +76,11 @@ keep_site <- c("MonitoringLocationIdentifier", "OrganizationIdentifier", "Organi
 }
 #Subset columns and add estuary ID to column
 if(Data_source == "Portal"){
-  Location_data <- Location_data[keep_site] %>% add_column(Estuary = Estuary_code, .before = "MonitoringLocationIdentifier")
+  Location_data <- Location_data[keep_site] %>% add_column(Estuary = Site_code, .before = "MonitoringLocationIdentifier")
 } else if(Data_source == "WA"){
-  Location_data <- Location_data[keep_site] %>% add_column(Estuary = Estuary_code, .before = "WBodyID")
+  Location_data <- Location_data[keep_site] %>% add_column(Estuary = Site_code, .before = "WBodyID")
 } else if(Data_source == "FIM"){
-  Location_data <- Location_data[keep_site] %>% add_column(Estuary = Estuary_code, .before = "TripID")
+  Location_data <- Location_data[keep_site] %>% add_column(Estuary = Site_code, .before = "TripID")
 }
 #Check columns
 head(Location_data, 4)
@@ -200,6 +200,12 @@ if(Data_source == "Portal"){
 #
 #Visualize data locations
 if(Data_source == "Portal"){
+  (static <- ggplot()+
+    geom_sf(data = Estuary_area, fill = "gray")+
+    geom_sf(data = FL_outline) + 
+    geom_point(data = Combined %>% distinct(LongitudeMeasure, LatitudeMeasure), aes(LongitudeMeasure, LatitudeMeasure), size = 2.5, color = "red")+
+    coord_sf(xlim = c(st_bbox(Estuary_area)["xmin"], st_bbox(Estuary_area)["xmax"]),
+             ylim = c(st_bbox(Estuary_area)["ymin"], st_bbox(Estuary_area)["ymax"])))
   (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
                          tm_polygons() + 
                          tm_shape(FL_outline) + #Outline of shoreline
@@ -207,8 +213,14 @@ if(Data_source == "Portal"){
                          tm_shape(Combined_data_counts) + #Stations relation to estuary area
                          tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
                                  popup.vars = c("StationID" = "MonitoringLocationIdentifier", "Latitude" = "LatitudeMeasure", "Longitude" = "LongitudeMeasure", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Estuary_code, Data_source, "WQ Stations", sep = " "))))
+                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
 } else if(Data_source == "WA"){
+  (static <- ggplot()+
+     geom_sf(data = Estuary_area, fill = "gray")+
+     geom_sf(data = FL_outline) + 
+     geom_point(data = Combined %>% distinct(Actual_Longitude, Actual_Latitude), aes(Actual_Longitude, Actual_Latitude), size = 2.5, color = "red")+
+     coord_sf(xlim = c(st_bbox(Estuary_area)["xmin"], st_bbox(Estuary_area)["xmax"]),
+              ylim = c(st_bbox(Estuary_area)["ymin"], st_bbox(Estuary_area)["ymax"])))
   (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
                          tm_polygons() + 
                          tm_shape(FL_outline) + #Outline of shoreline
@@ -216,8 +228,14 @@ if(Data_source == "Portal"){
                          tm_shape(Combined_data_counts) + #Stations relation to estuary area
                          tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
                                  popup.vars = c("StationID" = "StationID", "Latitude" = "Actual_Latitude", "Longitude" = "Actual_Longitude", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Estuary_code, Data_source, "WQ Stations", sep = " "))))
+                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
 } else if (Data_source == "FIM") {
+  (static <- ggplot()+
+     geom_sf(data = Estuary_area, fill = "gray")+
+     geom_sf(data = FL_outline) + 
+     geom_point(data = Combined %>% distinct(Longitude, Latitude), aes(Longitude, Latitude), size = 2.5, color = "red")+
+     coord_sf(xlim = c(st_bbox(Estuary_area)["xmin"], st_bbox(Estuary_area)["xmax"]),
+              ylim = c(st_bbox(Estuary_area)["ymin"], st_bbox(Estuary_area)["ymax"])))
   (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
                          tm_polygons() + 
                          tm_shape(FL_outline) + #Outline of shoreline
@@ -225,10 +243,10 @@ if(Data_source == "Portal"){
                          tm_shape(Combined_data_counts) + #Stations relation to estuary area
                          tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
                                  popup.vars = c("StationID" = "Reference", "Latitude" = "Latitude", "Longitude" = "Longitude", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Estuary_code, Data_source, "WQ Stations", sep = " "))))
+                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
 }
-#
-saveWidget(map, paste0("Maps/", Estuary_code, "_", Data_source,"_WQ_stations_", Start_year, "_", End_year, "_widget.html"))
+#Save widget map:
+saveWidget(map, paste0("Maps/", Site_code, "_", Data_source,"_WQ_stations_", Start_year, "_", End_year, "_widget.html"))
 #
 #
 ####Clean parameter data####
@@ -269,8 +287,8 @@ Comb_fil_2 <- Combined_filteredk %>% filter(ActivityStartDate >= "2012-01-01")
 ####Save filtered data####
 #
 #
-write_xlsx(Combined_filteredk, paste0("Data/Raw_cleaned/", Estuary_code, "_", Data_source, "_combined_filtered_", Start_year, "_", End_year,".xlsx"), format_headers = TRUE)
+write_xlsx(Combined_filteredk, paste0("Data/Raw-cleaned/", Site_code, "_", Data_source, "_combined_filtered_", Start_year, "_", End_year,".xlsx"), format_headers = TRUE)
 #
 ##Dividing files - use below - modify as needed
-write_xlsx(Comb_fil_2, paste0("Data/Raw_cleaned/", Estuary_code, "_", Data_source, "_combined_filtered_2012_", End_year,".xlsx"), format_headers = TRUE)
+write_xlsx(Comb_fil_2, paste0("Data/Raw-cleaned/", Site_code, "_", Data_source, "_combined_filtered_2012_", End_year,".xlsx"), format_headers = TRUE)
 #

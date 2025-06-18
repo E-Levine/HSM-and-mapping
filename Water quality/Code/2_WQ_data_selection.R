@@ -20,38 +20,39 @@ source("Code/WQ_functions.R")
 #
 #
 ###Setup - specs####
-Estuary_code <- c("SL") #Two letter estuary code
-Data_source <- c("FIM") #Source of data: "Portal", "WA", "FIM"
+Site_code <- c("SL")    #Two letter estuary code
+Version <- c("v1")      #Version of HSM
+Data_source <- c("Portal") #Source of data: "Portal", "WA", "FIM"
 #
 #Number of files to combine (Enter 1 if only one file. Current max is 3 files):
 Filtered_files <- c(1)
 #Years of possible data (from file names). Start and end years required for each file. Use 'NA" for any unused files:
-Start_year <- c("1997")
-End_year <- c("2022")
+Start_year <- c("2020")
+End_year <- c("2024")
 Start_year_2 <- c(NA)
 End_year_2 <- c(NA)
 Start_year_3 <- c(NA)
 End_year_3 <- c(NA)
 #
 ##Years of desired data:
-Begin_data <- c("2000")
-End_data <- c("2023")
+Begin_data <- c("2020")
+End_data <- c("2024")
 #
 #
 ####Load Files#####
 #
 ##Read in raw_cleaned data into a combined file
-Filtered_data <- combine_files(Filtered_files, Estuary_code, Data_source, Start_year, End_year, Start_year_2, End_year_2, Start_year_3, End_year_2)
+Filtered_data <- combine_files(Filtered_files, Site_code, Data_source, Start_year, End_year, Start_year_2, End_year_2, Start_year_3, End_year_2)
 head(Filtered_data)
 #
 #
 #Fixed station locations - run if including specified locations in map or selecting WQ stations based on station locations.
 #Can skip if not needed.
 Station_locations <- as.data.frame(read_excel("Data/Reference_data/Stations_area_selections.xlsx", na = c("NA", " ", "", "Z"))) %>% 
-  subset(grepl(Estuary_code, Site))
+  subset(grepl(Site_code, Site))
 #
 ##Estuary area  
-Estuary_area <- st_read(paste0("../Reference files/KML/", Estuary_code, ".kml"))
+Estuary_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
 plot(Estuary_area[2])
 ###State Outline
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
@@ -94,7 +95,7 @@ if(Data_source == "Portal"){
                          tm_shape(Combined_data_counts) + #Stations relation to estuary area
                          tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
                                  popup.vars = c("StationID" = "MonitoringLocationIdentifier", "Latitude" = "LatitudeMeasure", "Longitude" = "LongitudeMeasure", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Estuary_code, Data_source, "WQ Stations", sep = " "))))
+                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
 } else if(Data_source == "WA"){
   (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
                          tm_polygons() + 
@@ -104,7 +105,7 @@ if(Data_source == "Portal"){
                          tm_shape(Combined_data_counts) + #Stations relation to estuary area
                          tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
                                  popup.vars = c("StationID" = "StationID", "Latitude" = "Actual_Latitude", "Longitude" = "Actual_Longitude", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Estuary_code, Data_source, "WQ Stations", sep = " "))))
+                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
 } else if (Data_source == "FIM") {
   (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
                          tm_polygons() + 
@@ -114,7 +115,7 @@ if(Data_source == "Portal"){
                          tm_shape(Combined_data_counts) + #Stations relation to estuary area
                          tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
                                  popup.vars = c("StationID" = "Reference", "Latitude" = "Latitude", "Longitude" = "Longitude", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Estuary_code, Data_source, "WQ Stations", sep = " "))))
+                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
 }
 #
 #
@@ -126,7 +127,7 @@ if(Data_source == "Portal"){
 F_Distance <- c(50) #distance in meters
 S_Distance <- c(200) #secondary distance for additional search area of potential stations 
 #
-Selections <- buffer_selection(F_Distance, S_Distance, WidgetSave = "N", Estuary_code, Data_source, Begin_data, End_data)
+Selections <- buffer_selection(F_Distance, S_Distance, WidgetSave = "N", Site_code, Data_source, Begin_data, End_data)
 Selections$Selected_map
 WQ_Stations <- Selections$Stations
 #
@@ -176,8 +177,8 @@ Selected_data(BufferOrN = "N", To_include, To_exclude, ProjectCode = "SLTE")
 #
 ####Station selection - by station name or designated boundary####
 #
-#Method of selection: Bounding_box, Station_name
-Selection_Method <- c("Bounding_box")
+#Method of selection: Bounding_box, Station_name, Estuary
+Selection_Method <- c("Estuary")
 #
 ##For any unused items in next few lines, enter NA
 #Station_name:List of any stations to include based on station names: need station ID within "", can be partial of station name if unique to station
@@ -197,12 +198,12 @@ WQ_stations_selected$BoundedMap #Confirm stations, can chose to include or exclu
 #
 # List of any stations to include or exclude from selection by name of station
 #If no stations need to be included or excluded, replace with NA
-To_include <- data.frame(StationID = c("21FLCOSP_WQX-32-03", "21FLHILL_WQX-28", "21FLHILL_WQX-25"))
-To_exclude <- data.frame(StationID = c("21FLTPA_WQX-G5SW0146", "21FLCOSP_WQX-45-03", "21FLCOSP_WQX-CENTRAL CANAL"))
+To_include <- data.frame(StationID = c("21FLWPB_WQX-G2SE0048"))
+To_exclude <- data.frame(StationID = c("21FLSFWM_WQX-18967", "	21FLSFWM_WQX-28220"))
 #
 ##Run to include/exclude stations as specified above and save output of final data:
 #Use same project code from above.
-Modified_data(Selection_Method, To_include, To_exclude, ProjectCode = "TEST")
+Modified_data(Selection_Method, To_include, To_exclude, ProjectCode = "SLHSM")
 #
 #
 #
