@@ -53,6 +53,7 @@ rsconnect/
 **/ 
 !Data layers/
 !HSM code/
+!HSM code/Functions/
 !Reference files/
 #Keep the zip folder of KML files but ignore everything else:
 !Reference files/KML/Existing_KMLs.zip
