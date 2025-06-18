@@ -8,7 +8,7 @@
 ##Establish the site code and version for this project. (Required for both code chunks.)
 Site_Code <- c("SL") #two-letter site code used throughout for identifying files
 Version <- c("v1") #current version number of the model for the specified site
-source("HSM code/HSM_Functions.R")
+source("HSM code/Functions/HSM_Functions.R")
 #
 #Proceed to folder setup, file separation, and parameter assignment as needed
 #

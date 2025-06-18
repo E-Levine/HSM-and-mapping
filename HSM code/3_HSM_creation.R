@@ -13,7 +13,7 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
                install = TRUE) #Mapping and figures
 #
 #
-source("HSM code/HSM_Creation_Functions.R")
+source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being created. Make sure to use same Site_code and Version number from setup file.
 Site_Code <- c("SL") #two-letter site code

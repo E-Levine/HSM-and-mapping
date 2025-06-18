@@ -43,7 +43,7 @@ get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesig
   ##Limit to site area
   if(!is.na(AltGrid)){
     Site_Grid <<- rbind(PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,], 
-                       Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, Site_area))> 0,])
+                        Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, Site_area))> 0,])
     rm(PicoGrid, Alt_PicoGrid)
   } else {
     Site_Grid <<- PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,] 
@@ -53,10 +53,10 @@ get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesig
   ##Assign Site and Section information if designated
   if(SectionsDesignated == "N"){
     Section_grid <- suppressMessages(Site_Grid %>% 
-      #Add Site code and Sections as NA
-      mutate(Site = SiteCode, Section = NA) %>% 
-      #Add site long name
-      left_join(df_list[[1]] %>% filter(Type == "Site") %>% dplyr::select(Designation, LongName) %>% rename(Site = Designation))) 
+                                       #Add Site code and Sections as NA
+                                       mutate(Site = SiteCode, Section = NA) %>% 
+                                       #Add site long name
+                                       left_join(df_list[[1]] %>% filter(Type == "Site") %>% dplyr::select(Designation, LongName) %>% rename(Site = Designation))) 
     ##Output head of updated data frame and map of sections
     head(Section_grid)
     Section_plot <<- tm_shape(Section_grid) + tm_fill(col = "Section")
@@ -67,12 +67,12 @@ get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesig
     for (i in mget(ls(pattern = "Section[0-9]"))) {
       #Assign grid cells to section based on overlap with section layer
       temp <- suppressMessages(Site_Grid[lengths(st_intersects(Site_Grid, i)) > 0,] %>% #Limit to section area
-        mutate(Site = SiteCode, #Add Site code, section code
-               Section = OrderSections$Section[OrderSections$KML_Name == i$Name]) %>%
-        #Add site long name
-        left_join(df_list[[1]] %>% filter(Type == "Site") %>% mutate(Site = Designation) %>% dplyr::select(Site, LongName)) %>%
-        #Add section long names from KML file names
-        left_join(df_list[[2]] %>% mutate(Section_Name = str_extract(KML_Name, "(?<=-).*")) %>% dplyr::select(Section, Section_Name)))
+                                 mutate(Site = SiteCode, #Add Site code, section code
+                                        Section = OrderSections$Section[OrderSections$KML_Name == i$Name]) %>%
+                                 #Add site long name
+                                 left_join(df_list[[1]] %>% filter(Type == "Site") %>% mutate(Site = Designation) %>% dplyr::select(Site, LongName)) %>%
+                                 #Add section long names from KML file names
+                                 left_join(df_list[[2]] %>% mutate(Section_Name = str_extract(KML_Name, "(?<=-).*")) %>% dplyr::select(Section, Section_Name)))
       #
       temp_sections[[length(temp_sections) + 1]] <- temp
       #Add all data together into one output
@@ -122,9 +122,9 @@ get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesig
     height_pixels <- round(width_pixels * aspect_ratio)
     if (file.exists(jpg_filename)) {
       new_filename <- sub("\\.jpg$", paste0("_", format(Sys.Date(), "%Y-%m-%d"), ".xlsx"), jpg_filename)
-      } else {
-        new_filename <- jpg_filename
-      }
+    } else {
+      new_filename <- jpg_filename
+    }
     #
     p <-suppressMessages(ggplot(Section_grid) + geom_sf(aes(color = Section_Name, fill = Section_Name)) + 
                            theme_minimal() + theme(axis.text = element_text(size = 14, color = "black")) +  
