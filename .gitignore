@@ -55,13 +55,15 @@ rsconnect/
 !Data layers/*.gitkeep
 !HSM\ code/
 !HSM\ code/Functions/
-Reference\ files/*
 !Reference\ files/Setup_data
 !Reference\ files/Oyster\ State\ Grid
 !Reference\ files/KML\ file\ creation\ SOP
 !Reference\ files/HSI\ curve\ examples/*
+
+!Reference\ files/KML/KMLs*
+Reference\ files/KML/*.*
 !Reference\ files/KML/PreProcessing/.gitkeep*
-!Reference\ files/KML/KMLs/*
+
 !Reference\ files/Grids/*/.gitkeep*
 Reference\ files/Grids/*/*
 Reference\ files/Grids/*
