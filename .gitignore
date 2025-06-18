@@ -51,21 +51,17 @@ rsconnect/
 # Project files
 #Ignore all folders except for Data layers, HSM code, and Reference files:
 !**.gitkeep
-**/ 
+*_*/ 
 !Data layers/*.gitkeep
 !HSM\ code/
 !HSM\ code/Functions/
-!Reference\ files/
-
-#Keep the zip folder of KML files but ignore everything else:
 Reference\ files/*
+!Reference\ files/Setup_data
+!Reference\ files/Oyster\ State\ Grid
+!Reference\ files/KML\ file\ creation\ SOP
+!Reference\ files/HSI\ curve\ examples/*
+!Reference\ files/KML/KMLs/*
 !Reference\ files/Grids/*/.gitkeep*
 Reference\ files/Grids/*/*
 Reference\ files/Grids/*
-!Reference\ files/HSI\ curve\ examples
-!Reference\ files/HSI\ curve\ examples/*
-Reference\ files/KML/*
-!Reference\ files/KML/KMLs
-!Reference\ files/KML/KMLs/
-!Reference\ files/KML/PreProcessing/
-!Reference\ files/KML/PreProcessing/*.gitkeep*
+
