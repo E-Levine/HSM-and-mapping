@@ -3,7 +3,7 @@
 #
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
-               stats, statforbiology, splines,
+               stats, statforbiology, splines, writexl, 
                install = TRUE) 
 #
 ##Input the site code and version for this project. (Required)
@@ -38,8 +38,8 @@ source("HSM code/Functions/HSM_Functions.R")
 ##Save_options: should the figure ("figure"), the score values ("scores"), "both", or "neither" be saved to external files? Title will be used as the file name
 #
 #Continuous data example:
-curve_output(LineType = "logistic", FitType = "soft", 
-             Parameter_values = c(0, 19, 19.5, 20, 40), Parameter_limits = c(0, 40), Parameter_step = 1, 
+curve_output(LineType = "logistic", FitType = "hard", 
+             Parameter_values = c(0, 18.5, 19.25, 20, 40), Parameter_limits = c(0, 40), Parameter_step = 1, 
              Parameter_title = "Temperature", Title = "Temperature - Spawning", show_points = "Y",
              save_option = "both") #), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #Categorical data example:
