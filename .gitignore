@@ -51,6 +51,8 @@ rsconnect/
 # Project files
 #Ignore all folders except for Data layers, HSM code, and Reference files:
 !**.gitkeep
+Water\ quality/Data/*/*
+!Water\ quality/Data/*/.gitkeep
 *_*/ 
 !Data layers/*.gitkeep
 !HSM\ code/
