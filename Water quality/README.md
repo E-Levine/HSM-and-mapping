@@ -25,4 +25,5 @@ REQUIRED ITEMS:<br>
 Interpolation methods require:
 * an existing KML area file located in the "Site_code+VersionID/Data/Layers/KML" folder
 * Presence of FL_outlines layer in the "Data layers" folder
+* Presence of picogrid for desired area located in the "Reference files/Grids" folder
 * Water quality data in the Compiled-data folder (*updates to allow for Final-data need to be added*)
