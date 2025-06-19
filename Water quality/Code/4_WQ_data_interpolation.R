@@ -107,4 +107,8 @@ qtm(idw_nn, fill = "Pred_Value")
 #Determine overlay of data on SiteGrid
 idw_Site <- intersect(idw_nn, Site_Grid_spdf)
 #
-plot(idw_Site)
+(interp_data <- Site_Grid_df %>% 
+  left_join(as.data.frame(idw_Site) %>% dplyr::select(PGID, Pred_Value)) %>% 
+  group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
+  dplyr::rename("Salnity" = Pred_Value))
+#
