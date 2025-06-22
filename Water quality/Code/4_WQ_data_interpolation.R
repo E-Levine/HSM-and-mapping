@@ -28,6 +28,7 @@ End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
 #
+color_temp <- c("warm")    #"warm" or "cool"
 #
 ####Load data and KML files, plot existing points####
 #
@@ -66,8 +67,11 @@ ggplot()+
   geom_sf(data = FL_outline)+
   geom_sf(data = Site_Grid, fill = NA)+
   geom_point(data = WQ_data, aes(Longitude, Latitude), size = 2)+
+  theme_classic()+theme(panel.border = element_rect(color = "black", fill = NA))+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+####Summarize data based on parameter of interest - all methods####
 #
 ##Need to summarize data if more than one observation/station and select data to be used for interpolation:
 WQ_summ <- WQ_data %>% 
@@ -84,6 +88,8 @@ plot(grid)
 #Data as spatial df
 Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,1:2], WQ_summ[,3], 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+####Inverse distance weighted####
 #
 ##IDW: model(Parameter), data to use, grid to apply to 
 idw_model <- idw(Site_data_spdf$Salinity~1, Site_data_spdf, newdata = grid)
@@ -107,8 +113,32 @@ qtm(idw_nn, fill = "Pred_Value")
 #Determine overlay of data on SiteGrid
 idw_Site <- intersect(idw_nn, Site_Grid_spdf)
 #
+###Data frame with interpolated parameter values:
 (interp_data <- Site_Grid_df %>% 
   left_join(as.data.frame(idw_Site) %>% dplyr::select(PGID, Pred_Value)) %>% 
   group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
-  dplyr::rename("Salnity" = Pred_Value))
+  dplyr::rename("Salinity" = Pred_Value))
+#Add Salinity data back to Site_grid sf object 
+(Site_Grid_updated <- left_join(Site_Grid, interp_data))
 #
+# Determine which scale to use based on color_temp
+if(color_temp == "warm") {
+  scale_to_use <- scale_color_viridis_c(option = "rocket", direction = -1)
+} else if(color_temp == "cool") {
+  scale_to_use <- scale_color_viridis_c(option = "mako", direction = -1)
+} else {
+  scale_to_use <- scale_color_viridis_c()  # or some other default
+}
+#
+#Plot of interpolated values:
+ggplot()+
+  geom_sf(data = Site_area, fill = "white")+
+  geom_sf(data = Site_Grid_updated, aes(color = Salinity))+
+    scale_to_use +
+  geom_sf(data = FL_outline)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  theme_classic()+theme(panel.border = element_rect(color = "black", fill = NA))+
+  ggtitle("Mean salinity 2020 - 2024") +
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
+           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+
