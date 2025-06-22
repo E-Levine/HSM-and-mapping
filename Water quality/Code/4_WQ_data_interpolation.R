@@ -64,10 +64,12 @@ Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
 #Map of stations
 ggplot()+
   geom_sf(data = Site_area, color = "red")+
-  geom_sf(data = FL_outline)+
   geom_sf(data = Site_Grid, fill = NA)+
-  geom_point(data = WQ_data, aes(Longitude, Latitude), size = 2)+
-  theme_classic()+theme(panel.border = element_rect(color = "black", fill = NA))+
+  geom_sf(data = FL_outline)+
+  geom_point(data = WQ_data, aes(Longitude, Latitude), size = 2.5)+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
@@ -137,8 +139,9 @@ ggplot()+
     scale_to_use +
   geom_sf(data = FL_outline)+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
-  theme_classic()+theme(panel.border = element_rect(color = "black", fill = NA))+
-  ggtitle("Mean salinity 2020 - 2024") +
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+  ggtitle("Mean salinity 2020 - 2024") +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 
