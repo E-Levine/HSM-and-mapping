@@ -93,6 +93,17 @@ plot(grid)
 Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,1:2], WQ_summ[,3], 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
+# Determine which scale to use based on color_temp
+if(color_temp == "warm") {
+  scale_to_use <- scale_color_viridis_c(option = "rocket", direction = -1)
+} else if(color_temp == "cool") {
+  scale_to_use <- scale_color_viridis_c(option = "mako", direction = -1)
+} else {
+  scale_to_use <- scale_color_viridis_c()  # or some other default
+}
+#
+#
+#
 ####Inverse distance weighted####
 #
 ##IDW: model(Parameter), data to use, grid to apply to 
@@ -123,14 +134,6 @@ idw_Site <- intersect(idw_nn, Site_Grid_spdf)
 #Add Salinity data back to Site_grid sf object 
 (Site_Grid_updated <- left_join(Site_Grid, interp_data))
 #
-# Determine which scale to use based on color_temp
-if(color_temp == "warm") {
-  scale_to_use <- scale_color_viridis_c(option = "rocket", direction = -1)
-} else if(color_temp == "cool") {
-  scale_to_use <- scale_color_viridis_c(option = "mako", direction = -1)
-} else {
-  scale_to_use <- scale_color_viridis_c()  # or some other default
-}
 #
 #Plot of interpolated values:
 ggplot()+
@@ -149,5 +152,32 @@ ggplot()+
 ##END OF IDW
 #
 #
-####
-
+####Nearest neighbor####
+#
+##Voroni
+nn_model <- voronoi(x = vect(WQ_summ, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area)
+plot(v)
+points(vect(WQ_summ, geom=c("Longitude", "Latitude")), cex = 0.5)
+##Predictions
+nn_model <- st_as_sf(nn_model)
+tm_shape(nn_model) +
+  tm_fill(col = "Salinity", palette = "viridis", alpha = 0.6)
+#Assign preditions to grid
+resp <- st_intersection(v, st_as_sf(Site_Grid))
+#Plot of interpolated values
+qtm(resp, col = "Salinity", fill = "Salinity")
+#
+#Plot of interpolated values:
+ggplot()+
+  geom_sf(data = Site_area, fill = "white")+
+  geom_sf(data = resp, aes(color = Salinity))+
+  scale_to_use +
+  geom_sf(data = FL_outline)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
+  ggtitle("NN: Mean salinity 2020 - 2024") +
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
+           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
