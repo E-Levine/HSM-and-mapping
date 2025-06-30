@@ -132,20 +132,20 @@ idw_Site <- intersect(idw_nn, Site_Grid_spdf)
   group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
   dplyr::rename("Salinity" = Pred_Value))
 #Add Salinity data back to Site_grid sf object 
-(Site_Grid_updated <- left_join(Site_Grid, interp_data))
+(Site_Grid_idw <- left_join(Site_Grid, interp_data))
 #
 #
 #Plot of interpolated values:
 ggplot()+
   geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_updated, aes(color = Salinity))+
+  geom_sf(data = Site_Grid_idw, aes(color = Salinity))+
     scale_to_use +
   geom_sf(data = FL_outline)+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle("Mean salinity 2020 - 2024") +
+  ggtitle("IDW: Mean salinity 2020 - 2024") +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
@@ -160,17 +160,16 @@ plot(v)
 points(vect(WQ_summ, geom=c("Longitude", "Latitude")), cex = 0.5)
 ##Predictions
 nn_model <- st_as_sf(nn_model)
-tm_shape(nn_model) +
-  tm_fill(col = "Salinity", palette = "viridis", alpha = 0.6)
-#Assign preditions to grid
-resp <- st_intersection(v, st_as_sf(Site_Grid))
-#Plot of interpolated values
-qtm(resp, col = "Salinity", fill = "Salinity")
+#Assign predictions to grid
+Site_Grid_nn <- st_intersection(v, st_as_sf(Site_Grid))
+Site_Grid_nn <- Site_Grid_nn %>% rename(Salinity_nn = Salinity) %>% dplyr::select(-pred)
+#Plot of interpolated values (area)
+qtm(Site_Grid_nn, col = "Salinity", fill = "Salinity")
 #
-#Plot of interpolated values:
+#Plot of interpolated values (map):
 ggplot()+
   geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = resp, aes(color = Salinity))+
+  geom_sf(data = Site_Grid_nn, aes(color = Salinity))+
   scale_to_use +
   geom_sf(data = FL_outline)+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
@@ -180,4 +179,6 @@ ggplot()+
   ggtitle("NN: Mean salinity 2020 - 2024") +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+##END OF NN
 #
