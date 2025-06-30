@@ -30,7 +30,7 @@ Data_source <- c("Portal") #Required if Folder = compiled.
 #
 color_temp <- c("warm")    #"warm" or "cool"
 #
-####Load data and KML files, plot existing points####
+####Load data and KML files, plot existing points - will be one function####
 #
 if(Folder == "compiled"){
   files <- list.files(path = "Data/Compiled-data/", 
@@ -73,6 +73,8 @@ ggplot()+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
+#END OF FUNCTION
+#
 ####Summarize data based on parameter of interest - all methods####
 #
 ##Need to summarize data if more than one observation/station and select data to be used for interpolation:
@@ -95,8 +97,6 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,1:2], WQ_summ[,3],
 #
 ##IDW: model(Parameter), data to use, grid to apply to 
 idw_model <- idw(Site_data_spdf$Salinity~1, Site_data_spdf, newdata = grid)
-#idw_model <- gstat(formula = Salinity ~ 1, data = temp_df, set = list(idp = 1))
-#idw_values <- interpolate(grid, idw_model)
 #
 #Convert to data frame to rename and add parameters levels as values rounded to 0.1
 idw.output <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
@@ -141,7 +141,13 @@ ggplot()+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+  ggtitle("Mean salinity 2020 - 2024") +
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
+  ggtitle("Mean salinity 2020 - 2024") +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+##END OF IDW
+#
+#
+####
 
