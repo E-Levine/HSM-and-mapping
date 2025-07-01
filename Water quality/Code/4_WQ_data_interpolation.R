@@ -87,6 +87,7 @@ WQ_summ <- WQ_data %>%
 #Create grid of area based on station locations - used for all scores
 Site_Grid_spdf <- as(Site_Grid, "Spatial")
 grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000)
+rast <- rast(Site_Grid, resolution = c(20, 20))
 plot(grid) 
 #
 #Data as spatial df
@@ -181,4 +182,53 @@ ggplot()+
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
 ##END OF NN
+#
+####Thin plate spline####
+#
+#Get extent in meters to create raster:
+Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
+#Create base raster using meters:
+raster_t_m <- rast(resolution = c(20, 20),
+                 xmin = Site_extent_m[1], xmax = Site_extent_m[3], ymin = Site_extent_m[2], ymax = Site_extent_m[4],
+                 crs = "+init=EPSG:32617") #expand.grid(long = seq(extent(Site_data)[1], extent(Site_data)[2], length.out = nrow_lon), lat = seq(extent(Site_data)[3], extent(Site_data)[4], length.out = nrow_lat))
+#Convert back to dd:
+raster_t <- terra::project(raster_t_m, "EPSG:4326")
+#Convert WQ points to vector and rasterize over grid:
+Param_vec <- vect(Site_data_spdf)
+Param_ras <- rasterize(Param_vec, raster_t, field = "Salinity")
+#thin plate spline model
+tps_model <- interpolate(raster_t, Tps(xyFromCell(Param_ras, 1:ncell(Param_ras)),
+                                values(Param_ras)))
+plot(tps_model)
+#Limit data to area of interest
+tps_area <- crop(mask(tps_model, Site_area),Site_area) %>% as.polygons() %>% as("Spatial")
+plot(crop(mask(tps_model, Site_area),Site_area))
+#Get mean data for each location
+TPS_data <- st_intersection(Site_Grid, st_as_sf(tps_area)) %>% rename(Pred_Value = lyr.1) %>% st_set_geometry(NULL) %>%
+  dplyr::select(PGID, Pred_Value) %>% group_by(PGID) %>%
+  summarize(Pred_Value = mean(Pred_Value, na.rm = T)) 
+###Data frame with interpolated parameter values:
+(interp_data_TPS <- Site_Grid_df %>% 
+    left_join(TPS_data %>% dplyr::select(PGID, Pred_Value)) %>% 
+    group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
+    dplyr::rename("Salinity" = Pred_Value))
+#Add Salinity data back to Site_grid sf object 
+(Site_Grid_tps <- left_join(Site_Grid, interp_data_TPS))
+#
+#Plot of interpolated values:
+ggplot()+
+  geom_sf(data = Site_area, fill = "white")+
+  geom_sf(data = Site_Grid_tps, aes(color = Salinity))+
+  scale_to_use +
+  geom_sf(data = FL_outline)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
+  ggtitle("TPS: Mean salinity 2020 - 2024") +
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
+           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+#
+##END OF TPS
 #
