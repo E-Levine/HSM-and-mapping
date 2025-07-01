@@ -17,6 +17,7 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
                marmap, gstat, dismo, #Depth, interpolation
                install = TRUE) 
 #
+source("Code/autofitVariogram_R.R")
 #
 Site_code <- c("SL")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
@@ -157,7 +158,7 @@ ggplot()+
 #
 ##Voroni
 nn_model <- voronoi(x = vect(WQ_summ, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area)
-plot(v)
+plot(nn_model)
 points(vect(WQ_summ, geom=c("Longitude", "Latitude")), cex = 0.5)
 ##Predictions
 nn_model <- st_as_sf(nn_model)
@@ -231,4 +232,54 @@ ggplot()+
 #
 #
 ##END OF TPS
+#
+####Ordinary Kriging####
+#
+#ok_v <- variogram(Salinity~1, Site_data_spdf)
+#plot(ok_v)
+ok_vfit <- autofitVariogram(Salinity ~ 1, Site_data_spdf)
+#ok_vfit$var_model
+ok_model <- gstat(formula = Salinity~1, model = ok_vfit$var_model, data = Site_data_spdf)
+ok_pred <- predict(ok_model, grid)
+#Convert to data frame to rename and add parameters levels as values rounded to 0.1
+ok.output <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
+  mutate(Pred_Value = round(Prediction, 2)) 
+#Convert interpolated values to spatial data
+ok_spdf <- SpatialPointsDataFrame(coords = ok.output[,1:2],
+                                   as.data.frame(ok.output$Pred_Value) %>% rename(Pred_Value = "ok.output$Pred_Value"), 
+                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+#Use nearest neighbor to merge values into polygons, limit to bounding box of site area
+ok_nn <- voronoi(ok_spdf, ext = extent(Site_Grid)) 
+plot(ok_nn, fill = "Pred_Value")
+plot(crop(ok_nn, Site_area))
+#
+#Determine overlay of data on SiteGrid
+ok_Site <- intersect(ok_nn, Site_Grid_spdf)
+#
+###Data frame with interpolated parameter values:
+(interp_data_ok <- Site_Grid_df %>% 
+    left_join(as.data.frame(ok_Site) %>% dplyr::select(PGID, Pred_Value)) %>% 
+    group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
+    dplyr::rename("Salinity" = Pred_Value))
+#Add Salinity data back to Site_grid sf object 
+(Site_Grid_ok <- left_join(Site_Grid, interp_data_ok))
+#
+#
+#Plot of interpolated values:
+ggplot()+
+  geom_sf(data = Site_area, fill = "white")+
+  geom_sf(data = Site_Grid_ok, aes(color = Salinity))+
+  scale_to_use +
+  geom_sf(data = FL_outline)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
+  ggtitle("OK: Mean salinity 2020 - 2024") +
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
+           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+#
+##END OF OK
 #
