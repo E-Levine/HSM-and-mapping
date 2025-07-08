@@ -313,3 +313,70 @@ ggplot()+
 #
 ##END OF OK
 #
+####Ensemble####
+#
+weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights
+model_weighting <- function(weighting) {
+  #Patterns to search for:
+  patterns <- "_(idw|nn|tps|ok)$"
+  
+  #Function for equal weighting
+  if (weighting == "equal") {
+    weights_from_columns <- function(dataframe) {
+      #Identify columns that match the pattern
+      matched_columns <- colnames(dataframe)[grepl(patterns, colnames(dataframe))]
+      num_divisions <- length(matched_columns)  # Count the number of matched columns
+      #Create weights based on the number of divisions
+      if (num_divisions > 0) {
+        weights <- rep(1 / num_divisions, num_divisions)
+        #Create names for the weights
+        names(weights) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
+      } else {
+        weights <- numeric(0)  # Return an empty numeric vector if no matches
+      }
+      return(weights)
+    }
+    return(weight_values <<- weights_from_columns(Site_Grid_interp))
+    print(weight_values)
+  } else {
+    print("Numbers need to be specified.")
+  }
+}
+#
+model_weighting(weighting)
+#
+#
+#Select columns of interpolated data 
+ens_Site <- Site_Grid_interp %>% dplyr::select(PGID, matches("_(idw|nn|tps|ok)$")) %>%
+  mutate(Pred_Value = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values)))))
+#
+###Data frame with interpolated parameter values:
+(interp_data <- interp_data %>% #Site_Grid_df %>% 
+    left_join(as.data.frame(ens_Site) %>% dplyr::select(PGID, Pred_Value) %>% 
+                group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1)) %>%
+    dplyr::rename(!!paste0(Param_name,"_ens") := Pred_Value))
+#Add interpolated data back to Site_grid sf object 
+(Site_Grid_interp <- left_join(Site_Grid, interp_data))
+#
+#Plot of binned interpolate values for rough comparison
+ggplot()+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ens"))))+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
+  scale_color_viridis_b(direction = -1)
+#Map of interpolated values:
+ggplot()+
+  geom_sf(data = Site_area, fill = "white")+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ens"))))+
+  scale_to_use +
+  geom_sf(data = FL_outline)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
+  ggtitle(paste0("Ensemble: Mean ", Param_name)) +
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
+           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+##END OF ENSEMBLE
+#
