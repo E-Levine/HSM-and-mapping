@@ -28,8 +28,9 @@ Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
+Param_name <- c("Salinity")#Column/parameter name of interest
 #
-color_temp <- c("warm")    #"warm" or "cool"
+color_temp <- c("cool")    #"warm" or "cool"
 #
 ####Load data and KML files, plot existing points - will be one function####
 #
@@ -54,10 +55,12 @@ if(!is.na(Alt_Grid)){Alt_PicoGrid <- st_read(paste0("Reference files/Grids/Flori
 ##Limit to site area
 if(!is.na(Alt_Grid)){
   Site_Grid <- rbind(PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,], 
-                      Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, Site_area))> 0,])
+                      Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, Site_area))> 0,]) %>%
+    rename(Longitude = Long_DD_X, Latitude = Lat_DD_Y)
   rm(PicoGrid, Alt_PicoGrid)
 } else {
-  Site_Grid <- PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,] 
+  Site_Grid <- PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,] %>%
+    rename(Longitude = Long_DD_X, Latitude = Lat_DD_Y)
   rm(PicoGrid)
 }
 #Df of grid data
@@ -83,13 +86,23 @@ WQ_summ <- WQ_data %>%
   group_by(StationID, Estuary, Latitude, Longitude, Parameter) %>% 
   summarise(Mean = mean(Value, na.rm = T)) %>% ungroup() %>%
   pivot_wider(names_from = "Parameter", values_from = "Mean") %>% 
-  dplyr::select(Longitude, Latitude, Salinity) %>% drop_na() %>% ungroup()
+  dplyr::select(Longitude, Latitude, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
+  rename(Working_Param = any_of(Param_name))
 #
-#Create grid of area based on station locations - used for all scores
-Site_Grid_spdf <- as(Site_Grid, "Spatial")
-grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000)
-rast <- rast(Site_Grid, resolution = c(20, 20))
+#Create grid of area based on station locations - used for all scores - only need location information 
+Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude:MGID), "Spatial")
+grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) #st_as_sf(Site_Grid_spdf@data %>% dplyr::select(Longitude, Latitude, PGID), coords = c("Longitude", "Latitude"), crs = 4326)
+#rast <- rast(Site_Grid, resolution = c(20, 20))
 plot(grid) 
+#Get extent in meters to create raster:
+Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
+#Create base raster using meters:
+raster_t_m <- rast(resolution = c(20, 20),
+                   xmin = Site_extent_m[1], xmax = Site_extent_m[3], ymin = Site_extent_m[2], ymax = Site_extent_m[4],
+                   crs = "+init=EPSG:32617")
+#Convert back to dd:
+raster_t <- terra::project(raster_t_m, "EPSG:4326")
+#
 #
 #Data as spatial df
 Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,1:2], WQ_summ[,3], 
@@ -109,20 +122,19 @@ if(color_temp == "warm") {
 ####Inverse distance weighted####
 #
 ##IDW: model(Parameter), data to use, grid to apply to 
-idw_model <- idw(Site_data_spdf$Salinity~1, Site_data_spdf, newdata = grid)
+idw_model <- idw(Site_data_spdf$Working_Param~1, Site_data_spdf, newdata = grid)
 #
 #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-idw.output <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
-  mutate(Pred_Value = round(Prediction, 2)) 
+idw.output <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% #data.frame(Longitude = (idw_model %>% st_coordinates())[,1], Latitude = (idw_model %>% st_coordinates())[,2], data.frame(idw_model)) %>%   rename("Prediction" = var1.pred) %>% 
+  mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
 head(idw.output)
 #
 #Convert interpolated values to spatial data
-idw_spdf <- SpatialPointsDataFrame(coords = idw.output[,1:2],
-                                       as.data.frame(idw.output$Pred_Value) %>% rename(Pred_Value = "idw.output$Pred_Value"), 
-                                       proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+idw_spdf <- SpatialPointsDataFrame(coords = idw.output[,1:2], data = idw.output[4],#as.data.frame(idw.output), 
+                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
 #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-idw_nn <- voronoi(idw_spdf, ext = extent(Site_Grid)) 
+idw_nn <- dismo::voronoi(idw_spdf, ext = extent(Site_Grid)) 
 qtm(idw_nn, fill = "Pred_Value")
 #
 #Determine overlay of data on SiteGrid
@@ -132,22 +144,27 @@ idw_Site <- intersect(idw_nn, Site_Grid_spdf)
 (interp_data <- Site_Grid_df %>% 
   left_join(as.data.frame(idw_Site) %>% dplyr::select(PGID, Pred_Value)) %>% 
   group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
-  dplyr::rename("Salinity" = Pred_Value))
-#Add Salinity data back to Site_grid sf object 
-(Site_Grid_idw <- left_join(Site_Grid, interp_data))
+  dplyr::rename(!!paste0(Param_name,"_idw") := Pred_Value))
+#Add interpolated data back to Site_grid sf object 
+(Site_Grid_interp <- left_join(Site_Grid, interp_data))
 #
-#
-#Plot of interpolated values:
+#Plot of binned interpolate values for rough comparison
+ggplot()+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_idw"))))+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
+  scale_color_viridis_b(direction = -1)
+#Map of interpolated values:
 ggplot()+
   geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_idw, aes(color = Salinity))+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_idw"))))+
     scale_to_use +
   geom_sf(data = FL_outline)+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle("IDW: Mean salinity 2020 - 2024") +
+  ggtitle(paste0("IDW: Mean ",Param_name)) +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
@@ -158,27 +175,39 @@ ggplot()+
 #
 ##Voroni
 nn_model <- voronoi(x = vect(WQ_summ, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area)
-plot(nn_model)
-points(vect(WQ_summ, geom=c("Longitude", "Latitude")), cex = 0.5)
+#
 ##Predictions
 nn_model <- st_as_sf(nn_model)
 #Assign predictions to grid
-Site_Grid_nn <- st_intersection(v, st_as_sf(Site_Grid))
-Site_Grid_nn <- Site_Grid_nn %>% rename(Salinity_nn = Salinity) %>% dplyr::select(-pred)
+nn_Site <- st_intersection(nn_model, st_as_sf(Site_Grid %>% dplyr::select(Latitude:MGID)))
 #Plot of interpolated values (area)
-qtm(Site_Grid_nn, col = "Salinity", fill = "Salinity")
+qtm(nn_Site, col = "Salinity_nn", fill = "Salinity_nn")
 #
-#Plot of interpolated values (map):
+###Data frame with interpolated parameter values: - add to existing data (other model) or start new
+(interp_data <- interp_data %>% #Site_Grid_df %>% 
+    left_join(as.data.frame(nn_Site) %>% dplyr::select(PGID, Working_Param) %>% 
+    group_by(PGID) %>% arrange(desc(Working_Param)) %>% slice(1)) %>%
+    dplyr::rename(!!paste0(Param_name,"_nn") := Working_Param))
+#Add interpolated data back to Site_grid sf object 
+(Site_Grid_interp <- left_join(Site_Grid, interp_data))
+#
+#Plot of binned interpolate values for rough comparison
+ggplot()+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_nn"))))+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
+  scale_color_viridis_b(direction = -1)
+#Map of interpolated values:
 ggplot()+
   geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_nn, aes(color = Salinity))+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_nn"))))+
   scale_to_use +
   geom_sf(data = FL_outline)+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle("NN: Mean salinity 2020 - 2024") +
+  ggtitle(paste0("NN: Mean ", Param_name)) +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
@@ -186,47 +215,46 @@ ggplot()+
 #
 ####Thin plate spline####
 #
-#Get extent in meters to create raster:
-Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
-#Create base raster using meters:
-raster_t_m <- rast(resolution = c(20, 20),
-                 xmin = Site_extent_m[1], xmax = Site_extent_m[3], ymin = Site_extent_m[2], ymax = Site_extent_m[4],
-                 crs = "+init=EPSG:32617") #expand.grid(long = seq(extent(Site_data)[1], extent(Site_data)[2], length.out = nrow_lon), lat = seq(extent(Site_data)[3], extent(Site_data)[4], length.out = nrow_lat))
-#Convert back to dd:
-raster_t <- terra::project(raster_t_m, "EPSG:4326")
 #Convert WQ points to vector and rasterize over grid:
 Param_vec <- vect(Site_data_spdf)
-Param_ras <- rasterize(Param_vec, raster_t, field = "Salinity")
+Param_ras <- rasterize(Param_vec, raster_t, field = "Working_Param")
 #thin plate spline model
 tps_model <- interpolate(raster_t, Tps(xyFromCell(Param_ras, 1:ncell(Param_ras)),
                                 values(Param_ras)))
-plot(tps_model)
+#
 #Limit data to area of interest
-tps_area <- crop(mask(tps_model, Site_area),Site_area) %>% as.polygons() %>% as("Spatial")
-plot(crop(mask(tps_model, Site_area),Site_area))
+tps_model <- crop(mask(tps_model, Site_area),Site_area) %>% as.polygons() %>% as("Spatial")
+#
 #Get mean data for each location
-TPS_data <- st_intersection(Site_Grid, st_as_sf(tps_area)) %>% rename(Pred_Value = lyr.1) %>% st_set_geometry(NULL) %>%
+tps_Site <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model)) %>% 
+  rename(Pred_Value = lyr.1) %>% st_set_geometry(NULL) %>%
   dplyr::select(PGID, Pred_Value) %>% group_by(PGID) %>%
   summarize(Pred_Value = mean(Pred_Value, na.rm = T)) 
-###Data frame with interpolated parameter values:
-(interp_data_TPS <- Site_Grid_df %>% 
-    left_join(TPS_data %>% dplyr::select(PGID, Pred_Value)) %>% 
+###Data frame with interpolated parameter values: - add to existing data (other model) or start new
+(interp_data <- interp_data %>% # Site_Grid_df %>% 
+    left_join(tps_Site %>% dplyr::select(PGID, Pred_Value)) %>% 
     group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
-    dplyr::rename("Salinity" = Pred_Value))
-#Add Salinity data back to Site_grid sf object 
-(Site_Grid_tps <- left_join(Site_Grid, interp_data_TPS))
+    dplyr::rename(!!paste0(Param_name,"_tps") := Pred_Value))
+#Add interpolated data back to Site_grid sf object 
+(Site_Grid_interp <- left_join(Site_Grid, interp_data))
 #
-#Plot of interpolated values:
+#Plot of binned interpolate values for rough comparison
+ggplot()+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_tps"))))+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
+  scale_color_viridis_b(direction = -1)
+#Map of interpolated values:
 ggplot()+
   geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_tps, aes(color = Salinity))+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_tps"))))+
   scale_to_use +
   geom_sf(data = FL_outline)+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle("TPS: Mean salinity 2020 - 2024") +
+  ggtitle(paste0("TPS: Mean ",Param_name)) +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
@@ -237,46 +265,48 @@ ggplot()+
 #
 #ok_v <- variogram(Salinity~1, Site_data_spdf)
 #plot(ok_v)
-ok_vfit <- autofitVariogram(Salinity ~ 1, Site_data_spdf)
+ok_fit <- autofitVariogram(Working_Param ~ 1, Site_data_spdf)
 #ok_vfit$var_model
-ok_model <- gstat(formula = Salinity~1, model = ok_vfit$var_model, data = Site_data_spdf)
+ok_model <- gstat(formula = Working_Param~1, model = ok_fit$var_model, data = Site_data_spdf)
 ok_pred <- predict(ok_model, grid)
 #Convert to data frame to rename and add parameters levels as values rounded to 0.1
 ok.output <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
-  mutate(Pred_Value = round(Prediction, 2)) 
+  mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
 #Convert interpolated values to spatial data
-ok_spdf <- SpatialPointsDataFrame(coords = ok.output[,1:2],
-                                   as.data.frame(ok.output$Pred_Value) %>% rename(Pred_Value = "ok.output$Pred_Value"), 
+ok_spdf <- SpatialPointsDataFrame(coords = ok.output[,1:2], data = ok.output[4], 
                                    proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
 #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-ok_nn <- voronoi(ok_spdf, ext = extent(Site_Grid)) 
-plot(ok_nn, fill = "Pred_Value")
-plot(crop(ok_nn, Site_area))
+ok_nn <- dismo::voronoi(ok_spdf, ext = extent(Site_Grid))
 #
 #Determine overlay of data on SiteGrid
 ok_Site <- intersect(ok_nn, Site_Grid_spdf)
 #
 ###Data frame with interpolated parameter values:
-(interp_data_ok <- Site_Grid_df %>% 
-    left_join(as.data.frame(ok_Site) %>% dplyr::select(PGID, Pred_Value)) %>% 
-    group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
-    dplyr::rename("Salinity" = Pred_Value))
-#Add Salinity data back to Site_grid sf object 
-(Site_Grid_ok <- left_join(Site_Grid, interp_data_ok))
+(interp_data <- interp_data %>% #Site_Grid_df %>% 
+    left_join(as.data.frame(ok_Site) %>% dplyr::select(PGID, Pred_Value) %>% 
+    group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1)) %>%
+    dplyr::rename(!!paste0(Param_name,"_ok") := Pred_Value))
+#Add interpolated data back to Site_grid sf object 
+(Site_Grid_interp <- left_join(Site_Grid, interp_data))
 #
-#
-#Plot of interpolated values:
+#Plot of binned interpolate values for rough comparison
+ggplot()+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ok"))))+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
+  scale_color_viridis_b(direction = -1)
+#Map of interpolated values:
 ggplot()+
   geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_ok, aes(color = Salinity))+
+  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ok"))))+
   scale_to_use +
   geom_sf(data = FL_outline)+
   geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle("OK: Mean salinity 2020 - 2024") +
+  ggtitle(paste0("OK: Mean ", Param_name)) +
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
