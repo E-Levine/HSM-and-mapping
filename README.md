@@ -44,6 +44,6 @@ Location: HSM code; Project: HSM_and_mapping
 - Refer to "HSI_curve_descriptions" located in the "Referene files" folder for information on the types of habitat suitabiltiy curves.
 - Determine initial breakpoints or category names for all parameters being added to the model to act as a starting point to establish curves.
 - Use "2_Devloping_HSM_curves" to establish suitability curves for all parameters to be used in the model.
-- Final breakpoints and layer names will be added to the "model_setup" summary file in the Site_version Data folder, and scores for values will be saved in the Output/Data files folder for use when buildind the model. 
+- Final breakpoints and layer names will be added to the "model_setup" summary file in the Site_version Data folder, and scores for values and figures of scores will be saved in the Data/HSI curves folder for use when building the model. 
 
 ### 3_HSM_Creation  
