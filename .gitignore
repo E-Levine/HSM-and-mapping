@@ -3,7 +3,7 @@
 .Rapp.history
 
 # Session Data files
-.RData
+**.RData
 .RDataTmp
 
 # User-specific files
@@ -71,3 +71,5 @@ Water\ quality/**/*.xlsx
 Water\ quality/Maps/*widget.html
 Water\ quality/Maps/*.jpeg
 Water\ quality/Maps/*.jpg
+Water\ quality/**/*.RData
+Water\ quality/*.RData*

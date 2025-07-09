@@ -67,10 +67,10 @@ if(!is.na(Alt_Grid)){
 Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
 #Map of stations
 ggplot()+
-  geom_sf(data = Site_area, color = "red")+
-  geom_sf(data = Site_Grid, fill = NA)+
+  geom_sf(data = Site_area, fill = "#6699CC")+
+  #geom_sf(data = Site_Grid, fill = NA)+
   geom_sf(data = FL_outline)+
-  geom_point(data = WQ_data, aes(Longitude, Latitude), size = 2.5)+
+  geom_point(data = WQ_data, aes(Longitude, Latitude), size = 3.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
@@ -160,7 +160,8 @@ ggplot()+
   geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_idw"))))+
     scale_to_use +
   geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), color = "white", size = 4.5, shape = 21)+#, color = "black", size = 3)+
+  scale_fill_viridis_c(option = "magma", direction = -1)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
@@ -203,7 +204,8 @@ ggplot()+
   geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_nn"))))+
   scale_to_use +
   geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#, color = "black", size = 3.5)+
+  scale_fill_viridis_c(option = "magma", direction = -1)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
@@ -250,7 +252,8 @@ ggplot()+
   geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_tps"))))+
   scale_to_use +
   geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#color = "black", size = 3.5)+
+  scale_fill_viridis_c(option = "magma", direction = -1)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
@@ -302,7 +305,8 @@ ggplot()+
   geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ok"))))+
   scale_to_use +
   geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#color = "black", size = 3.5)+
+  scale_fill_viridis_c(option = "magma", direction = -1)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
@@ -370,7 +374,8 @@ ggplot()+
   geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ens"))))+
   scale_to_use +
   geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude), color = "black", size = 2.5)+
+  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#color = "black", size = 3.5)+
+  scale_fill_viridis_c(option = "magma", direction = -1)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
