@@ -1,4 +1,4 @@
-##Water quality data interpolation
+##Water quality data interpolation - **in progress - edits to be made**
 #
 #Interpolation of point data to site area based on site KML file
 #Requires WQ data Excel file, KML file, FL_outlines layer, picogrid layer
@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
                marmap, gstat, dismo, #Depth, interpolation
                install = TRUE) 
 #
-source("Code/autofitVariogram_R.R")
+source("Code/WQ_functions.R")
 #
 Site_code <- c("SL")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
