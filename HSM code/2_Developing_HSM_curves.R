@@ -35,19 +35,20 @@ source("HSM code/Functions/HSM_Functions.R")
 ##Parameter title should be the x-axis title for the plot output
 ##Title: title of figure produced, appears left-justified above plot; no title = NA, title = c("Some text")
 ##Show_points: should the user-provided points used to make the curve be shown in the plot "Y" or "N"
-##Save_options: should the figure ("figure"), the score values ("scores"), "both", or "neither" be saved to external files? Title will be used as the file name
 #
 #Continuous data example:
-curve_output(LineType = "logistic", FitType = "hard", 
-             Parameter_values = c(0, 18.5, 19.25, 20, 40), Parameter_limits = c(0, 40), Parameter_step = 1, 
-             Parameter_title = "Temperature", Title = "Temperature - Spawning", show_points = "Y",
-             save_option = "both") #), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
+curve_output(LineType = "Gaussian", FitType = "hard", 
+             Parameter_values = c(5, 12, 14, 28, 36, 40), Parameter_limits = c(0, 40), Parameter_step = 0.01, 
+             Parameter_title = "Salinity", Title = "Salinity - Adults", show_points = "Y") #), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #Categorical data example:
 curve_output(LineType = "categorical", FitType = "NA", 
              Parameter_values = c("Offshore, Primary, \n Large Vessel, \n General, Secondary", "Tertiary", "Terminus", "Shallow, Shortcut, \n Not Designated"), Parameter_limits = c(1, 0.5, 0.333, 0.1667), Parameter_step = NA, 
-             Parameter_title = "Channel designation", Title = "Buffer distance for navigational channels", show_points = "N",
-             save_option = "both")
+             Parameter_title = "Channel designation", Title = "Buffer distance for navigational channels", show_points = "N")
 
-#
+
+###Funciton to save the curve values and/or curve figure created
+#Save_options: should the figure ("figure"), the score values ("scores"), or "both" be saved to external files? Default:both
+#File_Title will be used as the file name. 
+save_curve_output(save_option = "both", File_Title = "Salinity_Adults")
 #
 #
