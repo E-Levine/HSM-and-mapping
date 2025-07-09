@@ -48,6 +48,9 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
+# Working files for project development
+*_working.*
+
 # Project files
 #Ignore all folders except for Data layers, HSM code, and Reference files:
 !**.gitkeep
