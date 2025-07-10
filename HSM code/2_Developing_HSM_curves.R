@@ -3,13 +3,18 @@
 #
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
-               stats, statforbiology, splines, writexl, 
+               stats, statforbiology, splines, 
+               writexl, readxl, openxlsx, 
                install = TRUE) 
 #
 ##Input the site code and version for this project. (Required)
 Site_Code <- c("SL") #two-letter site code used throughout for identifying files
 Version <- c("v1") #current version number of the model for the specified site
 source("HSM code/Functions/HSM_Functions.R")
+#
+##Naming convention for parameter - change with each new parameter and version of a parameter to score (i.e. if multiple Salinity curves will be used don't jsut use "Salinity".)
+#Name will be used in Excel file/sheet names and figure title. If redoing curves, name should be the same as the Excel sheet name.
+Parameter_name = c("Salinity_adult")
 #
 ###Function to create habitat suitability parameter score curves.
 ##Inputs required: LineType, FitType, Parameter_values, Parameter_limits, Parameter_step, Parameter_title, Title, show_points, save_option 
@@ -33,20 +38,22 @@ source("HSM code/Functions/HSM_Functions.R")
 ##Parameter limits should be the min and max values to be considered (if numerical) or list of Score (Y) values that correspond to Parameter factor levels supplied in Parameter_values
 ##Parameter step is the increments by which to estimate values: i.e., 0 to 40 by step = 1 (Should be NA for categorical curves)
 ##Parameter title should be the x-axis title for the plot output
-##Title: title of figure produced, appears left-justified above plot; no title = NA, title = c("Some text")
 ##Show_points: should the user-provided points used to make the curve be shown in the plot "Y" or "N"
+#
 #
 #Continuous data example:
 curve_output(LineType = "Gaussian", FitType = "hard", 
              Parameter_values = c(5, 12, 14, 28, 36, 40), Parameter_limits = c(0, 40), Parameter_step = 0.01, 
-             Parameter_title = "Salinity", Title = "Salinity - Adults", show_points = "Y") #), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
+             Parameter_title = "Salinity", show_points = "Y") #), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #Categorical data example:
 curve_output(LineType = "categorical", FitType = "NA", 
              Parameter_values = c("Offshore, Primary, \n Large Vessel, \n General, Secondary", "Tertiary", "Terminus", "Shallow, Shortcut, \n Not Designated"), Parameter_limits = c(1, 0.5, 0.333, 0.1667), Parameter_step = NA, 
-             Parameter_title = "Channel designation", Title = "Buffer distance for navigational channels", show_points = "N")
-
-
-###Funciton to save the curve values and/or curve figure created
+             Parameter_title = "Channel designation", show_points = "N")
+#
+#
+###Function to gather existing curve point data from existing model setup summary data or create new:
+curve_point_data()
+###Function to save the curve values and/or curve figure created
 #Save_options: should the figure ("figure"), the score values ("scores"), or "both" be saved to external files? Default:both
 #File_Title will be used as the file name. 
 save_curve_output(save_option = "both", File_Title = "Salinity_Adults")
