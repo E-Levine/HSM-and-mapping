@@ -218,6 +218,7 @@ predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, i
   
   #Print the plot
   print(p)
+  message("Objects created in the global environment: 'curve_points', 'p', 'predictions'.")
 }
 #
 ###Curve data gather/combination:
@@ -251,14 +252,39 @@ curve_point_data <- function(data_table = curve_points){
     combined_data <- curve_points_f %>% mutate(Curve = Parameter_name, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
     assign(paste0(Parameter_name, "_points"), combined_data, envir = globalenv())
   }
+  message(paste0("Objects created in the global environment: ", Parameter_name,"_points', 'Model_sheets'."))
   return(tail(combined_data, 10))
 }
 #
 #
 # Save data and/or figure created
-save_curve_output <- function(save_option = "both"){
-  #Save if specified:
-  if(save_option == "scores" | save_option == "both") {
+save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
+  #
+  #For all save types, save the curve point information:
+  if (exists(paste0(Parameter_name, "_points"))) {
+    temp_data <- get(paste0(Parameter_name, "_points"))
+    sheet_name <- Parameter_name
+    # Load the workbook
+    wb <- loadWorkbook(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
+    # Check if the sheet exists
+    if (sheet_name %in% sheet_names) {
+      # If it exists, overwrite the existing sheet
+      writeData(wb, sheet = sheet_name, temp_data)
+    } else {
+      # If it does not exist, create a new sheet
+      addWorksheet(wb, sheet_name)
+      writeData(wb, sheet = sheet_name, temp_data)
+    }
+    # Save the workbook
+    saveWorkbook(wb, paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+  } else {
+    warning("The variable does not exist.")
+  }
+  #
+  saving_occured <- FALSE
+  #
+  #Save if scores is specified:
+  if(save_option == "scores") {
     #Desired names
     base_filename <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
     #Check if the file already exists
@@ -272,7 +298,11 @@ save_curve_output <- function(save_option = "both"){
     }
     #Save predictions to Excel with the sheet named "Salinity_adults"
     write_xlsx(predictions, path = new_filename)
-  } else if(save_option == "figure" | save_option == "both") {
+    return("Parameter scores were saved in 'Data/HSI curves.")
+    saving_occured <- TRUE
+  } 
+  #Save if figure is specified:
+  if(save_option == "figure") {
     # Desired file name and specs
     jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
     width_pixels <- 1000
@@ -283,14 +313,58 @@ save_curve_output <- function(save_option = "both"){
       #Append current date in YYYY-MM-DD format before the extension
       date_str <- format(Sys.Date(), "%Y-%m-%d")
       #Create new filename with date appended
-      new_filename <- sub("\\.jpg$", paste0("_", date_str, ".xlsx"), jpg_filename)
+      new_filename <- sub("\\.jpg$", paste0("_", date_str, ".jpg"), jpg_filename)
     } else {
       new_filename <- jpg_filename
-    }
+    } 
     #Save predictions to Excel with the sheet named "Salinity_adults"
     ggsave(filename = new_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+    return("Parameter scoring figure was saved in 'Data/HSI curves.")
+    saving_occured <- TRUE
     #End figure output
-  }
+  } 
+  #
+  #Save if both is specified:
+  if(save_option == "both") {
+    #Desired names
+    base_filename_x <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
+    #Check if the file already exists
+    if (file.exists(base_filename_x)) {
+      #Append current date in YYYY-MM-DD format before the extension
+      date_str <- format(Sys.Date(), "%Y-%m-%d")
+      #Create new file name with date appended
+      new_filename_x <- sub("\\.xlsx$", paste0("_", date_str, ".xlsx"), base_filename_x)
+    } else {
+      new_filename_x <- base_filename_x
+    }
+    #Save predictions to Excel with the sheet named "Salinity_adults"
+    write_xlsx(predictions, path = new_filename_x)
+    #
+    #
+    # Desired file name and specs
+    jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
+    width_pixels <- 1000
+    aspect_ratio <- 3/4
+    height_pixels <- round(width_pixels * aspect_ratio)
+    #Check if the file already exists
+    if (file.exists(jpg_filename)) {
+      #Append current date in YYYY-MM-DD format before the extension
+      date_str <- format(Sys.Date(), "%Y-%m-%d")
+      #Create new file name with date appended
+      new_filename_p <- sub("\\.jpg$", paste0("_", date_str, ".jpg"), jpg_filename)
+    } else {
+      new_filename_p <- jpg_filename
+    } 
+    #Save predictions to Excel with the sheet named "Salinity_adults"
+    ggsave(filename = new_filename_p, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+    return("Parameter scores were saved in 'Data/HSI curves' and parameter scoring figure was saved in 'Data/HSI curves'.")
+    saving_occured <- TRUE
+    #End both output
+  } 
+  #
+  if(!save_option %in% c("scores", "figure", "both")){
+    print("Only parameter score point information will be saved.")
+    }
 }
 #
 #

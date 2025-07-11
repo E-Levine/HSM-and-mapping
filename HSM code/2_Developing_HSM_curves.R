@@ -53,9 +53,10 @@ curve_output(LineType = "categorical", FitType = "NA",
 #
 ###Function to gather existing curve point data from existing model setup summary data or create new:
 curve_point_data()
+#
 ###Function to save the curve values and/or curve figure created
 #Save_options: should the figure ("figure"), the score values ("scores"), or "both" be saved to external files? Default:both
 #File_Title will be used as the file name. 
-save_curve_output(save_option = "both", File_Title = "Salinity_Adults")
+save_curve_output(save_option = "points")
 #
 #
