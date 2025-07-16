@@ -14,14 +14,14 @@ source("HSM code/Functions/HSM_Functions.R")
 #
 ##Naming convention for parameter - change with each new parameter and version of a parameter to score (i.e. if multiple Salinity curves will be used don't jsut use "Salinity".)
 #Name will be used in Excel file/sheet names and figure title. If redoing curves, name should be the same as the Excel sheet name.
-Parameter_name = c("Salinity_adult")
+Parameter_name = c("Temperature_spawning")
 #
 ###Function to create habitat suitability parameter score curves.
 ##Inputs required: LineType, FitType, Parameter_values, Parameter_limits, Parameter_step, Parameter_title, Title, show_points, save_option 
 #Additional required input if FitType = bimodal: bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #
 #
-##LineType options: straight, power, expoDecay, Gaussian, bimodal, logistic, skewed, categorical
+##LineType options: straight, power, expoDecay, Gaussian, bimodal, logistic, skewed, step, categorical
 ##FitType options: "NA" (categorical), "hard" (values provided must be in output, lines directly connect points), "soft" (values provided are estimates, line is best-fit to points, max Y may not be included), "mid" (most values are included, maximum Y is mean value [power, expoDecay, Gaussian, logistic])
 #
 ##Parameter values must be entered according to the type of curve used. Please refer to documentation to ensure the correct number of values are added.
@@ -33,6 +33,7 @@ Parameter_name = c("Salinity_adult")
 #bimodal: requires the extra parameter of bimodal_Yvalues listing the minimum and maximum Y values to define the two peaks in the format: c(0, 1, 0, 1, 0)
 #Logistic: c(0, 0, 0.5, 1, 1) - Can enter Param = NA if don't want to specify central y = 0.5 point. (i.e., c(0, 2, NA, 15, 40))
 #Skewed: c(0, 1, 0.5. 0.05, 0) - unimodal skewed curve: for right-skewed enter Param normally, for left-skewed enter in reverse order
+#Step: End points for all steps should be specified in Parameter_values. Values for each step can be specified using step_values. Enter 1 step_value for each Parameter_value pair. 
 #Categorical: Name of each parameter factor level entered in order of parameter values listed in Parameter_limits (i.e., c("High", "Medium", "Low"))
 #
 ##Parameter limits should be the min and max values to be considered (if numerical) or list of Score (Y) values that correspond to Parameter factor levels supplied in Parameter_values
@@ -42,13 +43,13 @@ Parameter_name = c("Salinity_adult")
 #
 #
 #Continuous data example:
-curve_output(LineType = "Gaussian", FitType = "hard", 
-             Parameter_values = c(5, 12, 14, 28, 36, 40), Parameter_limits = c(0, 40), Parameter_step = 0.01, 
-             Parameter_title = "Salinity", show_points = "Y") #), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
+curve_output(LineType = "logistic", FitType = "hard", 
+             Parameter_values = c(0, 19, 19.5, 20, 40), Parameter_limits = c(0, 40), Parameter_step = 0.01, 
+             Parameter_title = "Temperature", show_points = "Y") #, step_values = c(0, 0.25, 1, 0.75, 0)), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #Categorical data example:
 curve_output(LineType = "categorical", FitType = "NA", 
-             Parameter_values = c("Offshore, Primary, \n Large Vessel, \n General, Secondary", "Tertiary", "Terminus", "Shallow, Shortcut, \n Not Designated"), Parameter_limits = c(1, 0.5, 0.333, 0.1667), Parameter_step = NA, 
-             Parameter_title = "Channel designation", show_points = "N")
+             Parameter_values = c("Unclassified", "Contains 'prohibited'",	"Contains 'restricted'", "Contains 'approved'"), Parameter_limits = c(1, 0.66, 0.33, 0), 
+             Parameter_title = "Designation", show_points = "N")
 #
 #
 ###Function to gather existing curve point data from existing model setup summary data or create new:
@@ -57,6 +58,6 @@ curve_point_data()
 ###Function to save the curve values and/or curve figure created
 #Save_options: should the figure ("figure"), the score values ("scores"), or "both" be saved to external files? Default:both
 #File_Title will be used as the file name. 
-save_curve_output(save_option = "points")
+save_curve_output()
 #
 #
