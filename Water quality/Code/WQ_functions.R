@@ -953,3 +953,101 @@ summary.autofitVariogram = function(object, ...)
 #
 ##END OF VARIOGRAM FUNCTIONS
 #
+####Data summarization functions####
+#
+summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = "Year", Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = "Means") {
+  #
+  # Initialize Start_year and End_year
+  Start_year <- NULL
+  End_year <- NULL
+  ##Set year range:
+  if(grepl("^\\d{4}-\\d{4}$", Year_range)){
+    Start_year <- as.numeric(substr(Year_range, 1, 4))
+    End_year <- as.numeric(substr(Year_range, 6, 9))
+  } else if(nchar(Year_range) == 4){
+    Start_year <- as.numeric(Year_range)
+    End_year <- as.numeric(Year_range)
+  } else if(Year_range == "NA") {
+    Year_range <- NA
+  } else {
+    stop("Year range must be in the format 'YYYY-YYYY' or 'YYYY'.")
+  }
+  #
+  ##Clean and group data
+  temp_df <- data_frame %>% 
+    #Filter to desired parameter
+    dplyr::filter(str_detect(Parameter, Parameter_name)) %>%
+    #Add in missing group columns
+    mutate(Year = year(as.Date(ActivityStartDate)),
+           Month = month(as.Date(ActivityStartDate), label = TRUE)) %>%
+    #Assign quarters, starting at month specified or default start of January
+    {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
+    #Filter to specified months if applicable
+    {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . } %>%
+    #Grouping for evals: station, specified time period
+    group_by(StationID, Estuary, Latitude, Longitude, Parameter, !!sym(Time_period))
+  #
+  ##Summarize data using method specified
+  if(Summ_method == "Means"){
+    summary_data <- station_means(temp_df, Year_range, Start_year, End_year)  
+  } else if(Summ_method == "Mins"){
+    summary_data <- station_mins(temp_df, Year_range, Start_year, End_year)  
+  } else if(Summ_method == "Maxs"){
+    summary_data <- station_maxs(temp_df, Year_range, Start_year, End_year)  
+  } else if(Summ_method == "Range"){
+    summary_data <- station_range(temp_df, values = "No", Year_range, Start_year, End_year)  
+  } else if(Summ_method == "Range_values"){
+    summary_data <- station_range(temp_df, values = "Yes", Year_range, Start_year, End_year)  
+  } else {
+    stop("Summarization method supplied is incorrectly speficied or is not currently suppported.")
+  }
+  #
+  output_data <- summary_data %>% ungroup() %>% 
+    pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
+    pivot_wider(names_from = "Parameter", values_from = "Value") %>% 
+    dplyr::select(Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
+    rename(Working_Param = any_of(Param_name))
+  #
+  return(output_data)
+  #
+}
+####Sub-functions:
+#
+#Set quarters
+set_quarters <- function(date, start_month) {
+  month_num <- month(date)
+  # Calculate the adjusted month number
+  adjusted_month <- (month_num - start_month + 12) %% 12
+  # Determine the quarter based on the adjusted month
+  return(floor(adjusted_month / 3) + 1)
+}
+#Means of parameter
+station_means <- function(df, Range, StartYr, EndYr){
+  temp <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    summarise(Mean = mean(Value, na.rm = TRUE))
+  return(temp)
+}
+#Minimums of parameter
+station_mins <- function(df, Range, StartYr, EndYr){
+  temp <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    summarise(Minimum = min(Value, na.rm = TRUE))
+  return(temp)
+}
+#Maximums of parameter
+station_maxs <- function(df, Range, StartYr, EndYr){
+  temp <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    summarise(Maximum = max(Value, na.rm = TRUE))
+  return(temp)
+}
+#Range of parameter: either the range (values = N) or the min and max (values = Y)
+station_range <- function(df, values, Range, StartYr, EndYr){
+  temp <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    summarise(Maximum = max(Value, na.rm = TRUE),
+              Minimum = min(Value, na.rm = TRUE)) %>%
+    {if(values == "Yes") . else mutate(., Range = Maximum - Minimum) %>% dplyr::select(., -Maximum, -Minimum) }
+  return(temp)
+}

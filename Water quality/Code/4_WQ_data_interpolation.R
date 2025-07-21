@@ -22,7 +22,7 @@ source("Code/WQ_functions.R")
 Site_code <- c("SL")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
 State_Grid <- c("H4")      #Two-letter StateGrid ID
-Alt_Grid <- c(NA)          #Two-letter additioanl StateGrid ID, enter NA if no secondary StateGrid needed
+Alt_Grid <- c(NA)          #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
 Project_code <- c("SLHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
@@ -77,17 +77,14 @@ ggplot()+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
-#END OF FUNCTION
+#END OF SECTION
 #
 ####Summarize data based on parameter of interest - all methods####
 #
-##Need to summarize data if more than one observation/station and select data to be used for interpolation:
-WQ_summ <- WQ_data %>% 
-  group_by(StationID, Estuary, Latitude, Longitude, Parameter) %>% 
-  summarise(Mean = mean(Value, na.rm = T)) %>% ungroup() %>%
-  pivot_wider(names_from = "Parameter", values_from = "Mean") %>% 
-  dplyr::select(Longitude, Latitude, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
-  rename(Working_Param = any_of(Param_name))
+##Summarize data based on method specifed:
+WQ_summ <- summarize_data(WQ_data, Summ_method = "Range_values")
+head(WQ_summ)
+#
 #
 #Create grid of area based on station locations - used for all scores - only need location information 
 Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude:MGID), "Spatial")
