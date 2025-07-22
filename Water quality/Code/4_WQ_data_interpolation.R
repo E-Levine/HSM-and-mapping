@@ -9,7 +9,7 @@
 #Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
-               readxl, writexl,
+               readxl, writexl, progress,
                sf, sp, terra,
                tmap, tmaptools, #Mapping and figures
                mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
@@ -81,8 +81,14 @@ ggplot()+
 #
 ####Summarize data based on parameter of interest - all methods####
 #
-##Summarize data based on method specifed:
-WQ_summ <- summarize_data(WQ_data, Summ_method = "Range_values")
+##Summarize data based on method specified:
+#Time_period - Period of time to group by: Year, Month, Quarter
+#Year_range - Range of years of data to include. Blank/enter "NA" for all years, 4-digit year for one year, or enter a character string of 4-digit start year followed by 4-digit end year, separated by a dash "-"
+#Quarter_start - Starting month of quarter 1, entered as an integer corresponding to month. NA if January (1) start. Not needed if not wokring with quarters.
+#Month_range - Start and end month to include in final data, specified by month's integer value c(#, #)
+#Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values
+
+WQ_summ <- summarize_data(WQ_data, Month_range = c(5, 10), Summ_method = "Range_values")
 head(WQ_summ)
 #
 #
@@ -100,9 +106,13 @@ raster_t_m <- rast(resolution = c(20, 20),
 #Convert back to dd:
 raster_t <- terra::project(raster_t_m, "EPSG:4326")
 #
-#
-#Data as spatial df
-Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,1:2], WQ_summ[,3], 
+#Data as spatial df:
+data_cols <- if(ncol(WQ_summ) >= 3) {
+  WQ_summ[, 3:ncol(WQ_summ), drop = FALSE]
+  } else {
+    stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+    }
+Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,1:2], data_cols, 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
 # Determine which scale to use based on color_temp
