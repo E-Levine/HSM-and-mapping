@@ -166,15 +166,7 @@ ggplot()+
 #
 ####Nearest neighbor####
 #
-##Voroni
-nn_model <- voronoi(x = vect(WQ_summ, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area)
-#
-##Predictions
-nn_model <- st_as_sf(nn_model)
-#Assign predictions to grid
-nn_Site <- st_intersection(nn_model, st_as_sf(Site_Grid %>% dplyr::select(Latitude:MGID)))
-#Plot of interpolated values (area)
-qtm(nn_Site, col = "Salinity_nn", fill = "Salinity_nn")
+nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ)
 #
 ###Data frame with interpolated parameter values: - add to existing data (other model) or start new
 (interp_data <- interp_data %>% #Site_Grid_df %>% 
