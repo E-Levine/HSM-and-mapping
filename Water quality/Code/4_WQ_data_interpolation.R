@@ -28,7 +28,7 @@ Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
-Param_name <- c("Salinity")#Column/parameter name of interest
+Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
 #
 color_temp <- c("cool")    #"warm" or "cool"
 #
@@ -88,7 +88,7 @@ ggplot()+
 #Month_range - Start and end month to include in final data, specified by month's integer value c(#, #)
 #Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values
 
-WQ_summ <- summarize_data(WQ_data, Month_range = c(5, 10), Summ_method = "Range_values")
+WQ_summ <- summarize_data(WQ_data, Summ_method = "Means")
 head(WQ_summ)
 #
 #
@@ -128,24 +128,71 @@ if(color_temp == "warm") {
 #
 ####Inverse distance weighted####
 #
-##IDW: model(Parameter), data to use, grid to apply to 
-idw_model <- idw(Site_data_spdf$Working_Param~1, Site_data_spdf, newdata = grid)
+perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Site_Grid_df, Parameter = Param_name) {
+  Param_name <- Parameter
+  #Determine number of statistics to loop over
+  stats <- unique(Site_data_spdf@data$Statistic)
+  #Initiate lists 
+  idw.output <- list()
+  idw_spdf <- list()
+  idw_nn <- list()
+  idw_Site <- list()
+  # Create a progress bar
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = length(stats) * 4,  
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #
+  tryCatch({
+    #Loop over each statistic
+    for(i in stats){
+      ##MODELLING:
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current statistic
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      ##IDW: model(Parameter), data to use, grid to apply to 
+      idw_model <- suppressMessages(idw(stat_data$Working_Param~1, stat_data, newdata = grid))
+      #Convert to data frame to rename and add parameters levels as values rounded to 0.1
+      idw.output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
+        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
+      #
+      ##PROCESSING:
+      pb$tick(tokens = list(step = "Processing"))
+      Sys.sleep(1/1000)
+      #Convert interpolated values to spatial data
+      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw.output[[i]][,1:2], data = idw.output[[i]][4], 
+                                              proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+      #
+      #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
+      idw_nn[[i]] <- dismo::voronoi(idw_spdf[[i]], ext = extent(Site_Grid)) 
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Determine overlay of data on SiteGrid
+      idw_Site[[i]] <- intersect(idw_nn[[i]], Site_Grid_spdf)
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      #
+      pb$message(paste("Completed:", i, Param_name))
+    }
+    close(pb)
+  }, error = function(e){ 
+    message("The progress bar has ended")
+    pb$terminate()
+  }, finally = {
+    pb$terminate() 
+  })
+  #
+  return(idw_Site)
+}
 #
-#Convert to data frame to rename and add parameters levels as values rounded to 0.1
-idw.output <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% #data.frame(Longitude = (idw_model %>% st_coordinates())[,1], Latitude = (idw_model %>% st_coordinates())[,2], data.frame(idw_model)) %>%   rename("Prediction" = var1.pred) %>% 
-  mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
-head(idw.output)
+idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Param_name)
 #
-#Convert interpolated values to spatial data
-idw_spdf <- SpatialPointsDataFrame(coords = idw.output[,1:2], data = idw.output[4],#as.data.frame(idw.output), 
-                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
-#Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-idw_nn <- dismo::voronoi(idw_spdf, ext = extent(Site_Grid)) 
-qtm(idw_nn, fill = "Pred_Value")
-#
-#Determine overlay of data on SiteGrid
-idw_Site <- intersect(idw_nn, Site_Grid_spdf)
 #
 ###Data frame with interpolated parameter values:
 (interp_data <- Site_Grid_df %>% 
