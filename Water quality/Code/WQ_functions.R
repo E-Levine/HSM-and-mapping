@@ -1051,3 +1051,135 @@ station_range <- function(df, values, Range, StartYr, EndYr){
     {if(values == "Yes") . else mutate(., Range = Maximum - Minimum) %>% dplyr::select(., -Maximum, -Minimum) }
   return(temp)
 }
+####Interpolation####
+#
+perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Site_Grid_df, Parameter = Param_name) {
+  Param_name <- Parameter
+  #Determine number of statistics to loop over
+  stats <- unique(Site_data_spdf@data$Statistic)
+  #Initiate lists 
+  idw.output <- list()
+  idw_spdf <- list()
+  idw_nn <- list()
+  idw_Site <- list()
+  # Create a progress bar
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = length(stats) * 4,  
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #
+  tryCatch({
+    #Loop over each statistic
+    for(i in stats){
+      ##MODELLING:
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current statistic
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      ##IDW: model(Parameter), data to use, grid to apply to 
+      idw_model <- suppressMessages(idw(stat_data$Working_Param~1, stat_data, newdata = grid))
+      #Convert to data frame to rename and add parameters levels as values rounded to 0.1
+      idw.output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
+        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
+      #
+      ##PROCESSING:
+      pb$tick(tokens = list(step = "Processing"))
+      Sys.sleep(1/1000)
+      #Convert interpolated values to spatial data
+      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw.output[[i]][,1:2], data = idw.output[[i]][4], 
+                                              proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+      #
+      #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
+      idw_nn[[i]] <- dismo::voronoi(idw_spdf[[i]], ext = extent(Site_Grid)) 
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Determine overlay of data on SiteGrid
+      idw_Site[[i]] <- st_as_sf(intersect(idw_nn[[i]], Site_Grid_spdf))
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      #Rename column based on model type
+      names(idw_Site[[i]])[names(idw_Site[[i]]) == "Pred_Value"] <- "Pred_Value_idw"
+      #
+      pb$message(paste("Completed:", i, Param_name))
+    }
+    close(pb)
+  }, error = function(e){ 
+    message("The progress bar has ended")
+    pb$terminate()
+  }, finally = {
+    pb$terminate() 
+  })
+  #
+  return(idw_Site)
+}
+#
+perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_Grid_df, Parameter = Param_name, WQ_summ) {
+  Param_name <- Parameter
+  WQsumm <- WQ_summ
+  #Determine number of statistics to loop over
+  stats <- unique(Site_data_spdf@data$Statistic)
+  #Initiate lists 
+  nn_model <- list()
+  nn_Site <- list()
+  # Create a progress bar
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = length(stats) * 3,  
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #
+  tryCatch({
+    #Loop over each statistic
+    for(i in seq_along(stats)){
+      ##MODELLING:
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current statistic
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ] 
+      WQ_data_stat <- WQsumm %>% filter(Statistic == stats[i])
+      ##NN: model(Parameter), data to use, grid to apply to 
+      nn_model[[i]] <- st_as_sf(voronoi(x = vect(WQ_data_stat, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area))
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Assign predictions to grid
+      nn_Site[[i]] <- st_intersection(nn_model[[i]], st_as_sf(Site_Grid %>% dplyr::select(Latitude:MGID)))
+      #
+      ##STORING:
+      #pb$tick(tokens = list(step = "Storing"))
+      #Sys.sleep(1/1000)
+      ###Data frame with interpolated parameter values:
+      #interp_data[[i]] <- Site_Grid_df %>% 
+      #    left_join(as.data.frame(nn_Site[[i]]) %>% dplyr::select(PGID, Working_Param) %>% 
+      #                group_by(PGID) %>% arrange(desc(Working_Param)) %>% slice(1)) %>%
+      #Add in column for statistic type
+      #  mutate(Statistic = i) %>%
+      #  dplyr::rename(!!paste0(Param_name,"_nn") := Working_Param)
+      #Add interpolated data back to Site_grid sf object 
+      #Site_Grid_interp[[i]] <- left_join(Site_Grid, interp_data[[i]])
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      #Rename column based on model type
+      names(nn_Site[[i]])[names(nn_Site[[i]]) == "Working_Param"] <- "Pred_Value_nn"
+      #
+      pb$message(paste("Completed:", i, Param_name))
+    }
+  }, error = function(e){ 
+    message("The progress bar has ended")
+    pb$terminate()
+  }, finally = {
+    pb$terminate() 
+  })
+  #
+  return(nn_Site)
+}
+#
+#
+#
+#
