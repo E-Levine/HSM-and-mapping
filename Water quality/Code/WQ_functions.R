@@ -985,7 +985,7 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     #Filter to specified months if applicable
     {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . } %>%
     #Grouping for evals: station, specified time period
-    group_by(StationID, Estuary, Latitude, Longitude, Parameter, !!sym(Time_period))
+    group_by(Estuary, Latitude, Longitude, Parameter, !!sym(Time_period))
   #
   ##Summarize data using method specified
   if(Summ_method == "Means"){
@@ -1025,27 +1025,31 @@ set_quarters <- function(date, start_month) {
 station_means <- function(df, Range, StartYr, EndYr){
   temp <- df %>% 
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
     summarise(Mean = mean(Value, na.rm = TRUE))
   return(temp)
 }
 #Minimums of parameter
 station_mins <- function(df, Range, StartYr, EndYr){
-  temp <- df %>% 
+  temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
     summarise(Minimum = min(Value, na.rm = TRUE))
   return(temp)
 }
 #Maximums of parameter
 station_maxs <- function(df, Range, StartYr, EndYr){
-  temp <- df %>% 
+  temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
     summarise(Maximum = max(Value, na.rm = TRUE))
   return(temp)
 }
 #Range of parameter: either the range (values = N) or the min and max (values = Y)
 station_range <- function(df, values, Range, StartYr, EndYr){
-  temp <- df %>% 
+  temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
     summarise(Maximum = max(Value, na.rm = TRUE),
               Minimum = min(Value, na.rm = TRUE)) %>%
     {if(values == "Yes") . else mutate(., Range = Maximum - Minimum) %>% dplyr::select(., -Maximum, -Minimum) }
@@ -1180,6 +1184,80 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
   return(nn_Site)
 }
 #
+perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_Grid, Parameter = Param_name) {
+  Param_name <- Parameter
+  #Determine number of statistics to loop over
+  stats <- unique(Site_data_spdf@data$Statistic)
+  #Initiate lists 
+  tps_model <- list()
+  tps_over <- list()
+  tps_Site <- list()
+  # Create a progress bar
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = length(stats) * 3,  
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #
+  tryCatch({
+    #Loop over each statistic
+    for(i in stats){
+      ##MODELLING:
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current statistic
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      #Convert WQ points to vector and rasterize over grid:
+      Param_vec <- vect(stat_data)
+      crs(Param_vec) <- "EPSG:4326"
+      Param_ras <- rasterize(Param_vec, raster_t, field = "Working_Param")
+      #thin plate spline model
+      tps_model_a <- interpolate(raster_t, Tps(xyFromCell(Param_ras, 1:ncell(Param_ras)),
+                                               values(Param_ras)))
+      #Limit data to area of interest
+      tps_model[[i]] <- crop(mask(tps_model_a, Site_area),Site_area) %>% as.polygons() %>% as("Spatial")
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Determine overlap
+      tps_over[[i]] <- st_intersects(Site_Grid, st_as_sf(tps_model[[i]])) %>% lengths() > 0
+      #Get mean data for each location
+      tps_Site[[i]] <- st_intersection(st_as_sf(tps_model[[i]]), Site_Grid[tps_over[[i]],]) #%>% 
+      #rename(Pred_Value = lyr.1) %>% st_set_geometry(NULL) %>%
+      #dplyr::select(PGID, Pred_Value) %>% group_by(PGID) %>%
+      #summarize(Pred_Value = mean(Pred_Value, na.rm = T)) 
+      #
+      ##STORING:
+      #pb$tick(tokens = list(step = "Storing"))
+      #Sys.sleep(1/1000)
+      ###Data frame with interpolated parameter values:
+      ###Data frame with interpolated parameter values: - add to existing data (other model) or start new
+      #interp_data[[i]] <- Site_Grid_df %>% 
+      #left_join(tps_Site[[i]] %>% dplyr::select(PGID, Pred_Value)) %>% 
+      #group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
+      #Add in column for statistic type
+      #mutate(Statistic = i) %>%
+      #dplyr::rename(!!paste0(Param_name,"_tps") := Pred_Value)
+      #Add interpolated data back to Site_grid sf object 
+      #Site_Grid_interp[[i]] <- left_join(Site_Grid, interp_data[[i]])
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      #Rename column based on model type
+      names(tps_Site[[i]])[names(tps_Site[[i]]) == "lyr.1"] <- "Pred_Value_tps"
+      #
+      pb$message(paste("Completed:", i, Param_name))
+    }
+  }, error = function(e){ 
+    message("The progress bar has ended")
+    pb$terminate()
+  }, finally = {
+    pb$terminate() 
+  })
+  #
+  return(tps_model_a)
+}
 #
 #
 #
