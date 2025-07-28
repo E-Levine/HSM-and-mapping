@@ -201,29 +201,9 @@ ggplot()+
 #
 ####Thin plate spline####
 #
-#Convert WQ points to vector and rasterize over grid:
-Param_vec <- vect(Site_data_spdf)
-Param_ras <- rasterize(Param_vec, raster_t, field = "Working_Param")
-#thin plate spline model
-tps_model <- interpolate(raster_t, Tps(xyFromCell(Param_ras, 1:ncell(Param_ras)),
-                                values(Param_ras)))
+tps_data <- perform_tps_interpolation(Site_data_spdf, raster_t, Site_area, Site_Grid, Param_name)
 #
-#Limit data to area of interest
-tps_model <- crop(mask(tps_model, Site_area),Site_area) %>% as.polygons() %>% as("Spatial")
-#
-#Get mean data for each location
-tps_Site <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model)) %>% 
-  rename(Pred_Value = lyr.1) %>% st_set_geometry(NULL) %>%
-  dplyr::select(PGID, Pred_Value) %>% group_by(PGID) %>%
-  summarize(Pred_Value = mean(Pred_Value, na.rm = T)) 
-###Data frame with interpolated parameter values: - add to existing data (other model) or start new
-(interp_data <- interp_data %>% # Site_Grid_df %>% 
-    left_join(tps_Site %>% dplyr::select(PGID, Pred_Value)) %>% 
-    group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
-    dplyr::rename(!!paste0(Param_name,"_tps") := Pred_Value))
-#Add interpolated data back to Site_grid sf object 
-(Site_Grid_interp <- left_join(Site_Grid, interp_data))
-#
+##PLOTTING
 #Plot of binned interpolate values for rough comparison
 ggplot()+
   geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_tps"))))+
@@ -252,6 +232,7 @@ ggplot()+
 #
 #ok_v <- variogram(Salinity~1, Site_data_spdf)
 #plot(ok_v)
+stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == "Mean", ]
 ok_fit <- autofitVariogram(Working_Param ~ 1, Site_data_spdf)
 #ok_vfit$var_model
 ok_model <- gstat(formula = Working_Param~1, model = ok_fit$var_model, data = Site_data_spdf)
