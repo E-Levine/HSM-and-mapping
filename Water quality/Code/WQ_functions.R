@@ -747,12 +747,9 @@ combine_data_sources <- function(){
 #
 ###All functions from automap package. See automap package for author/citation information.
 #
-autofitVariogram = function(formula, input_data, model = c("Sph", "Exp", "Gau", "Ste"),
-                            kappa = c(0.05, seq(0.2, 2, 0.1), 5, 10), fix.values = c(NA,NA,NA),
-                            verbose = FALSE, GLS.model = NA, start_vals = c(NA,NA,NA), 
-                            miscFitOptions = list(),...)
-  # This function automatically fits a variogram to input_data
-{
+# This function automatically fits a variogram to input_data
+autofitVariogram <- function(formula, input_data, model = c("Sph", "Exp", "Gau", "Ste"), kappa = c(0.05, seq(0.2, 2, 0.1), 5, 10), fix.values = c(NA,NA,NA),
+                            verbose = FALSE, GLS.model = NA, start_vals = c(NA,NA,NA), miscFitOptions = list(),...) {
   # Check for anisotropy parameters
   if('alpha' %in% names(list(...))) warning('Anisotropic variogram model fitting not supported, see the documentation of autofitVariogram for more details.')
   
@@ -925,8 +922,7 @@ autofitVariogram = function(formula, input_data, model = c("Sph", "Exp", "Gau", 
 }
 #
 #
-plot.autofitVariogram = function(x, plotit = TRUE, ...)
-{ 
+plot.autofitVariogram = function(x, plotit = TRUE, ...){ 
   shift = 0.03
   labels = as.character(x$exp_var$np)
   vario = xyplot(gamma ~ dist, data = x$exp_var, panel = autokrige.vgm.panel,
@@ -939,9 +935,8 @@ plot.autofitVariogram = function(x, plotit = TRUE, ...)
 }
 #
 #
-summary.autofitVariogram = function(object, ...)
-  # Provides a summary function for the autofitVariogram object
-{
+# Provides a summary function for the autofitVariogram object
+summary.autofitVariogram <- function(object, ...) {
   cat("Experimental variogram:\n")
   print(object$exp_var, ...)
   cat("\nFitted variogram model:\n")
@@ -1219,10 +1214,8 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
-      #Determine overlap
-      tps_over[[i]] <- st_intersects(Site_Grid, st_as_sf(tps_model[[i]])) %>% lengths() > 0
       #Get mean data for each location
-      tps_Site[[i]] <- st_intersection(st_as_sf(tps_model[[i]]), Site_Grid[tps_over[[i]],]) #%>% 
+      tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) #%>% 
       #rename(Pred_Value = lyr.1) %>% st_set_geometry(NULL) %>%
       #dplyr::select(PGID, Pred_Value) %>% group_by(PGID) %>%
       #summarize(Pred_Value = mean(Pred_Value, na.rm = T)) 
@@ -1256,8 +1249,324 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
     pb$terminate() 
   })
   #
-  return(tps_model_a)
+  return(tps_Site)
 }
 #
+perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Parameter = Param_name) {
+  Param_name <- Parameter
+  #Determine number of statistics to loop over
+  stats <- unique(Site_data_spdf@data$Statistic)
+  #Initiate lists 
+  ok.output <- list()
+  ok_spdf <- list()
+  ok_nn <- list()
+  ok_Site <- list()
+  # Create a progress bar
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = length(stats) * 4, 
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #
+  tryCatch({
+    #Loop over each statistic
+    for(i in stats){
+      ##MODELLING:
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current statistic
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      ##IOK: model(Parameter), data to use, grid to apply to 
+      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data)
+      ok_model <- gstat(formula = Working_Param~1, locations = stat_data, model = ok_fit$var_model, data = st_as_sf(stat_data))
+      ok_pred <- predict(ok_model, grid)
+      #Convert to data frame to rename and add parameters levels as values rounded to 0.1
+      ok.output[[i]] <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
+        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
+      #
+      ##PROCESSING:
+      pb$tick(tokens = list(step = "Processing"))
+      Sys.sleep(1/1000)
+      #Convert interpolated values to spatial data
+      ok_spdf[[i]] <- SpatialPointsDataFrame(coords = ok.output[[i]][,1:2], data = ok.output[[i]][4], 
+                                             proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+      #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
+      ok_nn[[i]] <- dismo::voronoi(ok_spdf[[i]], ext = extent(Site_Grid))#
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Determine overlay of data on SiteGrid
+      ok_Site[[i]] <- st_as_sf(intersect(ok_nn[[i]], Site_Grid_spdf))
+      #
+      ##STORING:
+      #pb$tick(tokens = list(step = "Storing"))
+      #Sys.sleep(1/1000)
+      ###Data frame with interpolated parameter values:###Data frame with interpolated parameter values:
+      #interp_data[[i]] <- Site_Grid_df %>% 
+      #Join predicted values
+      #  left_join(as.data.frame(ok_Site[[i]]) %>% dplyr::select(PGID, Pred_Value) %>% 
+      #                group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1)) %>%
+      #Add in column for statistic type
+      #  mutate(Statistic = i) %>%
+      #  dplyr::rename(!!paste0(Param_name,"_ok") := Pred_Value)
+      #Add interpolated data back to Site_grid sf object 
+      #Site_Grid_interp[[i]] <- left_join(Site_Grid, interp_data[[i]])
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      #Rename column based on model type
+      names(ok_Site[[i]])[names(ok_Site[[i]]) == "Pred_Value"] <- "Pred_Value_ok"
+      #
+      pb$message(paste("Completed:", i, Param_name))
+    }
+  }, error = function(e){ 
+    message("The progress bar has ended")
+    pb$terminate()
+  }, finally = {
+    pb$terminate() 
+  })
+  #
+  return(ok_Site)
+}
 #
+join_interpolation <- function(Site_Grid_df){
+  #Starting data:
+  output <- Site_Grid_df
+  #List of potential input SF objects to check for:
+  sf_objects <- c("idw_data", "nn_data", "tps_data", "ok_data")
+  #Determine number of models to combine:
+  existing_object <- NULL
+  existing_count <- 0
+  #Check which spatial objects exist
+  for (sf_obj in sf_objects) {
+    if (exists(sf_obj, envir = .GlobalEnv)) {
+      existing_count <- existing_count + 1
+      if (is.null(existing_object)) {
+        existing_object <- sf_obj  # Store the first existing object
+      }
+    }
+  }
+  #Check the number of existing objects
+  if (existing_count == 0) {
+    stop("Error: None of the model outputs exist in the global environment.")
+  } else if (existing_count == 1) {
+    stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not needed."))
+  }
+  #Get the list of statistics/list names:
+  params <- names(get(existing_object))
+  #
+  #Iterate over each parameter
+  for (i in seq_along(params)){
+    temp_results <- list()
+    #Iterate through each possible SF object
+    for (sf_obj in sf_objects) {
+      if (exists(sf_obj, envir = .GlobalEnv)) {
+        cat("Joining ", sf_obj, " with existing data...\n")
+        temp_data <- get(sf_obj[[i]]) %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
+          dplyr::select(PGID, contains("Pred_Value")) %>% 
+          group_by(PGID) %>% arrange(desc(.[,2])) %>% slice(1)
+        temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data))
+      } else {
+        cat("Warning: ", sf_obj, " does not exist in the global environment.\n")
+      }
+    }
+    #Combine results for the current parameter
+    combined_result <- Reduce(function(x, y) merge(x, y, by = intersect(names(x), names(y)), all = TRUE), temp_results)
+    combined_result <- combined_result %>% mutate(Statistic = params[i]) 
+    #Create a dynamic variable name for the result
+    result_name <- paste0("result_", params[i])
+    # Assign the combined result to a new variable
+    assign(result_name, combined_result, envir = .GlobalEnv)
+  } 
+}
+#
+plot_interpolations <- function(results_data, Site_Grid){
+  #
+  #Add interpolated data back to Site_grid sf object 
+  (Site_Grid_interp <- left_join(Site_Grid, results_data))
+  #Identify columns
+  interp_cols <- grep("Pred_Value_*", names(Site_Grid_interp), value = TRUE)
+  #Initiate list to store plots:
+  plot_list <- list()
+  #Create plots
+  for(col in interp_cols){
+    #Plot of binned interpolate values for rough comparison
+    p <- ggplot()+
+      geom_sf(data = Site_Grid_interp, aes(color = !!sym(col)))+
+      theme_classic()+
+      theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
+      scale_color_viridis_b(direction = -1)+
+      theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)))
+    plot_list[[col]] <- p
+  }
+  #
+  n <- length(plot_list)
+  ncols <- ceiling(sqrt(n))  # Number of columns
+  nrows <- ceiling(n / ncols)  # Number of rows
+  #Arrange the plots in a grid:
+  grid_obj <- grid.arrange(grobs = plot_list, nrow = nrows, ncol = ncols, padding = unit(0, "cm"), 
+                           widths = unit(rep(1, ncols), "null"), heights = unit(rep(1, nrows), "null")) #Equal height and widths
+  #
+  return(list(plots = plot_list, grid = grid_obj))
+}
+#
+final_interpolation <- function(model, selected_modelsl, results_datal, weighting, Site_Grid){
+  if(model == "ensemble"){
+    #Determine column names to match and limit to desired columns:
+    pred_cols <- paste0("Pred_Value_", selected_models)
+    result_Mean_final <- result_Mean %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    #
+    #Determine model weights:
+    model_weighting(result_Mean_final, c(0.75, 0.25))
+    ##Create ensemble values
+    ens_model <- result_Mean_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
+      mutate(Pred_Value_ens = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values))))) %>%
+      group_by(PGID) %>% arrange(desc(Pred_Value_ens)) %>% slice(1)
+    #Spatial data:
+    (Site_Grid_interp <- left_join(Site_Grid, ens_model))
+    #plotting
+    temp <- plot_interpolations(ens_model, Site_Grid)
+    #
+    ##Return plots, grid, and shapefile
+    return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
+  } else if(model == "single"){
+    #Determine column names to match and limit to desired columns:
+    pred_cols <- paste0("Pred_Value_", selected_models)
+    result_Mean_final <- result_Mean %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    #Spatial data:
+    (Site_Grid_interp <- left_join(Site_Grid, result_Mean_final))
+    #plotting
+    temp <- plot_interpolations(result_Mean_final, Site_Grid)
+    #
+    ##Return plots, grid, and shapefile
+    return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
+    #
+  }
+}
+#
+model_weighting <- function(final_data, weighting) {
+  #Patterns to search for:
+  patterns <- "_(idw|nn|tps|ok)$"
+  #Function for equal weighting
+  if (length(weighting) == 1 && weighting == "equal") {
+    weights_from_columns <- function(dataframe) {
+      #Identify columns that match the pattern
+      matched_columns <- colnames(dataframe)[grepl(patterns, colnames(dataframe))]
+      num_divisions <- length(matched_columns)  # Count the number of matched columns
+      #Create weights based on the number of divisions
+      if (num_divisions > 0) {
+        weights <- rep(1 / num_divisions, num_divisions)
+        #Create names for the weights
+        names(weights) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
+      } else {
+        weights <- numeric(0)  # Return an empty numeric vector if no matches
+      }
+      return(weights)
+    }
+    return(weight_values <<- weights_from_columns(final_data))
+    print(weight_values)
+  } else if(is.numeric(weighting) && length(weighting) > 1) {
+    weights_for_columns <- function(dataframe, weighting) {
+      #Identify columns that match the pattern
+      matched_columns <- colnames(dataframe)[grepl(patterns, colnames(dataframe))]
+      num_divisions <- length(matched_columns)  # Count the number of matched columns
+      # Check if the number of weights matches the number of matched columns
+      if (length(weighting) == num_divisions) {
+        # Create names for the weights
+        names(weighting) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
+        return(weighting)
+      } else {
+        stop("The number of weights must match the number of matched columns.")
+      }
+    }
+    return(weight_values <<- weights_for_columns(final_data, weighting))
+    print(weight_values)
+  } else {
+    print("Numbers need to be specified.")
+  }
+}
+#
+save_model_output <- function(output_data){
+  #
+  library(openxlsx)
+  final_output_data <- output_data
+  Stat_type <- unique(final_output_data$spatialData$Statistic)
+  #Save plots:
+  for (i in seq_along(final_output_data$plots)){
+    #Current plot
+    p <- final_output_data$plots[[i]]
+    p_name <- final_output_data$plots[[i]]$labels$colour
+    #Desired file name and specs
+    jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
+                           #File name
+                           Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, 
+                           ".jpg")
+    width_pixels <- 1000
+    aspect_ratio <- 3/4
+    height_pixels <- round(width_pixels * aspect_ratio)
+    #Save plot
+    ggsave(filename = jpg_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+    cat("Interpolation model figure for", gsub(".*_","",p_name), "was saved in 'Output/Figure files'.", "\n")
+  }
+  ##End figure output
+  #
+  #Save shapefile:
+  shape_file <- final_output_data$spatialData
+  shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
+                           #File name
+                           Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, 
+                           ".shp")
+  #Save the sf dataframe as a shapefile
+  suppressMessages(st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
+  #Print a message to confirm saving
+  cat("Shapefile saved at:", shapefile_path, "\n",
+      "- ", nrow(final_data$spatialData), " features saved with ", ncol(final_data$spatialData)-1, "fields")
+  ##End shapefile output
+  #
+  #Save data to Excel sheet
+  model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
+  data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                      #File name
+                      Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, 
+                      ".xlsx")
+  #Create wb with data:
+  new_wb <- createWorkbook()
+  addWorksheet(new_wb, "Model_data")  # Add fresh sheet
+  writeData(new_wb, sheet = "Model_data", x = model_data) 
+  #Save wb
+  saveWorkbook(new_wb, data_path, overwrite = TRUE)
+  cat("Model data successfully saved to:\n",
+      "- Sheet 'Model_data' (", nrow(model_data), " rows)\n",
+      "File: ", data_path, "\n")
+  ##End data output
+  #
+  ##Save the summary information:
+  sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+  sheet_name <- paste0(Param_name, "_models")
+  summ_info <- data.frame(Parameter = Param_name,
+                          Type = Param_name_2,
+                          Statistic = Stat_type,
+                          Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("_(idw|nn|tps|ok)$")) %>% colnames(), collapse = ", "),
+                          Weights = paste(as.vector(weight_values), collapse = ", "),
+                          Date_range = paste0(Start_year, "-", End_year))
+  #Load the workbook
+  wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+  # Check if the sheet exists
+  if (sheet_name %in% sheet_names) {
+    # If it exists, overwrite the existing sheet
+    existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
+    new_data <- rbind(existing_data, summ_info)
+    writeData(wb, sheet = sheet_name, new_data)
+  } else {
+    # If it does not exist, create a new sheet
+    addWorksheet(wb, sheet_name)
+    writeData(wb, sheet = sheet_name, summ_info)
+  }
+  # Save the workbook
+  saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+  #Print a message to confirm saving
+  cat("Summary information was saved as:", sheet_name, "\n")
+  ##End summary output
+} 
 #
