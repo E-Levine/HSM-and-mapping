@@ -9,9 +9,9 @@
 #Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
-               readxl, writexl, progress,
+               openxlsx, progress,
                sf, sp, terra,
-               tmap, tmaptools, #Mapping and figures
+               tmap, tmaptools, gridExtra, #Mapping and figures
                mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
                RColorBrewer, magicfor, ecorest, #HSV scoring
                marmap, gstat, dismo, #Depth, interpolation
@@ -29,6 +29,7 @@ End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
 Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
+Param_name_2 <- c("Annual")#Additional identify for parameter: i.e. Annual, Quarterly, etc.
 #
 color_temp <- c("cool")    #"warm" or "cool"
 #
@@ -126,227 +127,46 @@ if(color_temp == "warm") {
 #
 #
 #
-####Inverse distance weighted####
+####Interpolation models####
 #
+#
+##Inverse distance weighted
 idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Param_name)
 #
 #
-#
-###Data frame with interpolated parameter values:
-(interp_data <- Site_Grid_df %>% 
-  left_join(as.data.frame(idw_Site) %>% dplyr::select(PGID, Pred_Value)) %>% 
-  group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
-  dplyr::rename(!!paste0(Param_name,"_idw") := Pred_Value))
-#Add interpolated data back to Site_grid sf object 
-(Site_Grid_interp <- left_join(Site_Grid, interp_data))
-#
-#Plot of binned interpolate values for rough comparison
-ggplot()+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_idw"))))+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
-  scale_color_viridis_b(direction = -1)
-#Map of interpolated values:
-ggplot()+
-  geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_idw"))))+
-    scale_to_use +
-  geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), color = "white", size = 4.5, shape = 21)+#, color = "black", size = 3)+
-  scale_fill_viridis_c(option = "magma", direction = -1)+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle(paste0("IDW: Mean ",Param_name)) +
-  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
-           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
-#
-##END OF IDW
-#
-#
-####Nearest neighbor####
-#
+##Nearest neighbor
 nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ)
 #
-###Data frame with interpolated parameter values: - add to existing data (other model) or start new
-(interp_data <- interp_data %>% #Site_Grid_df %>% 
-    left_join(as.data.frame(nn_Site) %>% dplyr::select(PGID, Working_Param) %>% 
-    group_by(PGID) %>% arrange(desc(Working_Param)) %>% slice(1)) %>%
-    dplyr::rename(!!paste0(Param_name,"_nn") := Working_Param))
-#Add interpolated data back to Site_grid sf object 
-(Site_Grid_interp <- left_join(Site_Grid, interp_data))
 #
-#Plot of binned interpolate values for rough comparison
-ggplot()+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_nn"))))+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
-  scale_color_viridis_b(direction = -1)
-#Map of interpolated values:
-ggplot()+
-  geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_nn"))))+
-  scale_to_use +
-  geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#, color = "black", size = 3.5)+
-  scale_fill_viridis_c(option = "magma", direction = -1)+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle(paste0("NN: Mean ", Param_name)) +
-  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
-           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
-#
-##END OF NN
-#
-####Thin plate spline####
-#
+##Thin plate spline
 tps_data <- perform_tps_interpolation(Site_data_spdf, raster_t, Site_area, Site_Grid, Param_name)
 #
-##PLOTTING
-#Plot of binned interpolate values for rough comparison
-ggplot()+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_tps"))))+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
-  scale_color_viridis_b(direction = -1)
-#Map of interpolated values:
-ggplot()+
-  geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_tps"))))+
-  scale_to_use +
-  geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#color = "black", size = 3.5)+
-  scale_fill_viridis_c(option = "magma", direction = -1)+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle(paste0("TPS: Mean ",Param_name)) +
-  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
-           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+####Ordinary Kriging
+#
+ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Param_name)
 #
 #
-##END OF TPS
+####Joining and comparing####
 #
-####Ordinary Kriging####
+#Outputs df of 'results_[Param]'
+join_interpolation(Site_Grid_df)
 #
-#ok_v <- variogram(Salinity~1, Site_data_spdf)
-#plot(ok_v)
-stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == "Mean", ]
-ok_fit <- autofitVariogram(Working_Param ~ 1, Site_data_spdf)
-#ok_vfit$var_model
-ok_model <- gstat(formula = Working_Param~1, model = ok_fit$var_model, data = Site_data_spdf)
-ok_pred <- predict(ok_model, grid)
-#Convert to data frame to rename and add parameters levels as values rounded to 0.1
-ok.output <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
-  mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
-#Convert interpolated values to spatial data
-ok_spdf <- SpatialPointsDataFrame(coords = ok.output[,1:2], data = ok.output[4], 
-                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-#
-#Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-ok_nn <- dismo::voronoi(ok_spdf, ext = extent(Site_Grid))
-#
-#Determine overlay of data on SiteGrid
-ok_Site <- intersect(ok_nn, Site_Grid_spdf)
-#
-###Data frame with interpolated parameter values:
-(interp_data <- interp_data %>% #Site_Grid_df %>% 
-    left_join(as.data.frame(ok_Site) %>% dplyr::select(PGID, Pred_Value) %>% 
-    group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1)) %>%
-    dplyr::rename(!!paste0(Param_name,"_ok") := Pred_Value))
-#Add interpolated data back to Site_grid sf object 
-(Site_Grid_interp <- left_join(Site_Grid, interp_data))
-#
-#Plot of binned interpolate values for rough comparison
-ggplot()+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ok"))))+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
-  scale_color_viridis_b(direction = -1)
-#Map of interpolated values:
-ggplot()+
-  geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ok"))))+
-  scale_to_use +
-  geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#color = "black", size = 3.5)+
-  scale_fill_viridis_c(option = "magma", direction = -1)+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle(paste0("OK: Mean ", Param_name)) +
-  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
-           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#Generates plots for each model and output of all models together
+plotting <- plot_interpolations(result_Mean, Site_Grid)
+plot(plotting$grid)
 #
 #
-##END OF OK
 #
-####Ensemble####
+####Ensemble or model selection####
 #
-weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights
-model_weighting <- function(weighting) {
-  #Patterns to search for:
-  patterns <- "_(idw|nn|tps|ok)$"
-  
-  #Function for equal weighting
-  if (weighting == "equal") {
-    weights_from_columns <- function(dataframe) {
-      #Identify columns that match the pattern
-      matched_columns <- colnames(dataframe)[grepl(patterns, colnames(dataframe))]
-      num_divisions <- length(matched_columns)  # Count the number of matched columns
-      #Create weights based on the number of divisions
-      if (num_divisions > 0) {
-        weights <- rep(1 / num_divisions, num_divisions)
-        #Create names for the weights
-        names(weights) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
-      } else {
-        weights <- numeric(0)  # Return an empty numeric vector if no matches
-      }
-      return(weights)
-    }
-    return(weight_values <<- weights_from_columns(Site_Grid_interp))
-    print(weight_values)
-  } else {
-    print("Numbers need to be specified.")
-  }
-}
-#
-model_weighting(weighting)
+#weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
+#Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
+final_data <- final_interpolation("ensemble", c("idw", "nn"), result_Mean, c(0.75, 0.25), Site_Grid)
 #
 #
-#Select columns of interpolated data 
-ens_Site <- Site_Grid_interp %>% dplyr::select(PGID, matches("_(idw|nn|tps|ok)$")) %>%
-  mutate(Pred_Value = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values)))))
+####Save model####
 #
-###Data frame with interpolated parameter values:
-(interp_data <- interp_data %>% #Site_Grid_df %>% 
-    left_join(as.data.frame(ens_Site) %>% dplyr::select(PGID, Pred_Value) %>% 
-                group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1)) %>%
-    dplyr::rename(!!paste0(Param_name,"_ens") := Pred_Value))
-#Add interpolated data back to Site_grid sf object 
-(Site_Grid_interp <- left_join(Site_Grid, interp_data))
+save_model_output(final_data)
 #
-#Plot of binned interpolate values for rough comparison
-ggplot()+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ens"))))+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
-  scale_color_viridis_b(direction = -1)
-#Map of interpolated values:
-ggplot()+
-  geom_sf(data = Site_area, fill = "white")+
-  geom_sf(data = Site_Grid_interp, aes(color = !!sym(paste0(Param_name,"_ens"))))+
-  scale_to_use +
-  geom_sf(data = FL_outline)+
-  geom_point(data = WQ_summ, aes(Longitude, Latitude, fill = Working_Param), shape = 21, size = 4.5, color = "white")+#color = "black", size = 3.5)+
-  scale_fill_viridis_c(option = "magma", direction = -1)+
-  theme_classic()+
-  theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  ggtitle(paste0("Ensemble: Mean ", Param_name)) +
-  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
-           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
-#
-##END OF ENSEMBLE
 #
