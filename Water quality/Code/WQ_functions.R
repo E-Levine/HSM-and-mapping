@@ -1148,19 +1148,6 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
       #Assign predictions to grid
       nn_Site[[i]] <- st_intersection(nn_model[[i]], st_as_sf(Site_Grid %>% dplyr::select(Latitude:MGID)))
       #
-      ##STORING:
-      #pb$tick(tokens = list(step = "Storing"))
-      #Sys.sleep(1/1000)
-      ###Data frame with interpolated parameter values:
-      #interp_data[[i]] <- Site_Grid_df %>% 
-      #    left_join(as.data.frame(nn_Site[[i]]) %>% dplyr::select(PGID, Working_Param) %>% 
-      #                group_by(PGID) %>% arrange(desc(Working_Param)) %>% slice(1)) %>%
-      #Add in column for statistic type
-      #  mutate(Statistic = i) %>%
-      #  dplyr::rename(!!paste0(Param_name,"_nn") := Working_Param)
-      #Add interpolated data back to Site_grid sf object 
-      #Site_Grid_interp[[i]] <- left_join(Site_Grid, interp_data[[i]])
-      #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
@@ -1216,23 +1203,6 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       Sys.sleep(1/1000)
       #Get mean data for each location
       tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) #%>% 
-      #rename(Pred_Value = lyr.1) %>% st_set_geometry(NULL) %>%
-      #dplyr::select(PGID, Pred_Value) %>% group_by(PGID) %>%
-      #summarize(Pred_Value = mean(Pred_Value, na.rm = T)) 
-      #
-      ##STORING:
-      #pb$tick(tokens = list(step = "Storing"))
-      #Sys.sleep(1/1000)
-      ###Data frame with interpolated parameter values:
-      ###Data frame with interpolated parameter values: - add to existing data (other model) or start new
-      #interp_data[[i]] <- Site_Grid_df %>% 
-      #left_join(tps_Site[[i]] %>% dplyr::select(PGID, Pred_Value)) %>% 
-      #group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1) %>%
-      #Add in column for statistic type
-      #mutate(Statistic = i) %>%
-      #dplyr::rename(!!paste0(Param_name,"_tps") := Pred_Value)
-      #Add interpolated data back to Site_grid sf object 
-      #Site_Grid_interp[[i]] <- left_join(Site_Grid, interp_data[[i]])
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
@@ -1297,20 +1267,6 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
       Sys.sleep(1/1000)
       #Determine overlay of data on SiteGrid
       ok_Site[[i]] <- st_as_sf(intersect(ok_nn[[i]], Site_Grid_spdf))
-      #
-      ##STORING:
-      #pb$tick(tokens = list(step = "Storing"))
-      #Sys.sleep(1/1000)
-      ###Data frame with interpolated parameter values:###Data frame with interpolated parameter values:
-      #interp_data[[i]] <- Site_Grid_df %>% 
-      #Join predicted values
-      #  left_join(as.data.frame(ok_Site[[i]]) %>% dplyr::select(PGID, Pred_Value) %>% 
-      #                group_by(PGID) %>% arrange(desc(Pred_Value)) %>% slice(1)) %>%
-      #Add in column for statistic type
-      #  mutate(Statistic = i) %>%
-      #  dplyr::rename(!!paste0(Param_name,"_ok") := Pred_Value)
-      #Add interpolated data back to Site_grid sf object 
-      #Site_Grid_interp[[i]] <- left_join(Site_Grid, interp_data[[i]])
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
@@ -1411,7 +1367,7 @@ plot_interpolations <- function(results_data, Site_Grid){
   return(list(plots = plot_list, grid = grid_obj))
 }
 #
-final_interpolation <- function(model, selected_modelsl, results_datal, weighting, Site_Grid){
+final_interpolation <- function(model, selected_models, results_data, weighting, Site_Grid){
   if(model == "ensemble"){
     #Determine column names to match and limit to desired columns:
     pred_cols <- paste0("Pred_Value_", selected_models)
@@ -1477,7 +1433,7 @@ model_weighting <- function(final_data, weighting) {
         names(weighting) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
         return(weighting)
       } else {
-        stop("The number of weights must match the number of matched columns.")
+        stop("The number of weights must match the number of model columns.")
       }
     }
     return(weight_values <<- weights_for_columns(final_data, weighting))
