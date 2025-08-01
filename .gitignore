@@ -3,7 +3,7 @@
 .Rapp.history
 
 # Session Data files
-.RData
+**.RData
 .RDataTmp
 
 # User-specific files
@@ -48,6 +48,9 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
+# Working files for project development
+*_working.*
+
 # Project files
 #Ignore all folders except for Data layers, HSM code, and Reference files:
 !**.gitkeep
@@ -59,12 +62,17 @@ rsconnect/
 !Reference\ files/Oyster\ State\ Grid
 !Reference\ files/KML\ file\ creation\ SOP
 !Reference\ files/HSI\ curve\ examples/*
-
 !Reference\ files/KML/KMLs*
-Reference\ files/KML/*.*
+Reference\ files/KML/*.kml
 !Reference\ files/KML/PreProcessing/.gitkeep*
 
 !Reference\ files/Grids/*/.gitkeep*
 Reference\ files/Grids/*/*
 Reference\ files/Grids/*
 
+Water\ quality/**/*.xlsx
+Water\ quality/Maps/*widget.html
+Water\ quality/Maps/*.jpeg
+Water\ quality/Maps/*.jpg
+Water\ quality/**/*.RData
+Water\ quality/*.RData*

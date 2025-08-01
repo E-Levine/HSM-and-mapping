@@ -172,148 +172,123 @@ Identify_dataframes <- function(object_list){
 #
 #
 ####Creation of HSI curves
-curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, Parameter_step, Parameter_title, Title, show_points, save_option, bimodal_Yvalues){
-  # Create the line data frame
-  if(LineType == "straight"){base_line <- data.frame(Value = c(0, 0.25, 0.50, 0.75, 1))}
-  else if(LineType == "power"){base_line <- data.frame(Value = c(0, 0.05, 0.50, 0.95, 1))}
-  else if(LineType == "expoDecay"){base_line <- data.frame(Value = c(0.9999, 0.95, 0.50, 0.05, 0.00001))}
-  else if(LineType == "Gaussian"){base_line <- data.frame(Value = c(0, 0.5, 1, 1, 0.5, 0))}
-  else if(LineType == "bimodal"){base_line <- data.frame(Value = bimodal_Yvalues)}
-  else if(LineType == "logistic"){base_line <- data.frame(Value = c(0, 0, 0.5, 1, 1))}
-  else if(LineType == "skewed"){base_line <- data.frame(Value = c(0, 1, 0.5, 0.05, 0))}
-  else if(LineType == "categorical"){base_line <- Parameter_limits}
-  else {return("LineType must be either 'straight', 'power', 'expoDecay', 'Gaussian', 'bimodal', 'logistic', or 'skewed'.")}
+curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, Parameter_step = NA, Parameter_title, show_points, bimodal_Yvalues = NA, step_values = NA){
+  #Line dataframe
+  curve_points <<- line_dataframe(LineType, Parameter_values, step_values, Parameter_limits)
   #
-  # Add the curve data 
-  if(LineType != "categorical"){
-    temp_curve <- base_line %>% mutate(Param = Parameter_values)
-  } else {
-    temp_curve <- data.frame(Value = as.numeric(base_line), Param = Parameter_values)
-  }
   # Get values to calculate for:
   if(length(Parameter_limits) == 2){
     seq_values <- seq(Parameter_limits[1], Parameter_limits[2], by = Parameter_step) 
   } else {seq_values <- NA} 
-  #Based on fit type, fit line:
-  if(FitType == 'soft'){
-    #Predict values:
-    if(LineType == "straight"){
-      fit_line <- lm(Value ~ Param, data = temp_curve)
-      predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values)))
-      #End straight
-    } else if(LineType == "power"){
-      fit_line <- nls(Value ~ a*Param^b, data = temp_curve, start = list(a = 1, b = 1))
-      predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values)))
-      #End power
-    } else if(LineType == "expoDecay"){
-      prep_model <- lm(log(Value - min(base_line)*0.5) ~ Param, data = temp_curve)
-      start <- list(a = exp(coef(prep_model)[1]), b = coef(prep_model)[2], c = min(base_line)*0.5)
-      fit_line <- nls(Value ~ a * exp(b * Param) + c, data = temp_curve, start = start)
-      predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values)))
-      #End expoDecay
-    } else if(LineType == "Gaussian"){
-      fit_line <- smooth.spline(temp_curve$Param, temp_curve$Value)
-      predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
-      #End Gaussian
-    } else if(LineType == "bimodal"){
-      fit_line_s <- loess(Value ~ Param, data = temp_curve, span = 0.8)
-      predictions_s <- data.frame(Param = seq_values, Value = predict(fit_line_s, newdata = data.frame(Param = seq_values)))
-      #End bimodal
-    } else if(LineType == "logistic"){
-      fit_line <- glm(Value ~ Param, data = temp_curve, family = binomial(link = "logit"))
-      predictions <- data.frame(Param = seq_values, Value = predict(fit_line, data.frame(Param = seq_values), type = "response")) 
-      #End logistic
-    } else if(LineType == "skewed"){
-      fit_line_pts <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values) 
-      fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.45)
-      predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
-      #End skewed
-    } else {return("LineType must be either 'straight', 'power', 'expoDecay', 'Gaussian', 'bimodal', 'logistic', or 'skewed'..")}
-    ##END SOFT
-  } else if(FitType == "hard"){
-    if(LineType == "straight" | LineType == "power" | LineType == "expoDecay" | LineType == "logistic"){
-      fit_line_pts <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values)
-      fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y)
-      predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
-      #End straight, power, Gaussian, expoDecay, logisitc
-    } else if(LineType == "Gaussian"){
-      fit_line_pts <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values) %>% data.frame() %>% mutate(y = ifelse(row_number(x) < which.min(y == 0), 0, y)) %>% mutate(max_x_zero = max(x[y == 0], na.rm = TRUE)) %>% mutate(y = ifelse(x > max_x_zero, 0, y)) %>% dplyr::select(-max_x_zero) #Replace missing 0 values at extremes
-      fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y)
-      predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
-      #End Gaussian 
-    } else if(LineType == "bimodal"){
-      fit_line_pts_h <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values) 
-      fit_line_h <- smooth.spline(fit_line_pts_h$x, fit_line_pts_h$y, spar = 0.2)
-      predictions_h <- predict(fit_line_h, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) #%>% mutate(Value = ifelse(Param %in% (temp_curve %>% filter(Value == 0.9999))$Param, 0.9999, ifelse(Param %in% (temp_curve %>% filter(Value == 0.00001))$Param, 0.00001, Value)))
-      #End binomial
-    } else if(LineType == "skewed"){
-      fit_line <- loess(Value ~ Param, data = temp_curve, span = 0.6)
-      predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values))) 
-      #End skewed
-    } else {return("FitType 'hard' not an option for specified line type.")}
-    ##END HARD
-  } else if(FitType == "mid"){
-    if(LineType == "power"){
-      fit_line_pts <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values)
-      fit_line_m <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.45)
-      predictions_temp <- predict(fit_line_m, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) %>% mutate(Value = ifelse(Param %in% (temp_curve %>% filter(Value == 0))$Param, 0, ifelse(Param %in% (temp_curve %>% filter(Value == 1))$Param, 1, Value)))
-      smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value) #smooth curve
-      predictions_mTemp <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) #clean data to work with
-      review <- predictions_mTemp %>% filter(Param >= temp_curve$Param[4] & Param <= ((temp_curve$Param[5] - temp_curve$Param[4])/2)) #Values to review for peaks
-      peak_Param <- review$Param[which.max(review$Value)] #Identify Param value at peak by identifying location of Param value with peak
-      replacements <- seq((predictions_mTemp %>% filter(Param == peak_Param))$Value, (predictions_mTemp %>% filter(Param == max(Param)))$Value, length.out = length(seq(peak_Param, temp_curve$Param[5], by = Parameter_step))) #Create Values to replace with
-      predictions_m <- predictions_mTemp %>% mutate(idx = if_else(Param >= peak_Param, row_number() - min(which(Param >= peak_Param)) + 1L, NA_integer_)) %>% #Add number to identify rows
-        mutate(Value = if_else(Param >= peak_Param, replacements[idx], Value)) %>%  dplyr::select(-idx) #Replace values in order and remove ID column
-      #End power
-    } else if(LineType == "expoDecay"){
-      fit_line_pts <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values)
-      fit_line_m <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.7)
-      predictions_m <- predict(fit_line_m, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) %>% mutate(Value = ifelse(Param %in% (temp_curve %>% filter(Value == 0.9999))$Param, 0.9999, ifelse(Param %in% (temp_curve %>% filter(Value == 0.00001))$Param, 0.00001, Value)))
-      #End expoDecay
-    } else if(LineType == "Gaussian"){
-      fit_line_temp <- smooth.spline(temp_curve$Param, temp_curve$Value)
-      predictions_temp <- predict(fit_line_temp, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
-      mid_data <- predictions_temp %>% mutate(Value = ifelse(Param >= temp_curve$Param[3] & Param <= temp_curve$Param[4], 1, Value))
-      smooth_fit <- smooth.spline(mid_data$Param, mid_data$Value)
-      predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
-      #End Gaussian
-    } else if(LineType == "bimodal"){
-      fit_line_pts_m <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values) 
-      fit_line_m <- smooth.spline(fit_line_pts_m$x, fit_line_pts_m$y, spar = 0.5)
-      predictions_m <- predict(fit_line_m, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
-      #End bimodal
-    } else if(LineType == "logistic"){
-      if(is.na(temp_curve$Param[3]) == FALSE){
-        fit_line_temp <- smooth.spline(temp_curve$Param, temp_curve$Value)
-        predictions_temp <- predict(fit_line_temp, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
-        smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value)
-        predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
-      } else {
-        temp_curve <- temp_curve %>% filter(!is.na(Param))
-        fit_line_temp <- smooth.spline(temp_curve$Param, temp_curve$Value)
-        predictions_temp <- predict(fit_line_temp, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
-        smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value)
-        predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
-        #End logistic
-      }
-    } else if(LineType == "skewed"){
-      fit_line_pts <- approx(temp_curve$Param, temp_curve$Value, xout = seq_values) 
-      fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.45)
-      predictions_temp <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) %>% mutate(Value = ifelse(Param %in% (temp_curve %>% filter(Value == 0))$Param, 0, ifelse(Param %in% (temp_curve %>% filter(Value == 1))$Param, 1, Value)))
-      smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value)
-      predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
-      ### End skewed
-    } 
-    ##END MID
-  } else if(FitType == "NA"){
-    predictions <- temp_curve %>% mutate(Param = factor(temp_curve$Param, levels = (temp_curve %>% arrange(desc(Value)))$Param), Value = as.numeric(Value)) 
-  } else {return("FitType mid not an option for 'straight', 'power', 'expoDecay', or 'bimodal'.")}
   #
-  predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, ifelse(Value < 0, 0, Value))))
-  #Save if specified:
-  if(save_option == "scores" | save_option == "both") {
+  #Based on line type, fit line:
+  if(LineType == "straight"){
+    predictions <- straight_fit(FitType, curve_points, seq_values)
+  } else if(LineType == "power"){
+    predictions <- power_fit(FitType, curve_points, seq_values)
+  } else if(LineType == "expoDecay"){
+    predictions <- expoD_fit(FitType, base_line, curve_points, seq_values)
+  } else if(LineType == "Gaussian"){
+    predictions <- Gaussian_fit(FitType, curve_points, seq_values)
+  } else if(LineType == "bimodal"){
+    predictions <- bimodal_fit(FitType, curve_points, seq_values)
+  } else if(LineType == "logistic"){
+    predictions <- logistic_fit(FitType, curve_points, seq_values)
+  } else if(LineType == "skewed"){
+    predictions <- skewed_fit(FitType, curve_points, seq_values)
+  } else if(LineType == "step"){
+    predictions <- step_fit(FitType, curve_points, seq_values, step_values)
+  } else if(FitType == "NA"){
+  predictions <- curve_points %>% mutate(Param = factor(curve_points$Param, levels = (curve_points %>% arrange(desc(Value)))$Param), Value = as.numeric(Value)) 
+}
+#
+predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, ifelse(Value < 0, 0, Value))))
+#
+  #Generate the plot
+  p <<- ggplot() +
+    {if(LineType != "categorical") geom_line(data = predictions, aes(x = Param, y = Value), linetype = 1, linewidth = 1.5)} +
+    {if(LineType != "categorical" & show_points == "Y") geom_point(data = as.matrix(curve_points), aes(Param, Value), size = 2.75, color = "red")} +
+    {if(LineType == "categorical") geom_col(data = predictions, aes(Param, Value), fill = "#333333")} +
+    {if(LineType != "logistic") scale_y_continuous(limits = c(-0.001, 1.01), expand = c(0, 0))} +
+    {if(LineType == "logistic") scale_y_continuous(limits = c(-0.01, 1.05), expand = c(0, 0))} +
+    {if(LineType != "categorical") scale_x_continuous(limits = Parameter_limits, expand = c(0, 0))} +
+    xlab(Parameter_title) +  ylab("SI Score") +
+    {if(!is.na(Parameter_name)) ggtitle(Parameter_name)}+
+    theme_classic() +
+    theme(axis.title = element_text(size = 20, color = "black"), axis.text = element_text(size = 18, color = "black")) + 
+    theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), plot.title = element_text(size = 20, face = "bold"))
+  
+  #Print the plot
+  print(p)
+  message("Objects created in the global environment: 'curve_points', 'p', 'predictions'.")
+}
+#
+###Curve data gather/combination:
+curve_point_data <- function(data_table = curve_points){
+  #Check for model setup Excel file, check if sheet already exists, load if exists:
+  if(file.exists(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))){
+    print(paste0(Site_Code, " ", Version, " Excel file found."))
+    #Get list of sheet names in model setup file. Skip if already present. 
+    if(!exists("Model_sheets")){Model_sheets <<- excel_sheets(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))}
+    #
+    #Load sheet if exists, message if it doesn't 
+    if(Parameter_name %in% Model_sheets) {
+      assign(paste0(Parameter_name, "_points"), suppressWarnings(read_excel(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), sheet = Parameter_name)))
+      print(paste0(Parameter_name, " Excel sheet loaded succesfully."))
+    } else {
+      print(paste0(Parameter_name, " Excel sheet will be created."))
+    }
+  } else {
+    stop("Excel file not found. Please check that the model setup file is located in the Data folder. R code file '1_SetUp_Folders' should have already been run.")
+  } 
+  #
+  curve_points_f <- get("data_table")
+  ##Create data table or add to existing data:
+  if(exists(paste0(Parameter_name, "_points"))){
+    #Add data to existing data
+    curve_points_f <- curve_points_f %>% mutate(Curve = Parameter_name, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
+    combined_data <- rbind(get(paste0(Parameter_name, "_points")), curve_points_f)
+    assign(paste0(Parameter_name, "_points"), combined_data, envir = globalenv())
+  } else {
+    #Create data frame to save to Excel 
+    combined_data <- curve_points_f %>% mutate(Curve = Parameter_name, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
+    assign(paste0(Parameter_name, "_points"), combined_data, envir = globalenv())
+  }
+  message(paste0("Objects created in the global environment: ", Parameter_name,"_points', 'Model_sheets'."))
+  return(tail(combined_data, 10))
+}
+#
+#
+# Save data and/or figure created
+save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
+  #
+  #For all save types, save the curve point information:
+  if (exists(paste0(Parameter_name, "_points"))) {
+    temp_data <- get(paste0(Parameter_name, "_points"))
+    sheet_name <- Parameter_name
+    # Load the workbook
+    wb <- loadWorkbook(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
+    # Check if the sheet exists
+    if (sheet_name %in% sheet_names) {
+      # If it exists, overwrite the existing sheet
+      writeData(wb, sheet = sheet_name, temp_data)
+    } else {
+      # If it does not exist, create a new sheet
+      addWorksheet(wb, sheet_name)
+      writeData(wb, sheet = sheet_name, temp_data)
+    }
+    # Save the workbook
+    saveWorkbook(wb, paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+  } else {
+    warning("The variable does not exist.")
+  }
+  #
+  saving_occured <- FALSE
+  #
+  #Save if scores is specified:
+  if(save_option == "scores") {
     #Desired names
-    base_filename <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Title,".xlsx")
+    base_filename <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
     #Check if the file already exists
     if (file.exists(base_filename)) {
       #Append current date in YYYY-MM-DD format before the extension
@@ -325,29 +300,13 @@ curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, 
     }
     #Save predictions to Excel with the sheet named "Salinity_adults"
     write_xlsx(predictions, path = new_filename)
-  }
-  #
-  #Generate the plot
-  p <<- ggplot() +
-    {if(LineType != "categorical") geom_line(data = predictions, aes(x = Param, y = Value), linetype = 1, linewidth = 1.5)} +
-    {if(LineType != "categorical" & show_points == "Y") geom_point(data = as.matrix(temp_curve), aes(Param, Value), size = 2.75, color = "red")} +
-    {if(LineType == "categorical") geom_col(data = predictions, aes(Param, Value), fill = "#333333")} +
-    {if(LineType != "logistic") scale_y_continuous(limits = c(-0.001, 1.01), expand = c(0, 0))} +
-    {if(LineType == "logistic") scale_y_continuous(limits = c(-0.01, 1.05), expand = c(0, 0))} +
-    {if(LineType != "categorical") scale_x_continuous(limits = Parameter_limits, expand = c(0, 0))} +
-    xlab(Parameter_title) +  ylab("SI Score") +
-    {if(!is.na(Title)) ggtitle(Title)}+
-    theme_classic() +
-    theme(axis.title = element_text(size = 20, color = "black"), axis.text = element_text(size = 18, color = "black")) + 
-    theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), plot.title = element_text(size = 20, face = "bold"))
-  
-  #Print the plot
-  print(p)
-  
-  #Save if specified
-  if(save_option == "figure" | save_option == "both") {
-    # Desired filename and specs
-    jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Title,".jpg")
+    return("Parameter scores were saved in 'Data/HSI curves.")
+    saving_occured <- TRUE
+  } 
+  #Save if figure is specified:
+  if(save_option == "figure") {
+    # Desired file name and specs
+    jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
     width_pixels <- 1000
     aspect_ratio <- 3/4
     height_pixels <- round(width_pixels * aspect_ratio)
@@ -356,13 +315,287 @@ curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, 
       #Append current date in YYYY-MM-DD format before the extension
       date_str <- format(Sys.Date(), "%Y-%m-%d")
       #Create new filename with date appended
-      new_filename <- sub("\\.jpg$", paste0("_", date_str, ".xlsx"), jpg_filename)
+      new_filename <- sub("\\.jpg$", paste0("_", date_str, ".jpg"), jpg_filename)
     } else {
       new_filename <- jpg_filename
-    }
+    } 
     #Save predictions to Excel with the sheet named "Salinity_adults"
     ggsave(filename = new_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+    return("Parameter scoring figure was saved in 'Data/HSI curves.")
+    saving_occured <- TRUE
     #End figure output
+  } 
+  #
+  #Save if both is specified:
+  if(save_option == "both") {
+    #Desired names
+    base_filename_x <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
+    #Check if the file already exists
+    if (file.exists(base_filename_x)) {
+      #Append current date in YYYY-MM-DD format before the extension
+      date_str <- format(Sys.Date(), "%Y-%m-%d")
+      #Create new file name with date appended
+      new_filename_x <- sub("\\.xlsx$", paste0("_", date_str, ".xlsx"), base_filename_x)
+    } else {
+      new_filename_x <- base_filename_x
+    }
+    #Save predictions to Excel with the sheet named "Salinity_adults"
+    write_xlsx(predictions, path = new_filename_x)
+    #
+    #
+    # Desired file name and specs
+    jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
+    width_pixels <- 1000
+    aspect_ratio <- 3/4
+    height_pixels <- round(width_pixels * aspect_ratio)
+    #Check if the file already exists
+    if (file.exists(jpg_filename)) {
+      #Append current date in YYYY-MM-DD format before the extension
+      date_str <- format(Sys.Date(), "%Y-%m-%d")
+      #Create new file name with date appended
+      new_filename_p <- sub("\\.jpg$", paste0("_", date_str, ".jpg"), jpg_filename)
+    } else {
+      new_filename_p <- jpg_filename
+    } 
+    #Save predictions to Excel with the sheet named "Salinity_adults"
+    ggsave(filename = new_filename_p, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+    return("Parameter scores were saved in 'Data/HSI curves' and parameter scoring figure was saved in 'Data/HSI curves'.")
+    saving_occured <- TRUE
+    #End both output
+  } 
+  #
+  if(!save_option %in% c("scores", "figure", "both")){
+    print("Only parameter score point information will be saved.")
+    }
+}
+#
+#
+###SUB-FUNCTIONS
+#
+# Create the line data frame
+line_dataframe <- function(LineType, Parameter_values, step_values, Parameter_limits){
+  if(LineType == "straight"){base_line <- data.frame(Value = c(0, 0.25, 0.50, 0.75, 1))}
+  else if(LineType == "power"){base_line <- data.frame(Value = c(0, 0.05, 0.50, 0.95, 1))}
+  else if(LineType == "expoDecay"){base_line <- data.frame(Value = c(0.9999, 0.95, 0.50, 0.05, 0.00001))}
+  else if(LineType == "Gaussian"){base_line <- data.frame(Value = c(0, 0.5, 1, 1, 0.5, 0))}
+  else if(LineType == "bimodal"){base_line <- data.frame(Value = bimodal_Yvalues)}
+  else if(LineType == "logistic"){base_line <- data.frame(Value = c(0, 0, 0.5, 1, 1))}
+  else if(LineType == "skewed"){base_line <- data.frame(Value = c(0, 1, 0.5, 0.05, 0))}
+  else if(LineType == "step"){
+    if(length(step_values) == 0){
+      stop("Please specify the suitability values for each step range by specifying 'step_values' in the function call.")
+      } else {
+        #Get number of step_scores needed:
+        half_count = length(Parameter_values)/2
+        #Set step_scores as the base_line Values or give message about error.
+        if(length(step_values) > half_count){message("Too many Parameter_values are provided. There should only be two Parameter_values per one step_score.")}
+        if(length(step_values) < half_count){message("Too few Parameter_values are provided. There should be two Parameter_values per one step_score.")}
+        if(length(step_values) == half_count){base_line <- data.frame(Value = rep(step_values, each = 2))}
+        }
+    #
+  }
+  else if(LineType == "categorical"){base_line <- data.frame(Value = Parameter_limits)}
+  else {stop(message("LineType must be either 'straight', 'power', 'expoDecay', 'Gaussian', 'bimodal', 'logistic', 'skewed', or 'step'."))}
+  # Add the curve data 
+  if(LineType != "categorical"){
+    base_line %>% mutate(Param = Parameter_values)
+  } else {
+    base_line %>% mutate(Param = Parameter_values)
   }
 }
-
+# Fits by line type:
+straight_fit <- function(FitType, curve_points, seq_values){
+  if(FitType == "soft" | FitType == "mid"){
+    fit_line <- lm(Value ~ Param, data = curve_points)
+    predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values)))
+    return(predictions)
+    #End soft
+  } else if(FitType == "hard"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values)
+    fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y)
+    predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    return(predictions)
+  }
+}
+#
+power_fit <- function(FitType, curve_points, seq_values){
+  if(FitType == "soft"){
+    fit_line <- nls(Value ~ a*Param^b, data = curve_points, start = list(a = 1, b = 1))
+    predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values)))
+    return(predictions)
+  } else if(FitType == "hard"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values)
+    fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y)
+    predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    return(predictions)
+  } else if(FitType == "mid"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values)
+    fit_line_m <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.45)
+    predictions_temp <- predict(fit_line_m, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) %>% mutate(Value = ifelse(Param %in% (curve_points %>% filter(Value == 0))$Param, 0, ifelse(Param %in% (curve_points %>% filter(Value == 1))$Param, 1, Value)))
+    smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value) #smooth curve
+    predictions_mTemp <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) #clean data to work with
+    review <- predictions_mTemp %>% filter(Param >= curve_points$Param[4] & Param <= ((curve_points$Param[5] - curve_points$Param[4])/2)) #Values to review for peaks
+    peak_Param <- review$Param[which.max(review$Value)] #Identify Param value at peak by identifying location of Param value with peak
+    replacements <- seq((predictions_mTemp %>% filter(Param == peak_Param))$Value, (predictions_mTemp %>% filter(Param == max(Param)))$Value, length.out = length(seq(peak_Param, curve_points$Param[5], by = Parameter_step))) #Create Values to replace with
+    predictions <- predictions_mTemp %>% mutate(idx = if_else(Param >= peak_Param, row_number() - min(which(Param >= peak_Param)) + 1L, NA_integer_)) %>% #Add number to identify rows
+      mutate(Value = if_else(Param >= peak_Param, replacements[idx], Value)) %>%  dplyr::select(-idx) #Replace values in order and remove ID column
+    return(predictions)
+  }
+}
+#
+expoD_fit <- function(FitType, base_line, curve_points, seq_values){
+  if(FitType == "soft"){
+    prep_model <- lm(log(Value - min(base_line)*0.5) ~ Param, data = curve_points)
+    start <- list(a = exp(coef(prep_model)[1]), b = coef(prep_model)[2], c = min(base_line)*0.5)
+    fit_line <- nls(Value ~ a * exp(b * Param) + c, data = curve_points, start = start)
+    predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values)))
+    return(predictions)
+  } else if(FitType == "hard"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values)
+    fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y)
+    predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    return(predictions)
+  } else if(FitType == "mid"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values)
+    fit_line_m <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.7)
+    predictions <- predict(fit_line_m, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) %>% mutate(Value = ifelse(Param %in% (curve_points %>% filter(Value == 0.9999))$Param, 0.9999, ifelse(Param %in% (curve_points %>% filter(Value == 0.00001))$Param, 0.00001, Value)))
+    return(predictions)
+  }
+}
+#
+Gaussian_fit <- function(FitType, curve_points, seq_values){
+  if(FitType == "soft"){
+    fit_line <- smooth.spline(curve_points$Param, curve_points$Value)
+    predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    return(predictions)
+  } else if(FitType == "hard"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values) %>% data.frame() %>% mutate(y = ifelse(row_number(x) < which.min(y == 0), 0, y)) %>% mutate(max_x_zero = max(x[y == 0], na.rm = TRUE)) %>% mutate(y = ifelse(x > max_x_zero, 0, y)) %>% dplyr::select(-max_x_zero) #Replace missing 0 values at extremes
+    fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y)
+    predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    return(predictions)
+  } else if(FitType == "mid"){
+    fit_line_temp <- smooth.spline(curve_points$Param, curve_points$Value)
+    predictions_temp <- predict(fit_line_temp, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
+    mid_data <- predictions_temp %>% mutate(Value = ifelse(Param >= curve_points$Param[3] & Param <= curve_points$Param[4], 1, Value))
+    smooth_fit <- smooth.spline(mid_data$Param, mid_data$Value)
+    predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
+    return(predictions)
+  }
+}
+#
+bimodal_fit <- function(FitType, curve_points, seq_values){
+  if(FitType == "soft"){
+    fit_line_s <- loess(Value ~ Param, data = curve_points, span = 0.8)
+    predictions <- data.frame(Param = seq_values, Value = predict(fit_line_s, newdata = data.frame(Param = seq_values)))
+    return(predictions)
+  } else if(FitType == "hard"){
+    fit_line_pts_h <- approx(curve_points$Param, curve_points$Value, xout = seq_values) 
+    fit_line_h <- smooth.spline(fit_line_pts_h$x, fit_line_pts_h$y, spar = 0.2)
+    predictions <- predict(fit_line_h, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) #%>% mutate(Value = ifelse(Param %in% (curve_points %>% filter(Value == 0.9999))$Param, 0.9999, ifelse(Param %in% (curve_points %>% filter(Value == 0.00001))$Param, 0.00001, Value)))
+    return(predictions)
+  } else if(FitType == "mid"){
+    fit_line_pts_m <- approx(curve_points$Param, curve_points$Value, xout = seq_values) 
+    fit_line_m <- smooth.spline(fit_line_pts_m$x, fit_line_pts_m$y, spar = 0.5)
+    predictions <- predict(fit_line_m, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
+    return(predictions)
+  }
+}
+#
+logistic_fit <- function(FitType, curve_points, seq_values){
+  if(FitType == "soft"){
+    fit_line <- glm(Value ~ Param, data = curve_points, family = binomial(link = "logit"))
+    predictions <- data.frame(Param = seq_values, Value = predict(fit_line, data.frame(Param = seq_values), type = "response")) 
+    return(predictions)
+  } else if(FitType == "hard"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values)
+    fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y)
+    predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    return(predictions)
+  } else if(FitType == "mid"){
+    if(is.na(curve_points$Param[3]) == FALSE){
+      fit_line_temp <- smooth.spline(curve_points$Param, curve_points$Value)
+      predictions_temp <- predict(fit_line_temp, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
+      smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value)
+      predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    } else {
+      curve_points <- curve_points %>% filter(!is.na(Param))
+      fit_line_temp <- smooth.spline(curve_points$Param, curve_points$Value)
+      predictions_temp <- predict(fit_line_temp, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
+      smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value)
+      predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
+    }
+    return(predictions)
+  }
+}
+#
+skewed_fit <- function(FitType, curve_points, seq_values){
+  if(FitType == "soft"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values) 
+    fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.45)
+    predictions <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y)
+    return(predictions)
+  } else if(FitType == "hard"){
+    fit_line <- loess(Value ~ Param, data = curve_points, span = 0.6)
+    predictions <- data.frame(Param = seq_values, Value = predict(fit_line, newdata = data.frame(Param = seq_values))) 
+    return(predictions)
+  } else if(FitType == "mid"){
+    fit_line_pts <- approx(curve_points$Param, curve_points$Value, xout = seq_values) 
+    fit_line <- smooth.spline(fit_line_pts$x, fit_line_pts$y, spar = 0.45)
+    predictions_temp <- predict(fit_line, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) %>% mutate(Value = ifelse(Param %in% (curve_points %>% filter(Value == 0))$Param, 0, ifelse(Param %in% (curve_points %>% filter(Value == 1))$Param, 1, Value)))
+    smooth_fit <- smooth.spline(predictions_temp$Param, predictions_temp$Value)
+    predictions <- predict(smooth_fit, seq_values) %>% as.data.frame() %>% dplyr::rename("Param" = x, "Value" = y) 
+    return(predictions)
+  }
+}
+#
+step_fit <- function(FitType, curve_points, seq_values, step_values){
+  if(FitType == "hard"){
+    step_scores <- step_values
+    #Identify indices where Value changes
+    change_indices <- which(diff(curve_points$Value) != 0)
+    #Identify indices where Value does NOT change
+    nochange_indices <- which(diff(curve_points$Value) == 0)
+    
+    ##Predicting "between" (segment) values: 
+    #Initialize a list to store models
+    models <- list()
+    preds <- list()
+    #Loop through each segment defined by change_indices
+    for (i in seq_along(change_indices)) {
+      #Define the start and end indices for the segment
+      start_index <- change_indices[i]
+      end_index <- change_indices[i] + 1
+      #Get all values for the current segment
+      segment_data <- curve_points[start_index:(end_index), ]
+      segment_seq <- seq_values[seq_values >= min(segment_data$Param, na.rm = TRUE) & seq_values <= max(segment_data$Param, na.rm = TRUE)]
+      #Fit a linear model to the segment and get predicted values
+      model <- lm(Value ~ Param, data = segment_data)
+      pred <- data.frame(Param = segment_seq, Value = predict(model, newdata = data.frame(Param = segment_seq)))
+      #Store the model and predictions in the lists
+      models[[i]] <- model
+      preds[[i]] <- pred
+    }
+    
+    ##Add missing values where Value does NOT change:
+    #Create a new data frame to fill in missing Param values
+    nochange_data <- data.frame(Param = integer(), Value = numeric())
+    #Loop through indices to fill in missing values
+    for (i in seq_along(nochange_indices)) {
+      start_index_n <- nochange_indices[i]
+      end_index_n <- nochange_indices[i] + 1
+      #Get the current Value
+      current_value <- curve_points$Value[start_index_n]
+      #Fill in missing Param values
+      if (end_index_n <= nrow(curve_points)) {
+        for (param in (curve_points$Param[start_index_n] + 1):(curve_points$Param[end_index_n] - 1)) {
+          nochange_data <- rbind(nochange_data, data.frame(Param = param, Value = current_value))
+        }
+      }
+      }
+    #Combine predicted values into one dataframe:
+    predictions <- rbind(rbind(nochange_data, curve_points),
+                         do.call(rbind, preds) %>% filter(!Param %in% curve_points$Param))  %>% 
+      arrange(Param)
+    return(predictions)
+  } else stop("Only FitType option for a 'step' curve is 'hard'.")
+}
