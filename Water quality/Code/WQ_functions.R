@@ -950,8 +950,10 @@ summary.autofitVariogram <- function(object, ...) {
 #
 ####Data summarization functions####
 #
-summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = "Year", Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = "Means") {
+summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values")) {
   #
+  Time_period <- match.arg(Time_period)
+  Summ_method <- match.arg(Summ_method)
   # Initialize Start_year and End_year
   Start_year <- NULL
   End_year <- NULL
@@ -984,15 +986,15 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
   #
   ##Summarize data using method specified
   if(Summ_method == "Means"){
-    summary_data <- station_means(temp_df, Year_range, Start_year, End_year)  
+    summary_data <- station_means(temp_df, Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Mins"){
-    summary_data <- station_mins(temp_df, Year_range, Start_year, End_year)  
+    summary_data <- station_mins(temp_df, Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Maxs"){
-    summary_data <- station_maxs(temp_df, Year_range, Start_year, End_year)  
+    summary_data <- station_maxs(temp_df, Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Range"){
-    summary_data <- station_range(temp_df, values = "No", Year_range, Start_year, End_year)  
+    summary_data <- station_range(temp_df, values = "No", Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Range_values"){
-    summary_data <- station_range(temp_df, values = "Yes", Year_range, Start_year, End_year)  
+    summary_data <- station_range(temp_df, values = "Yes", Year_range, Start_year, End_year, Time_period)  
   } else {
     stop("Summarization method supplied is incorrectly speficied or is not currently suppported.")
   }
@@ -1000,7 +1002,7 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
   output_data <- summary_data %>% ungroup() %>% 
     pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
     pivot_wider(names_from = "Parameter", values_from = "Value") %>% 
-    dplyr::select(Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
+    dplyr::select(any_of(c("Year", "Month", "Quarter")), Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
     rename(Working_Param = any_of(Param_name))
   #
   return(output_data)
@@ -1020,15 +1022,23 @@ set_quarters <- function(date, start_month) {
 station_means <- function(df, Range, StartYr, EndYr){
   temp <- df %>% 
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Mean = mean(Value, na.rm = TRUE))
   return(temp)
 }
 #Minimums of parameter
-station_mins <- function(df, Range, StartYr, EndYr){
+station_mins <- function(df, Range, StartYr, EndYr, Time_period){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Minimum = min(Value, na.rm = TRUE))
   return(temp)
 }
@@ -1036,7 +1046,11 @@ station_mins <- function(df, Range, StartYr, EndYr){
 station_maxs <- function(df, Range, StartYr, EndYr){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Maximum = max(Value, na.rm = TRUE))
   return(temp)
 }
@@ -1044,12 +1058,17 @@ station_maxs <- function(df, Range, StartYr, EndYr){
 station_range <- function(df, values, Range, StartYr, EndYr){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Maximum = max(Value, na.rm = TRUE),
               Minimum = min(Value, na.rm = TRUE)) %>%
     {if(values == "Yes") . else mutate(., Range = Maximum - Minimum) %>% dplyr::select(., -Maximum, -Minimum) }
   return(temp)
 }
+#
 ####Interpolation####
 #
 perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Site_Grid_df, Parameter = Param_name) {
