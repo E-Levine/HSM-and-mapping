@@ -1019,7 +1019,7 @@ set_quarters <- function(date, start_month) {
   return(floor(adjusted_month / 3) + 1)
 }
 #Means of parameter
-station_means <- function(df, Range, StartYr, EndYr){
+station_means <- function(df, Range, StartYr, EndYr, Time_period){
   temp <- df %>% 
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
     ungroup() %>% 
@@ -1043,7 +1043,7 @@ station_mins <- function(df, Range, StartYr, EndYr, Time_period){
   return(temp)
 }
 #Maximums of parameter
-station_maxs <- function(df, Range, StartYr, EndYr){
+station_maxs <- function(df, Range, StartYr, EndYr, Time_period){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
     ungroup() %>% 
@@ -1055,7 +1055,7 @@ station_maxs <- function(df, Range, StartYr, EndYr){
   return(temp)
 }
 #Range of parameter: either the range (values = N) or the min and max (values = Y)
-station_range <- function(df, values, Range, StartYr, EndYr){
+station_range <- function(df, values, Range, StartYr, EndYr, Time_period){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
     ungroup() %>% 
@@ -1076,7 +1076,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
   #Initiate lists 
-  idw.output <- list()
+  idw_output <- list()
   idw_spdf <- list()
   idw_nn <- list()
   idw_Site <- list()
@@ -1088,23 +1088,23 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
   #
   tryCatch({
     #Loop over each statistic
-    for(i in stats){
+    for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
       ##IDW: model(Parameter), data to use, grid to apply to 
       idw_model <- suppressMessages(idw(stat_data$Working_Param~1, stat_data, newdata = grid))
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      idw.output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
-        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
+      idw_output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
+        mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
       #Convert interpolated values to spatial data
-      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw.output[[i]][,1:2], data = idw.output[[i]][4], 
+      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw_output[[i]][,c("Longitude","Latitude")], data = idw_output[[i]][c("Statistic", "Pred_Value")], 
                                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
       #
       #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
@@ -1201,12 +1201,12 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
   #
   tryCatch({
     #Loop over each statistic
-    for(i in stats){
+    for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
       #Convert WQ points to vector and rasterize over grid:
       Param_vec <- vect(stat_data)
       crs(Param_vec) <- "EPSG:4326"
@@ -1221,7 +1221,8 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
       #Get mean data for each location
-      tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) #%>% 
+      tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) %>% 
+        mutate(Statistic = stats[i], .before = Latitude)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
@@ -1238,7 +1239,7 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
     pb$terminate() 
   })
   #
-  return(tps_Site)
+return(tps_Site)
 }
 #
 perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Parameter = Param_name) {
@@ -1246,7 +1247,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
   #Initiate lists 
-  ok.output <- list()
+  ok_output <- list()
   ok_spdf <- list()
   ok_nn <- list()
   ok_Site <- list()
@@ -1258,25 +1259,30 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
   #
   tryCatch({
     #Loop over each statistic
-    for(i in stats){
+    for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
+      stat_temp <- as.data.frame(stat_data) %>% group_by(Longitude, Latitude, Statistic) %>%
+        summarize(Working_Param = mean(Working_Param, na.rm = TRUE))
+      coordinates(stat_temp) <- ~Longitude + Latitude  # Replace with your actual coordinate columns
+      proj4string(stat_temp) <- CRS(proj4string(stat_data))  # Keep the same projection as the original
+      stat_data <- stat_temp
       ##IOK: model(Parameter), data to use, grid to apply to 
       ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data)
       ok_model <- gstat(formula = Working_Param~1, locations = stat_data, model = ok_fit$var_model, data = st_as_sf(stat_data))
       ok_pred <- predict(ok_model, grid)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      ok.output[[i]] <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
-        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
+      ok_output[[i]] <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
+        mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
       #Convert interpolated values to spatial data
-      ok_spdf[[i]] <- SpatialPointsDataFrame(coords = ok.output[[i]][,1:2], data = ok.output[[i]][4], 
+      ok_spdf[[i]] <- SpatialPointsDataFrame(coords = ok_output[[i]][,c("Longitude","Latitude")], data = ok_output[[i]][c("Statistic", "Pred_Value")], 
                                              proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
       #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
       ok_nn[[i]] <- dismo::voronoi(ok_spdf[[i]], ext = extent(Site_Grid))#
@@ -1317,9 +1323,7 @@ join_interpolation <- function(Site_Grid_df){
   for (sf_obj in sf_objects) {
     if (exists(sf_obj, envir = .GlobalEnv)) {
       existing_count <- existing_count + 1
-      if (is.null(existing_object)) {
-        existing_object <- sf_obj  # Store the first existing object
-      }
+      existing_object <- sf_obj  # Store the last existing object
     }
   }
   #Check the number of existing objects
@@ -1329,7 +1333,7 @@ join_interpolation <- function(Site_Grid_df){
     stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not needed."))
   }
   #Get the list of statistics/list names:
-  params <- names(get(existing_object))
+  params <- get(existing_object) %>% as.data.frame() %>% distinct(Statistic)
   #
   #Iterate over each parameter
   for (i in seq_along(params)){
@@ -1339,8 +1343,8 @@ join_interpolation <- function(Site_Grid_df){
       if (exists(sf_obj, envir = .GlobalEnv)) {
         cat("Joining ", sf_obj, " with existing data...\n")
         temp_data <- get(sf_obj[[i]]) %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
-          dplyr::select(PGID, contains("Pred_Value")) %>% 
-          group_by(PGID) %>% arrange(desc(.[,2])) %>% slice(1)
+          dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
+          group_by(PGID) %>% arrange(desc(across(contains("Pred_Value")))) %>% slice(1)
         temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data))
       } else {
         cat("Warning: ", sf_obj, " does not exist in the global environment.\n")
@@ -1348,12 +1352,11 @@ join_interpolation <- function(Site_Grid_df){
     }
     #Combine results for the current parameter
     combined_result <- Reduce(function(x, y) merge(x, y, by = intersect(names(x), names(y)), all = TRUE), temp_results)
-    combined_result <- combined_result %>% mutate(Statistic = params[i]) 
     #Create a dynamic variable name for the result
     result_name <- paste0("result_", params[i])
     # Assign the combined result to a new variable
     assign(result_name, combined_result, envir = .GlobalEnv)
-  } 
+  }
 }
 #
 plot_interpolations <- function(results_data, Site_Grid){
@@ -1386,16 +1389,23 @@ plot_interpolations <- function(results_data, Site_Grid){
   return(list(plots = plot_list, grid = grid_obj))
 }
 #
-final_interpolation <- function(model, selected_models, results_data, weighting, Site_Grid){
+final_interpolation <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
+  model <- match.arg(model)
+  matched_models <- selected_models[selected_models %in% c("idw", "nn", "tps", "ok")]
+  if (length(matched_models) > 0) {
+    cat("Matched models:", matched_models, "\n")
+  } else {
+    cat("No matched models found.\n")
+  }
   if(model == "ensemble"){
     #Determine column names to match and limit to desired columns:
     pred_cols <- paste0("Pred_Value_", selected_models)
-    result_Mean_final <- result_Mean %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    result_data_final <- results_data %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
     #
     #Determine model weights:
-    model_weighting(result_Mean_final, c(0.75, 0.25))
+    model_weighting(result_data_final, c(0.75, 0.25))
     ##Create ensemble values
-    ens_model <- result_Mean_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
+    ens_model <- result_data_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
       mutate(Pred_Value_ens = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values))))) %>%
       group_by(PGID) %>% arrange(desc(Pred_Value_ens)) %>% slice(1)
     #Spatial data:
@@ -1408,11 +1418,11 @@ final_interpolation <- function(model, selected_models, results_data, weighting,
   } else if(model == "single"){
     #Determine column names to match and limit to desired columns:
     pred_cols <- paste0("Pred_Value_", selected_models)
-    result_Mean_final <- result_Mean %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    result_data_final <- results_data %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
     #Spatial data:
-    (Site_Grid_interp <- left_join(Site_Grid, result_Mean_final))
+    (Site_Grid_interp <- left_join(Site_Grid, result_data_final))
     #plotting
-    temp <- plot_interpolations(result_Mean_final, Site_Grid)
+    temp <- plot_interpolations(result_data_final, Site_Grid)
     #
     ##Return plots, grid, and shapefile
     return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
