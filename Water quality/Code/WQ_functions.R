@@ -1472,9 +1472,20 @@ model_weighting <- function(final_data, weighting) {
   }
 }
 #
-save_model_output <- function(output_data){
+save_model_output <- function(output_data, Month_range = NA){
   #
+  if(all(is.na(Month_range))){
+    cat("No month range has been specified for the data. Continuing ... \n")
+  } else if(any(is.na(Month_range))){
+    stop("Function stopped: Only one month has been specified properly in Month_range.")
+  } else {
+    cat("Months have been specified for the data. Continuing ... \n")
+  }
   library(openxlsx)
+  if(all(!is.na(Month_range))){
+    Start_month <- month.abb[Month_range[1]]
+    End_month <- month.abb[Month_range[2]]
+  }
   final_output_data <- output_data
   Stat_type <- unique(final_output_data$spatialData$Statistic)
   #Save plots:
@@ -1485,7 +1496,11 @@ save_model_output <- function(output_data){
     #Desired file name and specs
     jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
                            #File name
-                           Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, 
+                           if(all(!is.na(Month_range))){
+                             paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                             } else {
+                               paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year)
+                             }, 
                            ".jpg")
     width_pixels <- 1000
     aspect_ratio <- 3/4
@@ -1500,7 +1515,11 @@ save_model_output <- function(output_data){
   shape_file <- final_output_data$spatialData
   shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
                            #File name
-                           Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, 
+                           if(all(!is.na(Month_range))){
+                             paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                             } else {
+                               paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
+                             }, 
                            ".shp")
   #Save the sf dataframe as a shapefile
   suppressMessages(st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
@@ -1513,7 +1532,11 @@ save_model_output <- function(output_data){
   model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
   data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                       #File name
-                      Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, 
+                      if(all(!is.na(Month_range))){
+                        paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                        } else {
+                          paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
+                          }, 
                       ".xlsx")
   #Create wb with data:
   new_wb <- createWorkbook()
@@ -1534,7 +1557,8 @@ save_model_output <- function(output_data){
                           Statistic = Stat_type,
                           Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("_(idw|nn|tps|ok)$")) %>% colnames(), collapse = ", "),
                           Weights = paste(as.vector(weight_values), collapse = ", "),
-                          Date_range = paste0(Start_year, "-", End_year))
+                          Date_range = paste0(Start_year, "-", End_year),
+                          Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")})
   #Load the workbook
   wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
   # Check if the sheet exists
