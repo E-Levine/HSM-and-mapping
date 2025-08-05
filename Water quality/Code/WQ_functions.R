@@ -1122,7 +1122,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
       #Rename column based on model type
       names(idw_Site[[i]])[names(idw_Site[[i]]) == "Pred_Value"] <- "Pred_Value_idw"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
     }
     close(pb)
   }, error = function(e){ 
@@ -1173,7 +1173,7 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
       #Rename column based on model type
       names(nn_Site[[i]])[names(nn_Site[[i]]) == "Working_Param"] <- "Pred_Value_nn"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
     }
   }, error = function(e){ 
     message("The progress bar has ended")
@@ -1230,7 +1230,7 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       #Rename column based on model type
       names(tps_Site[[i]])[names(tps_Site[[i]]) == "lyr.1"] <- "Pred_Value_tps"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
     }
   }, error = function(e){ 
     message("The progress bar has ended")
@@ -1299,7 +1299,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
       #Rename column based on model type
       names(ok_Site[[i]])[names(ok_Site[[i]]) == "Pred_Value"] <- "Pred_Value_ok"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
     }
   }, error = function(e){ 
     message("The progress bar has ended")
@@ -1333,7 +1333,7 @@ join_interpolation <- function(Site_Grid_df){
     stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not needed."))
   }
   #Get the list of statistics/list names:
-  params <- get(existing_object) %>% as.data.frame() %>% distinct(Statistic)
+  params <- unique(unlist(lapply(get(existing_object), function(df) unique(df$Statistic))))
   #
   #Iterate over each parameter
   for (i in seq_along(params)){
@@ -1342,7 +1342,7 @@ join_interpolation <- function(Site_Grid_df){
     for (sf_obj in sf_objects) {
       if (exists(sf_obj, envir = .GlobalEnv)) {
         cat("Joining ", sf_obj, " with existing data...\n")
-        temp_data <- get(sf_obj[[i]]) %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
+        temp_data <- get(sf_obj)[[i]] %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
           dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
           group_by(PGID) %>% arrange(desc(across(contains("Pred_Value")))) %>% slice(1)
         temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data))
