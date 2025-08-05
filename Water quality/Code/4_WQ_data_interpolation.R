@@ -9,7 +9,7 @@
 #Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
-               openxlsx, progress,
+               readxl, openxlsx, progress,
                sf, sp, terra,
                tmap, tmaptools, gridExtra, #Mapping and figures
                mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
@@ -80,23 +80,13 @@ ggplot()+
 #
 #END OF SECTION
 #
-####Summarize data based on parameter of interest - all methods####
-#
-##Summarize data based on method specified:
-#Time_period - Period of time to group by: Year, Month, Quarter
-#Year_range - Range of years of data to include. Blank/enter "NA" for all years, 4-digit year for one year, or enter a character string of 4-digit start year followed by 4-digit end year, separated by a dash "-"
-#Quarter_start - Starting month of quarter 1, entered as an integer corresponding to month. NA if January (1) start. Not needed if not wokring with quarters.
-#Month_range - Start and end month to include in final data, specified by month's integer value c(#, #)
-#Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values
-
-WQ_summ <- summarize_data(WQ_data, Summ_method = "Means")
-head(WQ_summ)
+####Grid/raster set up - run once per sesssion####
 #
 #
 #Create grid of area based on station locations - used for all scores - only need location information 
-Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude:MGID), "Spatial")
-grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) #st_as_sf(Site_Grid_spdf@data %>% dplyr::select(Longitude, Latitude, PGID), coords = c("Longitude", "Latitude"), crs = 4326)
-#rast <- rast(Site_Grid, resolution = c(20, 20))
+Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID, MGID), "Spatial")
+grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) 
+#
 plot(grid) 
 #Get extent in meters to create raster:
 Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
@@ -107,15 +97,6 @@ raster_t_m <- rast(resolution = c(20, 20),
 #Convert back to dd:
 raster_t <- terra::project(raster_t_m, "EPSG:4326")
 #
-#Data as spatial df:
-data_cols <- if(ncol(WQ_summ) >= 3) {
-  WQ_summ[, 3:ncol(WQ_summ), drop = FALSE]
-  } else {
-    stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
-    }
-Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,1:2], data_cols, 
-                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-#
 # Determine which scale to use based on color_temp
 if(color_temp == "warm") {
   scale_to_use <- scale_color_viridis_c(option = "rocket", direction = -1)
@@ -124,6 +105,32 @@ if(color_temp == "warm") {
 } else {
   scale_to_use <- scale_color_viridis_c()  # or some other default
 }
+#
+#
+#
+####Summarize data based on parameter of interest - all methods####
+#
+##Summarize data based on method specified:
+#Time_period - Period of time to group by: Year, Month, Quarter
+#Year_range - Range of years of data to include. Blank/enter "NA" for all years, 4-digit year for one year, or enter a character string of 4-digit start year followed by 4-digit end year, separated by a dash "-"
+#Quarter_start - Starting month of quarter 1, entered as an integer corresponding to month. NA if January (1) start. Not needed if not wokring with quarters.
+#Month_range - Start and end month to include in final data, specified by month's integer value c(#, #)
+#Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values
+#
+WQ_summ <- summarize_data(WQ_data, Time_period = "Year", Summ_method = "Range_values", Month_range = c(5, 10))
+head(WQ_summ)
+#
+#
+#
+#Data as spatial df:
+data_cols <- if(ncol(WQ_summ) >= 3) {
+  WQ_summ[, c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+  } else {
+    stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+    }
+Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
 #
 #
 #
@@ -162,11 +169,13 @@ plot(plotting$grid)
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- final_interpolation("ensemble", c("idw", "nn"), result_Mean, c(0.75, 0.25), Site_Grid)
+final_data <- final_interpolation("ensemble", c("idw", "ok"), result_Mean, c(0.75, 0.25), Site_Grid)
 #
 #
 ####Save model####
 #
-save_model_output(final_data)
+save_model_output(final_data, Month_range = c(5, 10))
 #
 #
+#If continuing to work, good practice to remove objects to make sure correct data is used:
+rm(final_data, plotting, ok_data, tps_data, nn_data, idw_data, Site_data_spdf, WQ_summ, list = ls(pattern = "result_"))
