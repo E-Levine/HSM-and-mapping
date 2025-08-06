@@ -950,7 +950,7 @@ summary.autofitVariogram <- function(object, ...) {
 #
 ####Data summarization functions####
 #
-summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values")) {
+summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
   #
   Time_period <- match.arg(Time_period)
   Summ_method <- match.arg(Summ_method)
@@ -968,6 +968,15 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     Year_range <- NA
   } else {
     stop("Year range must be in the format 'YYYY-YYYY' or 'YYYY'.")
+  }
+  ##Set threshold variables:
+  if(Summ_method == "Threshold" && !(Threshold_parameters[1] %in% c("above", "below"))){
+    stop("Threshold_parameters must be one of: above of below \n
+    Threshold_parameters must also contain a numeric value.")
+  }
+  #
+  if(Summ_method == "Threshold" && Threshold_parameters[1] %in% c("above", "below")){
+    threshold_value <- as.numeric(Threshold_parameters[2])
   }
   #
   ##Clean and group data
@@ -995,12 +1004,14 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     summary_data <- station_range(temp_df, values = "No", Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Range_values"){
     summary_data <- station_range(temp_df, values = "Yes", Year_range, Start_year, End_year, Time_period)  
+  } else if(Summ_method == "Threshold"){
+    summary_data <- station_threshold(temp_df, Year_range, Start_year, End_year, Time_period, Threshold_parameters, threshold_value)  
   } else {
-    stop("Summarization method supplied is incorrectly speficied or is not currently suppported.")
+    stop("Summarization method supplied is incorrectly specified or is not currently suppported.")
   }
   #
   output_data <- summary_data %>% ungroup() %>% 
-    pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
+    pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range", "Threshold"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
     pivot_wider(names_from = "Parameter", values_from = "Value") %>% 
     dplyr::select(any_of(c("Year", "Month", "Quarter")), Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
     rename(Working_Param = any_of(Param_name))
@@ -1068,6 +1079,35 @@ station_range <- function(df, values, Range, StartYr, EndYr, Time_period){
     {if(values == "Yes") . else mutate(., Range = Maximum - Minimum) %>% dplyr::select(., -Maximum, -Minimum) }
   return(temp)
 }
+#Threshold of parameter: above or below a value
+station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_parameters, threshold_value){
+  #Filtering and grouping
+  temp_raw <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} 
+  #Calculate number above/below threshold and total number observations
+  temp <- left_join(temp_raw %>% {if (length(Threshold_parameters) == 2 && Threshold_parameters[1] %in% c("above", "below") && is.numeric(threshold_value)) {
+    if (Threshold_parameters[1] == "above") {
+      filter(., Value > threshold_value)
+    } else if (Threshold_parameters[1] == "below") {
+      filter(., Value < threshold_value)
+    }
+  } else {
+    stop("Invalid Threshold_parameters format. Must specify either 'above' or 'below' and specify the numeric value for the threshold.")
+  }
+  } %>%
+    summarise(Count = n()),
+  temp_raw %>% summarise(Total = n())) %>%
+    #Proportion of samples realted to threshold
+    mutate(Threshold = Count/Total)
+  #
+    return(temp)
+}
+#
 #
 ####Interpolation####
 #
@@ -1271,7 +1311,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
       proj4string(stat_temp) <- CRS(proj4string(stat_data))  # Keep the same projection as the original
       stat_data <- stat_temp
       ##IOK: model(Parameter), data to use, grid to apply to 
-      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data)
+      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data, miscFitOptions = list(merge.small.bins = FALSE))
       ok_model <- gstat(formula = Working_Param~1, locations = stat_data, model = ok_fit$var_model, data = st_as_sf(stat_data))
       ok_pred <- predict(ok_model, grid)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
@@ -1300,6 +1340,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
       names(ok_Site[[i]])[names(ok_Site[[i]]) == "Pred_Value"] <- "Pred_Value_ok"
       #
       pb$message(paste("Completed:", stats[i], Param_name))
+      
     }
   }, error = function(e){ 
     message("The progress bar has ended")
