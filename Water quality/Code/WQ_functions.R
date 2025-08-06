@@ -976,7 +976,7 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
   }
   #
   if(Summ_method == "Threshold" && Threshold_parameters[1] %in% c("above", "below")){
-    threshold_value <- as.numeric(Threshold_parameters[2])
+    threshold_value <<- as.numeric(Threshold_parameters[2])
   }
   #
   ##Clean and group data
@@ -1115,6 +1115,10 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
   #Initiate lists 
   idw_output <- list()
   idw_spdf <- list()
@@ -1222,6 +1226,10 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
     pb$terminate() 
   })
   #
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
   return(nn_Site)
 }
 #
@@ -1279,7 +1287,11 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
     pb$terminate() 
   })
   #
-return(tps_Site)
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
+  return(tps_Site)
 }
 #
 perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Parameter = Param_name) {
@@ -1349,6 +1361,10 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
     pb$terminate() 
   })
   #
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
   return(ok_Site)
 }
 #
@@ -1371,7 +1387,7 @@ join_interpolation <- function(Site_Grid_df){
   if (existing_count == 0) {
     stop("Error: None of the model outputs exist in the global environment.")
   } else if (existing_count == 1) {
-    stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not needed."))
+    stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not applicable"))
   }
   #Get the list of statistics/list names:
   params <- unique(unlist(lapply(get(existing_object), function(df) unique(df$Statistic))))
@@ -1398,6 +1414,10 @@ join_interpolation <- function(Site_Grid_df){
     # Assign the combined result to a new variable
     assign(result_name, combined_result, envir = .GlobalEnv)
   }
+  #Print note if threshold is being used:
+  if(any(params == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
 }
 #
 plot_interpolations <- function(results_data, Site_Grid){
@@ -1416,7 +1436,8 @@ plot_interpolations <- function(results_data, Site_Grid){
       theme_classic()+
       theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
       scale_color_viridis_b(direction = -1)+
-      theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)))
+      {if(any(Site_Grid_interp$Statistic == "Threshold")) labs(caption = "Values = Threshold sample proportions")}+
+      theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9))
     plot_list[[col]] <- p
   }
   #
@@ -1454,6 +1475,9 @@ final_interpolation <- function(model = c("ensemble", "single"), selected_models
     #plotting
     temp <- plot_interpolations(ens_model, Site_Grid)
     #
+    if(any(Site_Grid_interp$Statistic == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+    }
     ##Return plots, grid, and shapefile
     return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
   } else if(model == "single"){
@@ -1465,6 +1489,9 @@ final_interpolation <- function(model = c("ensemble", "single"), selected_models
     #plotting
     temp <- plot_interpolations(result_data_final, Site_Grid)
     #
+    if(any(Site_Grid_interp$Statistic == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+    }
     ##Return plots, grid, and shapefile
     return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
     #
@@ -1513,12 +1540,13 @@ model_weighting <- function(final_data, weighting) {
   }
 }
 #
-save_model_output <- function(output_data, Month_range = NA){
+save_model_output <- function(output_data, Month_range = NA, threshold_val = threshold_value){
   #
-  if(all(is.na(Month_range))){
-    cat("No month range has been specified for the data. Continuing ... \n")
+  if(all(is.na(Month_range)) && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nNo month range has been specified for the data. Is this correct?")
+    if(result == "Yes"){cat("Continuing... \n")} else {stop("Please specify Month_range.")}
   } else if(any(is.na(Month_range))){
-    stop("Function stopped: Only one month has been specified properly in Month_range.")
+    stop("Saving stopped: Only one month has been specified properly in Month_range.")
   } else {
     cat("Months have been specified for the data. Continuing ... \n")
   }
@@ -1527,96 +1555,133 @@ save_model_output <- function(output_data, Month_range = NA){
     Start_month <- month.abb[Month_range[1]]
     End_month <- month.abb[Month_range[2]]
   }
+  threshold_val <- threshold_val
   final_output_data <- output_data
   Stat_type <- unique(final_output_data$spatialData$Statistic)
+
   #Save plots:
-  for (i in seq_along(final_output_data$plots)){
-    #Current plot
-    p <- final_output_data$plots[[i]]
-    p_name <- final_output_data$plots[[i]]$labels$colour
-    #Desired file name and specs
-    jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
-                           #File name
-                           if(all(!is.na(Month_range))){
-                             paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
-                             } else {
-                               paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year)
-                             }, 
-                           ".jpg")
-    width_pixels <- 1000
-    aspect_ratio <- 3/4
-    height_pixels <- round(width_pixels * aspect_ratio)
-    #Save plot
-    ggsave(filename = jpg_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
-    cat("Interpolation model figure for", gsub(".*_","",p_name), "was saved in 'Output/Figure files'.", "\n")
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the plots the chosen interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Interpolation plots will not be saved.")
+    } else {
+      for (i in seq_along(final_output_data$plots)){
+        #Current plot
+        p <- final_output_data$plots[[i]]
+        p_name <- final_output_data$plots[[i]]$labels$colour
+        #Desired file name and specs
+        jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
+                               #File name
+                               if(all(!is.na(Month_range))){
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                               } else {
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year)
+                               }, 
+                               ".jpg")
+        if(is.numeric(threshold_val)) {jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)} else {jpg_filename <- jpg_filename}
+        width_pixels <- 1000
+        aspect_ratio <- 3/4
+        height_pixels <- round(width_pixels * aspect_ratio)
+        #Save plot
+        ggsave(filename = jpg_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+        cat("Interpolation model figure for", gsub(".*_","",p_name), "model was saved in 'Output/Figure files'.", "\n")
+      }
+    }
   }
   ##End figure output
   #
+  #
   #Save shapefile:
-  shape_file <- final_output_data$spatialData
-  shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
-                           #File name
-                           if(all(!is.na(Month_range))){
-                             paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
-                             } else {
-                               paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
-                             }, 
-                           ".shp")
-  #Save the sf dataframe as a shapefile
-  suppressMessages(st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
-  #Print a message to confirm saving
-  cat("Shapefile saved at:", shapefile_path, "\n",
-      "- ", nrow(final_data$spatialData), " features saved with ", ncol(final_data$spatialData)-1, "fields")
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the shapefile of chosen interpolation values be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Shapefile will not be saved.")
+    } else {
+      shape_file <- final_output_data$spatialData
+      shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
+                               #File name
+                               if(all(!is.na(Month_range))){
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                               } else {
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
+                               }, 
+                               ".shp")
+      if(is.numeric(threshold_val)) {shapefile_path <- sub("\\.shp$", paste0("_", threshold_val, ".shp"), shapefile_path)} else {shapefile_path <- shapefile_path}
+      #Save the sf dataframe as a shapefile
+      suppressMessages(st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
+      #Print a message to confirm saving
+      cat("Shapefile saved at:", shapefile_path, "\n",
+          "- ", nrow(final_data$spatialData), " features saved with ", ncol(final_data$spatialData)-1, "fields")
+    }
+  }
   ##End shapefile output
   #
+  #
   #Save data to Excel sheet
-  model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
-  data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
-                      #File name
-                      if(all(!is.na(Month_range))){
-                        paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
-                        } else {
-                          paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould an Excel file with chosen interpolation data be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Interpolation data will not be saved in an Excel file.")
+    } else {
+      model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
+      data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                          #File name
+                          if(all(!is.na(Month_range))){
+                            paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                          } else {
+                            paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
                           }, 
-                      ".xlsx")
-  #Create wb with data:
-  new_wb <- createWorkbook()
-  addWorksheet(new_wb, "Model_data")  # Add fresh sheet
-  writeData(new_wb, sheet = "Model_data", x = model_data) 
-  #Save wb
-  saveWorkbook(new_wb, data_path, overwrite = TRUE)
-  cat("Model data successfully saved to:\n",
-      "- Sheet 'Model_data' (", nrow(model_data), " rows)\n",
-      "File: ", data_path, "\n")
+                          ".xlsx")
+      if(is.numeric(threshold_val)) {data_path <- sub("\\.xlsx$", paste0("_", threshold_val, ".xlsx"), data_path)} else {data_path <- data_path}
+      #Create wb with data:
+      new_wb <- createWorkbook()
+      addWorksheet(new_wb, "Model_data")  # Add fresh sheet
+      writeData(new_wb, sheet = "Model_data", x = model_data) 
+      #Save wb
+      saveWorkbook(new_wb, data_path, overwrite = TRUE)
+      cat("Model data successfully saved to:\n",
+          "- Sheet 'Model_data' (", nrow(model_data), " rows)\n",
+          "File: ", data_path, "\n")
+    }
+  }
   ##End data output
   #
+  #
   ##Save the summary information:
-  sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-  sheet_name <- paste0(Param_name, "_models")
-  summ_info <- data.frame(Parameter = Param_name,
-                          Type = Param_name_2,
-                          Statistic = Stat_type,
-                          Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("_(idw|nn|tps|ok)$")) %>% colnames(), collapse = ", "),
-                          Weights = paste(as.vector(weight_values), collapse = ", "),
-                          Date_range = paste0(Start_year, "-", End_year),
-                          Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")})
-  #Load the workbook
-  wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-  # Check if the sheet exists
-  if (sheet_name %in% sheet_names) {
-    # If it exists, overwrite the existing sheet
-    existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
-    new_data <- rbind(existing_data, summ_info)
-    writeData(wb, sheet = sheet_name, new_data)
-  } else {
-    # If it does not exist, create a new sheet
-    addWorksheet(wb, sheet_name)
-    writeData(wb, sheet = sheet_name, summ_info)
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould summary data for the chosen interpolation models and output be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Summary data will not be saved.")
+    } else {
+      sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      sheet_name <- paste0(Param_name, "_models")
+      summ_info <- data.frame(Parameter = Param_name,
+                              Type = Param_name_2,
+                              Statistic = Stat_type,
+                              Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("_(idw|nn|tps|ok)$")) %>% colnames(), collapse = ", "),
+                              Weights = paste(as.vector(weight_values), collapse = ", "),
+                              Date_range = paste0(Start_year, "-", End_year),
+                              Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")},
+                              Threshold_value = threshold_val)
+      #Load the workbook
+      wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      # Check if the sheet exists
+      if (sheet_name %in% sheet_names) {
+        # If it exists, overwrite the existing sheet
+        existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
+        new_data <- rbind(existing_data, summ_info)
+        writeData(wb, sheet = sheet_name, new_data)
+      } else {
+        # If it does not exist, create a new sheet
+        addWorksheet(wb, sheet_name)
+        writeData(wb, sheet = sheet_name, summ_info)
+      }
+      # Save the workbook
+      saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+      #Print a message to confirm saving
+      cat("Summary information was saved as:", sheet_name, "\n")
+    }
   }
-  # Save the workbook
-  saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
-  #Print a message to confirm saving
-  cat("Summary information was saved as:", sheet_name, "\n")
   ##End summary output
 } 
 #

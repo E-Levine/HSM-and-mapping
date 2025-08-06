@@ -158,7 +158,7 @@ ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid, Site_Grid_s
 join_interpolation(Site_Grid_df)
 #
 #Generates plots for each model and output of all models together - run for each parameter
-plotting <- plot_interpolations(result_Mean, Site_Grid)
+plotting <- plot_interpolations(result_Threshold, Site_Grid)
 #
 #
 #
@@ -166,12 +166,12 @@ plotting <- plot_interpolations(result_Mean, Site_Grid)
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- final_interpolation("ensemble", c("idw", "ok"), result_Mean, c(0.75, 0.25), Site_Grid)
+final_data <- final_interpolation("ensemble", c("idw", "ok"), result_Threshold, c(0.75, 0.25), Site_Grid)
 #
 #
 ####Save model####
 #
-save_model_output(final_data, Month_range = c(5, 10))
+save_model_output(final_data)
 #
 #
 #If continuing to work, good practice to remove objects to make sure correct data is used:
