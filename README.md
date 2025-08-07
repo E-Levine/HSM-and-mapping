@@ -9,7 +9,7 @@ All files other than R code and R project files will be saved locally due to the
 - Determine two-letter site code and section names to be used for whole area of interest for the project and subregions within the area.
 - Identify the appropriate StateGrid and add the required pico-grid folder to the "Reference files/Grids" folder.
 - Create or locate the necessary KML files (refer to "Site_Section_KML_creation_SOP" found in the Reference documentation for file creation). If the KML files are already separated, coppy the files to the "Reference files/KML" folder. If the KML file needs to be separated, copy the [SiteCode_version]_all file to the "Reference files/KML/PreProcessing" folder.
-- Determine data layers to include in model. *[need to update: Gather data as needed and add to the "Data layers" folder.]*
+- Determine data layers to include in model. Add required layers to the "Data layers" folder. Make sure the date of publication is appened to the folder name using a 4-digit year and 2-digit month ("_202402"). This will allow for the usage of multiple layers of the same data type and will aid in build a local library of data layers to be shared among projects.
 - Update the "Setup_data" file (located in the "Reference files" folder) as needed for the model and based on the data being used. Refer to the *Set up data* section for more guidance.
 
 ### Set up data
@@ -17,8 +17,7 @@ A base "Setup_data" Excel file is located within the "Reference files" folder. T
 *Current data types included/accounted for:*
 - Long_Names: Long names for sites, parameters, layer types, and data types. Requires a Yes/No desgnation for inclusion or exclusion in models.
 - Section_Order: Priority order for sections within sites. Used to assign section designations in the case of overlapping spatial polygons. Data is filtered based on site code.
-- Parameter_Order: Priority order for data layers used within the model. Used to assign parameter order for model weighting. Parameters to included should be assigned a priority number and data to exclude should be prioritized as "NA".
-- Parameter_Scoring: Scoring values for data layers used within the model. Used to assign parameter score based on parameter value. Data layer used should be marked as "Y" under "Is_Used" or "N" if not being used in the model.
+- Parameter_Order: Priority order for data layers used within the model. Used to assign parameter order for model weighting. Parameters to included should be assigned a priority number and data to exclude should be prioritized as "NA". "Column_name" should refelect the column of data to reference for assigning suitability scores.
 
 ### Data layers
 Folder for storing all data layers used within the model. Due to file size, data should be stored locally. A text file is included to note data sources. Names or values listed below are currently accounted for in the code and set up file. Anything not listed has not been used in models created by the code owner(s). <br>
@@ -43,7 +42,7 @@ Location: Water quality; Project: Water quality
 - Interpolation (uses 4_WQ_data_interpolation.R)
   * Cleaned water quality data can be used to interpolate data to the entire site area based on station locations. Before interpolation is applied, data should be summarized by time frame and by statistic using the 'summarize_data' function.
   * Functions for inverse distance weighting, nearest neighbor, thin plate spline, and ordinary kriging can be used independently or in combination. In combination, an ensemble model can also be produced using user-specified weighting. 
-  * Plots, data, and shapefiles for selected models can be output, and summary information for models are added to the "model_setup" summary file in the Site_version Data folder.
+  * Plots, data, and shapefiles for selected models can be saved locally, and summary information for models are added to the "model_setup" summary file in the Site_version Data folder.
   * Refer to "Interpolation Methods" document located in the "Reference files" folder for additional information on interpolation methods.  
 
 ### 2_Developing_HSM_curves
