@@ -2,6 +2,21 @@
 ##
 #### SetUp_Folders
 create_folders <- function(Site_Code, Version) {
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan local folders be created to organize model files in a Site and Version specific directory?")
+    if(result == "No"){
+      message(paste0("Local folders will not be created. Folders required for proper code functioning:
+              - main directory ",Site_Code, "_", Version," folder
+              - ",Site_Code, "_", Version,"/Data
+              - ",Site_Code, "_", Version,"/Data/Layers                     
+              - ",Site_Code, "_", Version,"/Data/Layers/KML
+              - ",Site_Code, "_", Version,"/Data/Layers/HSI curves                     
+              - ",Site_Code, "_", Version,"/Output
+              - ",Site_Code, "_", Version,"/Output/Data files
+              - ",Site_Code, "_", Version,"/Output/Figure files
+              - ",Site_Code, "_", Version,"/Output/Map files
+              - ",Site_Code, "_", Version,"/Output/Shapefiles"))
+    } else {
   # Create main folder
   main_folder <- paste0(Site_Code, "_", Version)
   if (!dir.exists(main_folder)) {
@@ -82,6 +97,8 @@ create_folders <- function(Site_Code, Version) {
   } else {
     print(paste(Site_Code, " version ", Version, " Output Shapefiles folder already exists."))
   }
+    }
+  }
 }
 #
 #
@@ -90,40 +107,45 @@ create_folders <- function(Site_Code, Version) {
 #### File separation
 #
 KML_separation <- function(Status_of_KML){
-  if(length(Status_of_KML) == 1){
-    #If separation required:
-    
-    kml_file <- st_read(paste0("Reference files/KML/PreProcessing/", Site_Code, "_", Version, "/", Site_Code,"_all.kml")) #Load file
-    Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
-    filelist <- list()
-    for (i in 1:nrow(Polygons)) {
-      name <- Polygons$Name[1]
-      polygon <- kml_file %>% filter(Name == Polygons$Name[i]) #Get the current unique polygon
-      filename <- paste0("Reference files/KML/", Polygons$Name[i], ".kml") #Write to separate KML file within References/KML folder
-      st_write(polygon, filename, driver = "kml", append = FALSE)
-      st_write(polygon, paste0(Site_Code, "_", Version, "/Data/Layers/KML/", Polygons$Name[i], ".kml"), driver = "kml", append = FALSE) #Write to HSM folder for records.
-      filelist[i] <- paste("Polygon", name, "to", filename)
-    }
-    return(filelist)
-  } else {
-    search_strings  <- Status_of_KML
-    # List of available files 
-    files <- list.files("Reference files/KML", full.names = TRUE)
-    #
-    for (file in files) {
-      # Get the filename without the path
-      filename <- basename(file)
-      
-      # Check if any of the search strings are in the filename
-      if (any(str_detect(filename, search_strings))) {
-        # Copy the file to locationB
-        file.copy(file, file.path(paste0(Site_Code, "_", Version, "/Data/Layers/KML/"), filename))
+  if(interactive()){
+    result<- select.list(c("Yes", "No"), title = paste0("\nCan KML files be saved locally to the '",Site_Code,"_",Version,"' folder?"))
+    if(result == "No"){
+      message("KML files will not be saved. A local copy of the site boundary KML is required at a minimum. Section-specific KMLs are not required.")
+    } else {
+      if(length(Status_of_KML) == 1){
+        #If separation required:
+        kml_file <- st_read(paste0("Reference files/KML/PreProcessing/", Site_Code, "_", Version, "/", Site_Code,"_all.kml")) #Load file
+        Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
+        filelist <- list()
+        for (i in 1:nrow(Polygons)) {
+          name <- Polygons$Name[1]
+          polygon <- kml_file %>% filter(Name == Polygons$Name[i]) #Get the current unique polygon
+          filename <- paste0("Reference files/KML/", Polygons$Name[i], ".kml") #Write to separate KML file within References/KML folder
+          st_write(polygon, filename, driver = "kml", append = FALSE)
+          st_write(polygon, paste0(Site_Code, "_", Version, "/Data/Layers/KML/", Polygons$Name[i], ".kml"), driver = "kml", append = FALSE) #Write to HSM folder for records.
+          filelist[i] <- paste("Polygon", name, "to", filename)
+        }
+        return(filelist)
+      } else {
+        search_strings  <- Status_of_KML
+        #List of available files 
+        files <- list.files("Reference files/KML", full.names = TRUE)
+        #
+        for (file in files) {
+          #Get the filename without the path
+          filename <- basename(file)
+          #Check if any of the search strings are in the filename
+          if (any(str_detect(filename, search_strings))) {
+            #Copy the file to locationB
+            file.copy(file, file.path(paste0(Site_Code, "_", Version, "/Data/Layers/KML/"), filename))
+          }
+        }
+        #Print a message indicating completion
+        message(paste0("Files copied from [Reference files/KML/] to [", Site_Code, "_", Version, "/Data/Layers/KML]."))
       }
     }
-    # Print a message indicating completion
-    message(paste0("Files copied from [Reference files/KML/] to [", Site_Code, "_", Version, "/Data/Layers/KML]."))
+    }
   }
-}
 #
 #
 #
@@ -166,6 +188,14 @@ Identify_dataframes <- function(object_list){
   dfoutput <<- sprintf("%s\n%s", t_line1, t_line2)
   cat(dfoutput)
   selected_data[["Data not included"]] <<- notdataframes
+  if(interactive()){
+    result<- select.list(c("Yes", "No"), title = paste0("\nIs the list of included data correct and can the information be save to the version tracking file?"))
+    if(result == "No"){
+      message("A list of the included and excluded data will not be saved to the version tracking file.")
+    } else {
+      write.xlsx(selected_data, file = paste0(Site_Code, "_", Version, "/Data/", Site_Code, "_", Version, "_model_setup.xlsx"), sheetName = names(selected_data))
+    }
+  }
 }
 #
 #
