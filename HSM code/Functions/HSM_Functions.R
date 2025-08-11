@@ -158,14 +158,20 @@ Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters
     if(Long_Names == "Y"){Names <<- suppressWarnings(read_excel("Reference files/Setup_data.xlsx", sheet = "Long_Names") %>% as.data.frame() %>% subset(Designation == Site_Code | Is_Used == "Y"))} else {Names <<- "Long names are not needed."}
     if(Order_of_Sections == "Y"){suppressWarnings(Sections <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Section_Order") %>% as.data.frame() %>% mutate(Order = as.integer(Order)) %>% subset(Site == Site_Code & !is.na(Order)))} else {Sections <<- "Section order is not needed."}
     if(Order_of_Parameters == "Y"){suppressWarnings(Parameters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Order") %>% as.data.frame() %>% mutate(Priority = as.integer(Priority)) %>% subset(!is.na(Priority)))} else {Parameters <<- "Parameter order is not needed."}
-    if(FL_Oysters == "Y"){suppressWarnings(Oysters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Scoring") %>% as.data.frame() %>% mutate(Score = as.numeric(Score)) %>% subset(Parameter == "Oysters" & !is.na(Score)))} else {Parameters <<- "'Oyster Beds in Florida' layer is not needed."}
-    if(Shellfish_Harvest_Area_Designations == "Y"){suppressWarnings(SHAreas  <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Scoring") %>% as.data.frame() %>% mutate(Score = as.numeric(Score)) %>% subset(Parameter == "SHA_Class" & !is.na(Score)))} else {SHAreas <<- "Shellfish Harvest Areas is not needed."}
+    if(FL_Oysters == "Y"){suppressWarnings(Oysters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Levels") %>% as.data.frame() %>% subset(Parameter == "Oysters"))} else {Parameters <<- "'Oyster Beds in Florida' layer is not needed."}
+    if(Seagrass == "Y"){suppressWarnings(Seagrasses <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Levels") %>% as.data.frame() %>% subset(Parameter == "Seagrass"))} else {Parameters <<- "'Seagrass habitat in Florida' layer is not needed."}
+    if(Shellfish_Harvest_Area_Designations == "Y"){suppressWarnings(SHAreas  <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Levels") %>% as.data.frame() %>% subset(Parameter == "SHA_Class"))} else {SHAreas <<- "Shellfish Harvest Areas is not needed."}
+    if(Navigation_channels == "Y"){suppressWarnings(NavCha <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Levels") %>% as.data.frame() %>% subset(Parameter == "Nav_Channels"))} else {Parameters <<- "'Navigational channels' layer is not needed."}
+    if(Aquaculture_lease == "Y"){suppressWarnings(AquaLease <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Levels") %>% as.data.frame() %>% subset(Parameter == "Aquaculture_Lease"))} else {Parameters <<- "'Aquaculture leases' layer is not needed."}
     df_list <<- list("Long_Names" = Names, 
                      "Section_Order" = Sections, 
                      "Parameter_Order" = Parameters, 
                      "FLOysters" = Oysters,
-                     "SHAs" = SHAreas)
-    return(list("Excel file found. Required sheets loaded into data frames.", df_list))
+                     "Seagrass" = Seagrasses,
+                     "SHAs" = SHAreas,
+                     "Nav_Channels" = NavCha,
+                     "Aquaculture" = AquaLease)
+    return(list("Excel file found. Required sheets loaded into data frames. Levels of specified parameters listed.", df_list))
   } else {
     return(print("Excel file not found. Please find the data file and check for required data."))
   } 
