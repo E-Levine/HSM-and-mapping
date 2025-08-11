@@ -58,6 +58,4 @@ Gather_setup_data(Long_Names, Order_of_Sections, Order_of_Parameters, FL_Oysters
 ##Return list of data included and excluded from model.
 Identify_dataframes(df_list)
 #
-##If above data is correct, run line to write data used to the version tracking files (Data/Site_Code_Version).
-write.xlsx(selected_data, file = paste0(Site_Code, "_", Version, "/Data/", Site_Code, "_", Version, "_model_setup.xlsx"), sheetName = names(selected_data))
 #

@@ -950,8 +950,10 @@ summary.autofitVariogram <- function(object, ...) {
 #
 ####Data summarization functions####
 #
-summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = "Year", Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = "Means") {
+summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
   #
+  Time_period <- match.arg(Time_period)
+  Summ_method <- match.arg(Summ_method)
   # Initialize Start_year and End_year
   Start_year <- NULL
   End_year <- NULL
@@ -966,6 +968,15 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     Year_range <- NA
   } else {
     stop("Year range must be in the format 'YYYY-YYYY' or 'YYYY'.")
+  }
+  ##Set threshold variables:
+  if(Summ_method == "Threshold" && !(Threshold_parameters[1] %in% c("above", "below"))){
+    stop("Threshold_parameters must be one of: above of below \n
+    Threshold_parameters must also contain a numeric value.")
+  }
+  #
+  if(Summ_method == "Threshold" && Threshold_parameters[1] %in% c("above", "below")){
+    threshold_value <<- as.numeric(Threshold_parameters[2])
   }
   #
   ##Clean and group data
@@ -984,23 +995,25 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
   #
   ##Summarize data using method specified
   if(Summ_method == "Means"){
-    summary_data <- station_means(temp_df, Year_range, Start_year, End_year)  
+    summary_data <- station_means(temp_df, Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Mins"){
-    summary_data <- station_mins(temp_df, Year_range, Start_year, End_year)  
+    summary_data <- station_mins(temp_df, Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Maxs"){
-    summary_data <- station_maxs(temp_df, Year_range, Start_year, End_year)  
+    summary_data <- station_maxs(temp_df, Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Range"){
-    summary_data <- station_range(temp_df, values = "No", Year_range, Start_year, End_year)  
+    summary_data <- station_range(temp_df, values = "No", Year_range, Start_year, End_year, Time_period)  
   } else if(Summ_method == "Range_values"){
-    summary_data <- station_range(temp_df, values = "Yes", Year_range, Start_year, End_year)  
+    summary_data <- station_range(temp_df, values = "Yes", Year_range, Start_year, End_year, Time_period)  
+  } else if(Summ_method == "Threshold"){
+    summary_data <- station_threshold(temp_df, Year_range, Start_year, End_year, Time_period, Threshold_parameters, threshold_value)  
   } else {
-    stop("Summarization method supplied is incorrectly speficied or is not currently suppported.")
+    stop("Summarization method supplied is incorrectly specified or is not currently suppported.")
   }
   #
   output_data <- summary_data %>% ungroup() %>% 
-    pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
+    pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range", "Threshold"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
     pivot_wider(names_from = "Parameter", values_from = "Value") %>% 
-    dplyr::select(Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
+    dplyr::select(any_of(c("Year", "Month", "Quarter")), Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
     rename(Working_Param = any_of(Param_name))
   #
   return(output_data)
@@ -1017,47 +1030,97 @@ set_quarters <- function(date, start_month) {
   return(floor(adjusted_month / 3) + 1)
 }
 #Means of parameter
-station_means <- function(df, Range, StartYr, EndYr){
+station_means <- function(df, Range, StartYr, EndYr, Time_period){
   temp <- df %>% 
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Mean = mean(Value, na.rm = TRUE))
   return(temp)
 }
 #Minimums of parameter
-station_mins <- function(df, Range, StartYr, EndYr){
+station_mins <- function(df, Range, StartYr, EndYr, Time_period){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Minimum = min(Value, na.rm = TRUE))
   return(temp)
 }
 #Maximums of parameter
-station_maxs <- function(df, Range, StartYr, EndYr){
+station_maxs <- function(df, Range, StartYr, EndYr, Time_period){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Maximum = max(Value, na.rm = TRUE))
   return(temp)
 }
 #Range of parameter: either the range (values = N) or the min and max (values = Y)
-station_range <- function(df, values, Range, StartYr, EndYr){
+station_range <- function(df, values, Range, StartYr, EndYr, Time_period){
   temp <- df %>%  
     {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
-    ungroup() %>% group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
     summarise(Maximum = max(Value, na.rm = TRUE),
               Minimum = min(Value, na.rm = TRUE)) %>%
     {if(values == "Yes") . else mutate(., Range = Maximum - Minimum) %>% dplyr::select(., -Maximum, -Minimum) }
   return(temp)
 }
+#Threshold of parameter: above or below a value
+station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_parameters, threshold_value){
+  #Filtering and grouping
+  temp_raw <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} 
+  #Calculate number above/below threshold and total number observations
+  temp <- left_join(temp_raw %>% {if (length(Threshold_parameters) == 2 && Threshold_parameters[1] %in% c("above", "below") && is.numeric(threshold_value)) {
+    if (Threshold_parameters[1] == "above") {
+      filter(., Value > threshold_value)
+    } else if (Threshold_parameters[1] == "below") {
+      filter(., Value < threshold_value)
+    }
+  } else {
+    stop("Invalid Threshold_parameters format. Must specify either 'above' or 'below' and specify the numeric value for the threshold.")
+  }
+  } %>%
+    summarise(Count = n()),
+  temp_raw %>% summarise(Total = n())) %>%
+    #Proportion of samples realted to threshold
+    mutate(Threshold = Count/Total)
+  #
+    return(temp)
+}
+#
+#
 ####Interpolation####
 #
 perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Site_Grid_df, Parameter = Param_name) {
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
   #Initiate lists 
-  idw.output <- list()
+  idw_output <- list()
   idw_spdf <- list()
   idw_nn <- list()
   idw_Site <- list()
@@ -1069,23 +1132,23 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
   #
   tryCatch({
     #Loop over each statistic
-    for(i in stats){
+    for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
       ##IDW: model(Parameter), data to use, grid to apply to 
       idw_model <- suppressMessages(idw(stat_data$Working_Param~1, stat_data, newdata = grid))
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      idw.output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
-        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
+      idw_output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
+        mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
       #Convert interpolated values to spatial data
-      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw.output[[i]][,1:2], data = idw.output[[i]][4], 
+      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw_output[[i]][,c("Longitude","Latitude")], data = idw_output[[i]][c("Statistic", "Pred_Value")], 
                                               proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
       #
       #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
@@ -1103,7 +1166,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
       #Rename column based on model type
       names(idw_Site[[i]])[names(idw_Site[[i]]) == "Pred_Value"] <- "Pred_Value_idw"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
     }
     close(pb)
   }, error = function(e){ 
@@ -1154,7 +1217,7 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
       #Rename column based on model type
       names(nn_Site[[i]])[names(nn_Site[[i]]) == "Working_Param"] <- "Pred_Value_nn"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
     }
   }, error = function(e){ 
     message("The progress bar has ended")
@@ -1163,6 +1226,10 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
     pb$terminate() 
   })
   #
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
   return(nn_Site)
 }
 #
@@ -1182,12 +1249,12 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
   #
   tryCatch({
     #Loop over each statistic
-    for(i in stats){
+    for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
       #Convert WQ points to vector and rasterize over grid:
       Param_vec <- vect(stat_data)
       crs(Param_vec) <- "EPSG:4326"
@@ -1202,7 +1269,8 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
       #Get mean data for each location
-      tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) #%>% 
+      tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) %>% 
+        mutate(Statistic = stats[i], .before = Latitude)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
@@ -1210,7 +1278,7 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       #Rename column based on model type
       names(tps_Site[[i]])[names(tps_Site[[i]]) == "lyr.1"] <- "Pred_Value_tps"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
     }
   }, error = function(e){ 
     message("The progress bar has ended")
@@ -1219,6 +1287,10 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
     pb$terminate() 
   })
   #
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
   return(tps_Site)
 }
 #
@@ -1227,7 +1299,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
   #Initiate lists 
-  ok.output <- list()
+  ok_output <- list()
   ok_spdf <- list()
   ok_nn <- list()
   ok_Site <- list()
@@ -1239,25 +1311,30 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
   #
   tryCatch({
     #Loop over each statistic
-    for(i in stats){
+    for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == i, ]
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
+      stat_temp <- as.data.frame(stat_data) %>% group_by(Longitude, Latitude, Statistic) %>%
+        summarize(Working_Param = mean(Working_Param, na.rm = TRUE))
+      coordinates(stat_temp) <- ~Longitude + Latitude  # Replace with your actual coordinate columns
+      proj4string(stat_temp) <- CRS(proj4string(stat_data))  # Keep the same projection as the original
+      stat_data <- stat_temp
       ##IOK: model(Parameter), data to use, grid to apply to 
-      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data)
+      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data, miscFitOptions = list(merge.small.bins = FALSE))
       ok_model <- gstat(formula = Working_Param~1, locations = stat_data, model = ok_fit$var_model, data = st_as_sf(stat_data))
       ok_pred <- predict(ok_model, grid)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      ok.output[[i]] <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
-        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
+      ok_output[[i]] <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
+        mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
       #Convert interpolated values to spatial data
-      ok_spdf[[i]] <- SpatialPointsDataFrame(coords = ok.output[[i]][,1:2], data = ok.output[[i]][4], 
+      ok_spdf[[i]] <- SpatialPointsDataFrame(coords = ok_output[[i]][,c("Longitude","Latitude")], data = ok_output[[i]][c("Statistic", "Pred_Value")], 
                                              proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
       #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
       ok_nn[[i]] <- dismo::voronoi(ok_spdf[[i]], ext = extent(Site_Grid))#
@@ -1274,7 +1351,8 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
       #Rename column based on model type
       names(ok_Site[[i]])[names(ok_Site[[i]]) == "Pred_Value"] <- "Pred_Value_ok"
       #
-      pb$message(paste("Completed:", i, Param_name))
+      pb$message(paste("Completed:", stats[i], Param_name))
+      
     }
   }, error = function(e){ 
     message("The progress bar has ended")
@@ -1283,6 +1361,10 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_
     pb$terminate() 
   })
   #
+  #Print note if threshold is being used:
+  if(any(stats == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
   return(ok_Site)
 }
 #
@@ -1298,19 +1380,17 @@ join_interpolation <- function(Site_Grid_df){
   for (sf_obj in sf_objects) {
     if (exists(sf_obj, envir = .GlobalEnv)) {
       existing_count <- existing_count + 1
-      if (is.null(existing_object)) {
-        existing_object <- sf_obj  # Store the first existing object
-      }
+      existing_object <- sf_obj  # Store the last existing object
     }
   }
   #Check the number of existing objects
   if (existing_count == 0) {
     stop("Error: None of the model outputs exist in the global environment.")
   } else if (existing_count == 1) {
-    stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not needed."))
+    stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not applicable"))
   }
   #Get the list of statistics/list names:
-  params <- names(get(existing_object))
+  params <- unique(unlist(lapply(get(existing_object), function(df) unique(df$Statistic))))
   #
   #Iterate over each parameter
   for (i in seq_along(params)){
@@ -1319,9 +1399,9 @@ join_interpolation <- function(Site_Grid_df){
     for (sf_obj in sf_objects) {
       if (exists(sf_obj, envir = .GlobalEnv)) {
         cat("Joining ", sf_obj, " with existing data...\n")
-        temp_data <- get(sf_obj[[i]]) %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
-          dplyr::select(PGID, contains("Pred_Value")) %>% 
-          group_by(PGID) %>% arrange(desc(.[,2])) %>% slice(1)
+        temp_data <- get(sf_obj)[[i]] %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
+          dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
+          group_by(PGID) %>% arrange(desc(across(contains("Pred_Value")))) %>% slice(1)
         temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data))
       } else {
         cat("Warning: ", sf_obj, " does not exist in the global environment.\n")
@@ -1329,12 +1409,15 @@ join_interpolation <- function(Site_Grid_df){
     }
     #Combine results for the current parameter
     combined_result <- Reduce(function(x, y) merge(x, y, by = intersect(names(x), names(y)), all = TRUE), temp_results)
-    combined_result <- combined_result %>% mutate(Statistic = params[i]) 
     #Create a dynamic variable name for the result
     result_name <- paste0("result_", params[i])
     # Assign the combined result to a new variable
     assign(result_name, combined_result, envir = .GlobalEnv)
-  } 
+  }
+  #Print note if threshold is being used:
+  if(any(params == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
 }
 #
 plot_interpolations <- function(results_data, Site_Grid){
@@ -1353,7 +1436,8 @@ plot_interpolations <- function(results_data, Site_Grid){
       theme_classic()+
       theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
       scale_color_viridis_b(direction = -1)+
-      theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)))
+      {if(any(Site_Grid_interp$Statistic == "Threshold")) labs(caption = "Values = Threshold sample proportions")}+
+      theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9))
     plot_list[[col]] <- p
   }
   #
@@ -1367,16 +1451,23 @@ plot_interpolations <- function(results_data, Site_Grid){
   return(list(plots = plot_list, grid = grid_obj))
 }
 #
-final_interpolation <- function(model, selected_models, results_data, weighting, Site_Grid){
+final_interpolation <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
+  model <- match.arg(model)
+  matched_models <- selected_models[selected_models %in% c("idw", "nn", "tps", "ok")]
+  if (length(matched_models) > 0) {
+    cat("Matched models:", matched_models, "\n")
+  } else {
+    cat("No matched models found.\n")
+  }
   if(model == "ensemble"){
     #Determine column names to match and limit to desired columns:
     pred_cols <- paste0("Pred_Value_", selected_models)
-    result_Mean_final <- result_Mean %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    result_data_final <- results_data %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
     #
     #Determine model weights:
-    model_weighting(result_Mean_final, c(0.75, 0.25))
+    model_weighting(result_data_final, c(0.75, 0.25))
     ##Create ensemble values
-    ens_model <- result_Mean_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
+    ens_model <- result_data_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
       mutate(Pred_Value_ens = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values))))) %>%
       group_by(PGID) %>% arrange(desc(Pred_Value_ens)) %>% slice(1)
     #Spatial data:
@@ -1384,17 +1475,23 @@ final_interpolation <- function(model, selected_models, results_data, weighting,
     #plotting
     temp <- plot_interpolations(ens_model, Site_Grid)
     #
+    if(any(Site_Grid_interp$Statistic == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+    }
     ##Return plots, grid, and shapefile
     return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
   } else if(model == "single"){
     #Determine column names to match and limit to desired columns:
     pred_cols <- paste0("Pred_Value_", selected_models)
-    result_Mean_final <- result_Mean %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    result_data_final <- results_data %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
     #Spatial data:
-    (Site_Grid_interp <- left_join(Site_Grid, result_Mean_final))
+    (Site_Grid_interp <- left_join(Site_Grid, result_data_final))
     #plotting
-    temp <- plot_interpolations(result_Mean_final, Site_Grid)
+    temp <- plot_interpolations(result_data_final, Site_Grid)
     #
+    if(any(Site_Grid_interp$Statistic == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+    }
     ##Return plots, grid, and shapefile
     return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
     #
@@ -1443,86 +1540,148 @@ model_weighting <- function(final_data, weighting) {
   }
 }
 #
-save_model_output <- function(output_data){
+save_model_output <- function(output_data, Month_range = NA, threshold_val = threshold_value){
   #
+  if(all(is.na(Month_range)) && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nNo month range has been specified for the data. Is this correct?")
+    if(result == "Yes"){cat("Continuing... \n")} else {stop("Please specify Month_range.")}
+  } else if(any(is.na(Month_range))){
+    stop("Saving stopped: Only one month has been specified properly in Month_range.")
+  } else {
+    cat("Months have been specified for the data. Continuing ... \n")
+  }
   library(openxlsx)
+  if(all(!is.na(Month_range))){
+    Start_month <- month.abb[Month_range[1]]
+    End_month <- month.abb[Month_range[2]]
+  }
+  threshold_val <- threshold_val
   final_output_data <- output_data
   Stat_type <- unique(final_output_data$spatialData$Statistic)
+
   #Save plots:
-  for (i in seq_along(final_output_data$plots)){
-    #Current plot
-    p <- final_output_data$plots[[i]]
-    p_name <- final_output_data$plots[[i]]$labels$colour
-    #Desired file name and specs
-    jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
-                           #File name
-                           Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, 
-                           ".jpg")
-    width_pixels <- 1000
-    aspect_ratio <- 3/4
-    height_pixels <- round(width_pixels * aspect_ratio)
-    #Save plot
-    ggsave(filename = jpg_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
-    cat("Interpolation model figure for", gsub(".*_","",p_name), "was saved in 'Output/Figure files'.", "\n")
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the plots the chosen interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Interpolation plots will not be saved.")
+    } else {
+      for (i in seq_along(final_output_data$plots)){
+        #Current plot
+        p <- final_output_data$plots[[i]]
+        p_name <- final_output_data$plots[[i]]$labels$colour
+        #Desired file name and specs
+        jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
+                               #File name
+                               if(all(!is.na(Month_range))){
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                               } else {
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year)
+                               }, 
+                               ".jpg")
+        if(is.numeric(threshold_val)) {jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)} else {jpg_filename <- jpg_filename}
+        width_pixels <- 1000
+        aspect_ratio <- 3/4
+        height_pixels <- round(width_pixels * aspect_ratio)
+        #Save plot
+        ggsave(filename = jpg_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+        cat("Interpolation model figure for", gsub(".*_","",p_name), "model was saved in 'Output/Figure files'.", "\n")
+      }
+    }
   }
   ##End figure output
   #
+  #
   #Save shapefile:
-  shape_file <- final_output_data$spatialData
-  shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
-                           #File name
-                           Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, 
-                           ".shp")
-  #Save the sf dataframe as a shapefile
-  suppressMessages(st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
-  #Print a message to confirm saving
-  cat("Shapefile saved at:", shapefile_path, "\n",
-      "- ", nrow(final_data$spatialData), " features saved with ", ncol(final_data$spatialData)-1, "fields")
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the shapefile of chosen interpolation values be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Shapefile will not be saved.")
+    } else {
+      shape_file <- final_output_data$spatialData
+      shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
+                               #File name
+                               if(all(!is.na(Month_range))){
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                               } else {
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
+                               }, 
+                               ".shp")
+      if(is.numeric(threshold_val)) {shapefile_path <- sub("\\.shp$", paste0("_", threshold_val, ".shp"), shapefile_path)} else {shapefile_path <- shapefile_path}
+      #Save the sf dataframe as a shapefile
+      suppressMessages(st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
+      #Print a message to confirm saving
+      cat("Shapefile saved at:", shapefile_path, "\n",
+          "- ", nrow(final_data$spatialData), " features saved with ", ncol(final_data$spatialData)-1, "fields")
+    }
+  }
   ##End shapefile output
   #
+  #
   #Save data to Excel sheet
-  model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
-  data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
-                      #File name
-                      Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, 
-                      ".xlsx")
-  #Create wb with data:
-  new_wb <- createWorkbook()
-  addWorksheet(new_wb, "Model_data")  # Add fresh sheet
-  writeData(new_wb, sheet = "Model_data", x = model_data) 
-  #Save wb
-  saveWorkbook(new_wb, data_path, overwrite = TRUE)
-  cat("Model data successfully saved to:\n",
-      "- Sheet 'Model_data' (", nrow(model_data), " rows)\n",
-      "File: ", data_path, "\n")
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould an Excel file with chosen interpolation data be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Interpolation data will not be saved in an Excel file.")
+    } else {
+      model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
+      data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                          #File name
+                          if(all(!is.na(Month_range))){
+                            paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                          } else {
+                            paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
+                          }, 
+                          ".xlsx")
+      if(is.numeric(threshold_val)) {data_path <- sub("\\.xlsx$", paste0("_", threshold_val, ".xlsx"), data_path)} else {data_path <- data_path}
+      #Create wb with data:
+      new_wb <- createWorkbook()
+      addWorksheet(new_wb, "Model_data")  # Add fresh sheet
+      writeData(new_wb, sheet = "Model_data", x = model_data) 
+      #Save wb
+      saveWorkbook(new_wb, data_path, overwrite = TRUE)
+      cat("Model data successfully saved to:\n",
+          "- Sheet 'Model_data' (", nrow(model_data), " rows)\n",
+          "File: ", data_path, "\n")
+    }
+  }
   ##End data output
   #
+  #
   ##Save the summary information:
-  sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-  sheet_name <- paste0(Param_name, "_models")
-  summ_info <- data.frame(Parameter = Param_name,
-                          Type = Param_name_2,
-                          Statistic = Stat_type,
-                          Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("_(idw|nn|tps|ok)$")) %>% colnames(), collapse = ", "),
-                          Weights = paste(as.vector(weight_values), collapse = ", "),
-                          Date_range = paste0(Start_year, "-", End_year))
-  #Load the workbook
-  wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-  # Check if the sheet exists
-  if (sheet_name %in% sheet_names) {
-    # If it exists, overwrite the existing sheet
-    existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
-    new_data <- rbind(existing_data, summ_info)
-    writeData(wb, sheet = sheet_name, new_data)
-  } else {
-    # If it does not exist, create a new sheet
-    addWorksheet(wb, sheet_name)
-    writeData(wb, sheet = sheet_name, summ_info)
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould summary data for the chosen interpolation models and output be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Summary data will not be saved.")
+    } else {
+      sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      sheet_name <- paste0(Param_name, "_models")
+      summ_info <- data.frame(Parameter = Param_name,
+                              Type = Param_name_2,
+                              Statistic = Stat_type,
+                              Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("_(idw|nn|tps|ok)$")) %>% colnames(), collapse = ", "),
+                              Weights = paste(as.vector(weight_values), collapse = ", "),
+                              Date_range = paste0(Start_year, "-", End_year),
+                              Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")},
+                              Threshold_value = threshold_val)
+      #Load the workbook
+      wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      # Check if the sheet exists
+      if (sheet_name %in% sheet_names) {
+        # If it exists, overwrite the existing sheet
+        existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
+        new_data <- rbind(existing_data, summ_info)
+        writeData(wb, sheet = sheet_name, new_data)
+      } else {
+        # If it does not exist, create a new sheet
+        addWorksheet(wb, sheet_name)
+        writeData(wb, sheet = sheet_name, summ_info)
+      }
+      # Save the workbook
+      saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+      #Print a message to confirm saving
+      cat("Summary information was saved as:", sheet_name, "\n")
+    }
   }
-  # Save the workbook
-  saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
-  #Print a message to confirm saving
-  cat("Summary information was saved as:", sheet_name, "\n")
   ##End summary output
 } 
 #

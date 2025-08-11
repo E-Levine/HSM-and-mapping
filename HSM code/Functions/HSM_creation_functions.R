@@ -121,7 +121,7 @@ get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesig
     aspect_ratio <- 3/4
     height_pixels <- round(width_pixels * aspect_ratio)
     if (file.exists(jpg_filename)) {
-      new_filename <- sub("\\.jpg$", paste0("_", format(Sys.Date(), "%Y-%m-%d"), ".xlsx"), jpg_filename)
+      new_filename <- sub("\\.jpg$", paste0("_", format(Sys.Date(), "%Y-%m-%d"), ".jpg"), jpg_filename)
     } else {
       new_filename <- jpg_filename
     }
