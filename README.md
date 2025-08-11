@@ -8,8 +8,8 @@ All files other than R code and R project files will be saved locally due to the
 - Create local fork of the repo. (Fork should contain project; code "1_SetUpFolders"; folders: Data layers, HSM code, Output, Reference files").
 - Determine two-letter site code and section names to be used for whole area of interest for the project and subregions within the area.
 - Identify the appropriate StateGrid and add the required pico-grid folder to the "Reference files/Grids" folder.
-- Create or locate the necessary KML files (refer to "Site_Section_KML_creation_SOP" found in the Reference documentation for file creation). If the KML files are already separated, coppy the files to the "Reference files/KML" folder. If the KML file needs to be separated, copy the [SiteCode_version]_all file to the "Reference files/KML/PreProcessing" folder.
-- Determine data layers to include in model. Add required layers to the "Data layers" folder. Make sure the date of publication is appened to the folder name using a 4-digit year and 2-digit month ("_202402"). This will allow for the usage of multiple layers of the same data type and will aid in build a local library of data layers to be shared among projects.
+- Create or locate the necessary KML files (refer to "Site_Section_KML_creation_SOP" found in the Reference documentation for file creation). If the KML files are already separated, copy the files to the "Reference files/KML" folder. If the KML file needs to be separated, copy the [SiteCode_version]_all file to the "Reference files/KML/PreProcessing" folder.
+- Determine data layers to include in model. Add required layers to the "Data layers" folder. Make sure the date of publication is appended to the folder name using a 4-digit year and 2-digit month ("_202402"). This will allow for the usage of multiple layers of the same data type and will aid in build a local library of data layers to be shared among projects.
 - Update the "Setup_data" file (located in the "Reference files" folder) as needed for the model and based on the data being used. Refer to the *Set up data* section for more guidance.
 
 ### Set up data
@@ -17,7 +17,7 @@ A base "Setup_data" Excel file is located within the "Reference files" folder. T
 *Current data types included/accounted for:*
 - Long_Names: Long names for sites, parameters, layer types, and data types. Requires a Yes/No desgnation for inclusion or exclusion in models.
 - Section_Order: Priority order for sections within sites. Used to assign section designations in the case of overlapping spatial polygons. Data is filtered based on site code.
-- Parameter_Order: Priority order for data layers used within the model. Used to assign parameter order for model weighting. Parameters to included should be assigned a priority number and data to exclude should be prioritized as "NA". "Column_name" should refelect the column of data to reference for assigning suitability scores.
+- Parameter_Order: Priority order for data layers used within the model. Used to assign parameter order for model weighting. Parameters to included should be assigned a priority number and data to exclude should be prioritized as "NA". "Column_name" should reflect the column of data to reference for assigning suitability scores.
 
 ### Data layers
 Folder for storing all data layers used within the model. Due to file size, data should be stored locally. A text file is included to note data sources. Names or values listed below are currently accounted for in the code and set up file. Anything not listed has not been used in models created by the code owner(s). <br>
