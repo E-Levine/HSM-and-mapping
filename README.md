@@ -18,11 +18,17 @@ A base "Setup_data" Excel file is located within the "Reference files" folder. T
 - Long_Names: Long names for sites, parameters, layer types, and data types. Requires a Yes/No desgnation for inclusion or exclusion in models.
 - Section_Order: Priority order for sections within sites. Used to assign section designations in the case of overlapping spatial polygons. Data is filtered based on site code.
 - Parameter_Order: Priority order for data layers used within the model. Used to assign parameter order for model weighting. Parameters to included should be assigned a priority number and data to exclude should be prioritized as "NA". "Column_name" should reflect the column of data to reference for assigning suitability scores.
+- Parameter_Levels: Levels/variable names possible for specified parameters and their associated data column name.  
 
 ### Data layers
 Folder for storing all data layers used within the model. Due to file size, data should be stored locally. A text file is included to note data sources. Names or values listed below are currently accounted for in the code and set up file. Anything not listed has not been used in models created by the code owner(s). <br>
 *Current data layers*: <br>
-- Oysters in Florida (current) - Live, Mostly Live, Restored, 50/50, Mostly Dead, NA
+- Oysters in Florida (current)
+- Seagrass habitat in Florida
+- Navigation channels
+- Shellfish harvest areas 
+- Aquaculture lease designations
+- Continuous data: Salinity, temperture
 
 ## Model set up
 Progress through the numbered code files to set up the file organization and initial parameter information, establish habitat suitability scoring curves, and assemble the model data. Sections of code and their use are outlined below.
