@@ -1668,7 +1668,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
       message("Summary data will not be saved.")
     } else {
       sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-      sheet_name <- paste0(Param_name, "_models")
+      sheet_name <- "Interpolation_Summary"
       summ_info <- data.frame(Parameter = Param_name,
                               Type = Param_name_2,
                               Statistic = Stat_type,
@@ -1676,24 +1676,25 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
                               Weights = paste(as.vector(weight_values), collapse = ", "),
                               Date_range = paste0(Start_year, "-", End_year),
                               Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")},
-                              Threshold_value = threshold_val)
+                              Threshold_value = threshold_val,
+                              Date_update = Sys.Date())
       #Load the workbook
       wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-      # Check if the sheet exists
+      #Check if the sheet exists
       if (sheet_name %in% sheet_names) {
-        # If it exists, overwrite the existing sheet
+        #If it exists, append data to the existing sheet
         existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
         new_data <- rbind(existing_data, summ_info)
         writeData(wb, sheet = sheet_name, new_data)
       } else {
-        # If it does not exist, create a new sheet
+        #If it does not exist, create a new sheet
         addWorksheet(wb, sheet_name)
         writeData(wb, sheet = sheet_name, summ_info)
       }
-      # Save the workbook
+      #Save the workbook
       saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
       #Print a message to confirm saving
-      cat("Summary information was saved as:", sheet_name, "\n")
+      cat("Summary information was saved within:", sheet_name, "\n")
     }
   }
   ##End summary output
