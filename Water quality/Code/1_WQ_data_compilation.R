@@ -19,7 +19,7 @@ pacman::p_load(plyr, tidyverse, readxl, writexl, #Df manipulation, basic summary
 ####Compilation setup####
 #
 #Set parameters - run for each data source type
-Site_code <- c("SL")       #Two letter estuary code
+Site_code <- c("SS")       #Two letter estuary code
 Version <- c("v1")         #Version ID for the model data will be used in
 Data_source <- c("Portal") #Source of data: "Portal", "WA" , or "FIM"
 #
@@ -169,11 +169,11 @@ if(Data_source == "Portal"){
 #Check CRS s
 crs(Estuary_area)
 crs(WQ_sp)
-WQ_sp2 <- st_transform(st_as_sf(WQ_sp), crs = st_crs(Estuary_area)) #Using with SS and changing WQ_sp to WQ_sp2 in line 182
+WQ_sp2 <- st_transform(st_as_sf(WQ_sp), crs = st_crs(Estuary_area)) 
 #
 ##Crop to estuary area
 Estuary_data <- WQ_sp[as.vector(st_intersects(Estuary_area, st_as_sf(WQ_sp), sparse = FALSE)), ]
-##Run following lines only if issue with Loop above
+##Run following lines only if issue with Loop above. If there is an issue with "Loop", polygons are overlapping somewhere. 
 #sf_use_s2(FALSE)
 #Estuary_data <- WQ_sp[lengths(st_intersects(Estuary_area, st_as_sf(WQ_sp)))>0,]
 #sf_use_s2(TRUE)

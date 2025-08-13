@@ -10,7 +10,7 @@ create_folders <- function(Site_Code, Version) {
               - ",Site_Code, "_", Version,"/Data
               - ",Site_Code, "_", Version,"/Data/Layers                     
               - ",Site_Code, "_", Version,"/Data/Layers/KML
-              - ",Site_Code, "_", Version,"/Data/Layers/HSI curves                     
+              - ",Site_Code, "_", Version,"/Data/HSI curves                     
               - ",Site_Code, "_", Version,"/Output
               - ",Site_Code, "_", Version,"/Output/Data files
               - ",Site_Code, "_", Version,"/Output/Figure files
@@ -49,8 +49,8 @@ create_folders <- function(Site_Code, Version) {
   } else {
     print(paste(Site_Code, " version ", Version, " KML folder already exists."))
   }
-  # Create HSI curves folder (in Data/Layers)
-  HSMcurves_folder <- paste0(main_folder, "/Data/Layers/HSI curves")
+  # Create HSI curves folder (in Data)
+  HSMcurves_folder <- paste0(main_folder, "/Data/HSI curves")
   if (!dir.exists(HSMcurves_folder)) {
     dir.create(HSMcurves_folder)  
     print(paste(Site_Code, " version ", Version, " HSI curves folder created."))
@@ -154,18 +154,26 @@ KML_separation <- function(Status_of_KML){
 ##Function to read excel files and limit to required setup data
 Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters, FL_Oysters, Shellfish_Harvest_Area_Designations){
   if(file.exists("Reference files/Setup_data.xlsx")){
+    temp <- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Levels") %>% as.data.frame()
     #Load sheets if file exists and if data is required. If data isn't required, state as such. Limit to data required for model.
     if(Long_Names == "Y"){Names <<- suppressWarnings(read_excel("Reference files/Setup_data.xlsx", sheet = "Long_Names") %>% as.data.frame() %>% subset(Designation == Site_Code | Is_Used == "Y"))} else {Names <<- "Long names are not needed."}
     if(Order_of_Sections == "Y"){suppressWarnings(Sections <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Section_Order") %>% as.data.frame() %>% mutate(Order = as.integer(Order)) %>% subset(Site == Site_Code & !is.na(Order)))} else {Sections <<- "Section order is not needed."}
     if(Order_of_Parameters == "Y"){suppressWarnings(Parameters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Order") %>% as.data.frame() %>% mutate(Priority = as.integer(Priority)) %>% subset(!is.na(Priority)))} else {Parameters <<- "Parameter order is not needed."}
-    if(FL_Oysters == "Y"){suppressWarnings(Oysters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Scoring") %>% as.data.frame() %>% mutate(Score = as.numeric(Score)) %>% subset(Parameter == "Oysters" & !is.na(Score)))} else {Parameters <<- "'Oyster Beds in Florida' layer is not needed."}
-    if(Shellfish_Harvest_Area_Designations == "Y"){suppressWarnings(SHAreas  <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Scoring") %>% as.data.frame() %>% mutate(Score = as.numeric(Score)) %>% subset(Parameter == "SHA_Class" & !is.na(Score)))} else {SHAreas <<- "Shellfish Harvest Areas is not needed."}
+    if(FL_Oysters == "Y"){Oysters <<- temp %>% subset(Parameter == "Oysters")} else {Parameters <<- "'Oyster Beds in Florida' layer is not needed."}
+    if(Seagrass == "Y"){Seagrasses <<- temp %>% subset(Parameter == "Seagrass")} else {Parameters <<- "'Seagrass habitat in Florida' layer is not needed."}
+    if(Shellfish_Harvest_Area_Designations == "Y"){SHAreas  <<- temp %>% subset(Parameter == "SHA_Class")} else {SHAreas <<- "Shellfish Harvest Areas is not needed."}
+    if(Navigation_channels == "Y"){NavCha <<- temp %>% subset(Parameter == "Nav_Channels")} else {Parameters <<- "'Navigational channels' layer is not needed."}
+    if(Aquaculture_lease == "Y"){AquaLease <<- temp %>% subset(Parameter == "Aquaculture_Lease")} else {Parameters <<- "'Aquaculture leases' layer is not needed."}
     df_list <<- list("Long_Names" = Names, 
                      "Section_Order" = Sections, 
                      "Parameter_Order" = Parameters, 
                      "FLOysters" = Oysters,
-                     "SHAs" = SHAreas)
-    return(list("Excel file found. Required sheets loaded into data frames.", df_list))
+                     "Seagrass" = Seagrasses,
+                     "SHAs" = SHAreas,
+                     "Nav_Channels" = NavCha,
+                     "Aquaculture" = AquaLease,
+                     "Continuous" = temp %>% subset(Parameter %in% (Parameters %>% filter(Parameter %in% c("Salinity", "Temperature")) %>% filter(!is.na(Priority)))$Parameter))
+    return(list("Excel file found. Required sheets loaded into data frames. Levels of specified parameters listed.", df_list))
   } else {
     return(print("Excel file not found. Please find the data file and check for required data."))
   } 
@@ -182,7 +190,9 @@ Identify_dataframes <- function(object_list){
   #Return names of objects that are data frames 
   dataframes <- names(df_types[df_types == TRUE])
   notdataframes <- names(df_types[df_types == FALSE])
-  selected_data <<- object_list[(names(object_list) %in% dataframes == TRUE)]
+  named_data <- object_list[(names(object_list) %in% dataframes == TRUE)]
+  #Combine data levels info into one output
+  selected_data <<- c(named_data[1:3], list(Parameter_Summary = bind_rows(named_data[4:(length(named_data))])))
   t_line1 <- paste("These data are to be included in the model: ", paste(unlist(dataframes), collapse = ", "))
   t_line2 <- paste("These data are NOT included in the model: ", paste(unlist(notdataframes), collapse = ", "))
   dfoutput <<- sprintf("%s\n%s", t_line1, t_line2)
