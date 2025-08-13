@@ -341,11 +341,18 @@ Selected_data <- function(BufferOrN, Adding, Removing, ProjectCode){
   Project_code <- ProjectCode
   #
   ##Export cleaned final data
-  if(BufferOrN == "Buffer") {
-    write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_selected_buffer_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-  } else {
-    write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_closest_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the selected data be saved locally to the 'Compiled-data' folder?")
+    if(result == "No"){
+      message("The selected data will not be saved.")
+    } else {
+      if(BufferOrN == "Buffer") {
+        write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_selected_buffer_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+      } else {
+        write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_closest_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+      }
     }
+  }
   #
   return(print(head(WQ_stations_final %>% as.data.frame())))
 }
@@ -442,6 +449,11 @@ location_boundary <- function(SelectionType, SelectedStations, BoundingBox, Proj
 Modified_data <- function(Selection_Method, Adding, Removing, ProjectCode){
   ##Code (3-4 letters preferred) to identify project selected data is for:
   Project_code <- ProjectCode
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the modified data be saved locally to the 'Compiled-data' folder?")
+    if(result == "No"){
+      message("The selected data will not be saved.")
+    } else {
   #Both NA
   if(is.na(Adding) == TRUE && is.na(Removing) == TRUE){
     if(Selection_Method == "Station_name"){
@@ -534,7 +546,9 @@ Modified_data <- function(Selection_Method, Adding, Removing, ProjectCode){
             write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
           } else {WQ_stations_final <- (paste0("Adding or removing stations by name for ", Data_source, "is not yet supported."))}
         }
-      }
+    }
+    }
+  }
   return(print(head(WQ_stations_final)))
   }
 #
