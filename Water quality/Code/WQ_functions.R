@@ -964,6 +964,28 @@ summary.autofitVariogram <- function(object, ...) {
 #
 ####Data summarization functions####
 #
+#Load WQ data file
+load_WQ_data <- function(){
+  if(Folder == "compiled" && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the data be saved locally to the project version folder?")
+    if(result == "No"){
+      message("A copy of the data will not be saved to the project folder.")
+      files <- list.files(path = "Data/Compiled-data/", 
+                          pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
+      WQ_data <<- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+        dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
+                      Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
+    } else {
+      files <- list.files(path = "Data/Compiled-data/", 
+                          pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
+      WQ_data <<- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+        dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
+                      Parameter = contains("CharacteristicName"), Value = contains("MeasureValue")) 
+      write_xlsx(WQ_data, paste0("../",Site_code, "_", Version,"/Data/", Site_code, "_cleaned_WQ_data.xlsx"), format_headers = TRUE)
+    }
+  } else {paste("Code needs to be updated for 'final' folder location.")}
+}
+#
 summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
   #
   Time_period <- match.arg(Time_period)
