@@ -311,19 +311,21 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
       #For all save types, save the curve point information:
       if (exists(Param_summ_name)) {
         temp_data <- get(Param_summ_name)
-        sheet_name <- Param_summ_name
-        # Load the workbook
+        sheet_name <- "HSI_Curve_Summary"
+        #Load the workbook
         wb <- loadWorkbook(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
-        # Check if the sheet exists
+        #Check if the sheet exists
         if (sheet_name %in% sheet_names) {
-          # If it exists, overwrite the existing sheet
-          writeData(wb, sheet = sheet_name, temp_data)
+          #If it exists, append data to the existing sheet
+          existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
+          new_data <- rbind(existing_data, temp_data)
+          writeData(wb, sheet = sheet_name, new_data)
         } else {
-          # If it does not exist, create a new sheet
+          #If it does not exist, create a new sheet
           addWorksheet(wb, sheet_name)
           writeData(wb, sheet = sheet_name, temp_data)
         }
-        # Save the workbook
+        #Save the workbook
         saveWorkbook(wb, paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
       } else {
         warning("The variable does not exist.")
