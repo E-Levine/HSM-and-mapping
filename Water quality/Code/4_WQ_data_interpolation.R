@@ -19,29 +19,23 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
 #
 source("Code/WQ_functions.R")
 #
-Site_code <- c("SL")       #Two letter estuary code
+Site_code <- c("SS")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
-State_Grid <- c("H4")      #Two-letter StateGrid ID
-Alt_Grid <- c(NA)          #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("SLHSM") #Project code given to data, found in file name
+State_Grid <- c("E2")      #Two-letter StateGrid ID
+Alt_Grid <- c("F2")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("SSHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
-Param_name <- c("Temperature, water")#Column/parameter name of interest - from WQ data file.
+Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
 Param_name_2 <- c("Annual")#Additional identify for parameter: i.e. Annual, Quarterly, etc.
 #
 color_temp <- c("cool")    #"warm" or "cool"
 #
 ####Load data and KML files, plot existing points - will be one function####
 #
-if(Folder == "compiled"){
-  files <- list.files(path = "Data/Compiled-data/", 
-                      pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
-  WQ_data <- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
-    dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
-                  Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
-  } else {paste("Code needs to be updated for 'final' folder location.")}
+load_WQ_data()
 #
 ##Site area  
 Site_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
@@ -51,7 +45,7 @@ FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 #Load StateGrid(s) of picogrid
 PicoGrid <- st_read(paste0("../Reference files/Grids/Florida_PicoGrid_WGS84_",State_Grid,"/Florida_PicoGrid_WGS84_",State_Grid,"_clip.shp"), quiet = TRUE)
-if(!is.na(Alt_Grid)){Alt_PicoGrid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",Alt_Grid,"/Florida_PicoGrid_WGS84_",Alt_Grid,"_clip.shp"), quiet = TRUE)}
+if(!is.na(Alt_Grid)){Alt_PicoGrid <- st_read(paste0("../Reference files/Grids/Florida_PicoGrid_WGS84_",Alt_Grid,"/Florida_PicoGrid_WGS84_",Alt_Grid,"_clip.shp"), quiet = TRUE)}
 #
 ##Limit to site area
 if(!is.na(Alt_Grid)){
@@ -118,7 +112,7 @@ if(color_temp == "warm") {
 #Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values, Threshold
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
-WQ_summ <- summarize_data(WQ_data, Time_period = "Year", Summ_method = "Threshold", Threshold_parameters = c("below", 20))
+WQ_summ <- summarize_data(WQ_data, Time_period = "Year", Summ_method = "Means")
 head(WQ_summ)
 #
 #
