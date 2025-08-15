@@ -10,6 +10,7 @@ if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
                sf, raster, terra,
                leaflet, tmap, openxlsx, writexl,
+               foreach, doParallel,
                install = TRUE) #Mapping and figures
 #
 #
@@ -33,10 +34,20 @@ FL_Oysters <- c("Y") #Oyster beds in Florida: Include Oyster layer data ("Data")
 #Loads Excel file data information as designated during version set up:
 load_working_info(Site_Code, Version)
 #
-#Assign site and section designations to grid cells. Data and shapefile can be saved using Save_data = "Y" and save a figure using Save_figure = "Y".
+#Assign site and section designations to grid cells.
+#Data and shapefile can be saved using Save_data = "Y" and save a figure using Save_figure = "Y". Default is "N"
 get_base_grid(State_Grid, Alt_Grid, Site_Code, Version, Sections_designated, Save_data = "Y", Save_figure = "Y")
 #
 #
 ###END OF SECTION
 #
+####Loading data layers####
+#
+##Identify folders and files based on data type
+find_folder_names("Oysters")
+#
+##Load data for specified folders
+Start_date <- "2020-01-01"
+End_date <- "2024-12-31"
+load_matching_shp("Oysters")
 #

@@ -19,7 +19,7 @@ load_working_info <- function(SiteCode, VersionID){
 #
 #
 #### Function to load grid(s) and site area, clips to overlap, saves final grid, and keeps final grid for use
-get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesignated, Save_data, Save_figure){
+get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesignated = "N", Save_data = "N", Save_figure = "N"){
   #
   #Load StateGrid(s) of picogrid
   PicoGrid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",StateGrid,"/Florida_PicoGrid_WGS84_",StateGrid,"_clip.shp"), quiet = TRUE)
@@ -140,4 +140,63 @@ get_base_grid <- function(StateGrid, AltGrid, SiteCode, VersionID, SectionsDesig
 #
 #
 #### Assigning polygon data #####
+#
+##Identify potential folders/files based on parameter name: FL_Oysters
+find_folder_names <- function(Parameter_name){
+  #Directory
+  data_dir <- "Data layers/"
+  #Summary information
+  Ref_info <- data.frame(df_list[3])
+  #ID parameter in summary table
+  if(Parameter_name == "Oysters"){Param_find <- "Oysters"}
+  #
+  #Check if Param to find is included in summary
+  if (!Param_find %in% unique(Ref_info$Parameter)) {
+    stop("The 'Parameter_Order' dataframe does not contain an associated 'Layer_name'")
+  }
+  #
+  match_pattern <- (Ref_info%>% filter(Parameter == Param_find))$Layer_name
+  #Get list of folder names
+  all_folders <- list.dirs(path = data_dir, full.names = FALSE, recursive = FALSE)
+  #Narrow to list containing Layer name
+  matched_folders <<- all_folders[grepl(match_pattern, x = all_folders, ignore.case = TRUE)]
+  #Check for matches
+  if(length(matched_folders) > 0){
+    message(paste0("Matching folders found for ", Parameter_name, " as '", Param_find, "': ", 
+                   paste(unlist(matched_folders), collapse = ", ")))
+  } else {
+    warning(paste0("No matching folders were found for ", Parameter_name, " as '", Param_find, "'"))
+  }
+  #
+}
+#
+##Load data from all matching folders
+load_matching_shp <- function(Parameter_name, StartDate = Start_date, EndDate = End_date){
+  data_dir <- "Data layers/"
+  #ID parameter in summary table
+  if(Parameter_name == "Oysters"){Param_file <- "/Oyster_Beds_in_Florida.shp"}
+  #
+  StartDate <- as.Date(Start_date)
+  EndDate <- as.Date(End_date)
+  loaded_files <- list()
+  #
+  ##For each matching folder:
+  for(folder in matched_folders){
+    #Get date of folder, skip if outside range:
+    folder_date <- as.Date(paste0(substr(folder, nchar(folder) - 5, nchar(folder)), "01"), format = "%Y%m%d")
+    if(folder_date > Start_date & folder_date < End_date){
+      print(paste0("Loading: ", folder))
+      #Load shapefile, assign name
+      shape_obj <- crop(as(st_read(paste0(data_dir, folder, Param_file)), "Spatial"),
+                        extent(Site_Grid))
+      obj_name <- paste0("Oyster_", substr(folder, nchar(folder) - 5, nchar(folder)))
+      assign(obj_name, shape_obj, envir = .GlobalEnv)
+      #Add to loaded list
+      loaded_files[[folder]] <- paste0(str_extract(folder, "[^_]+"), "_", str_extract(folder, "[^_]+$"))
+    } else {
+      print(paste0("Skipping: ", folder))
+    }
+  }
+  files_loaded <<- loaded_files
+}
 #
