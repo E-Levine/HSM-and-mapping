@@ -1159,6 +1159,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
   idw_output <- list()
   idw_spdf <- list()
   idw_nn <- list()
+  idw_simple <- list()
   idw_Site <- list()
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
@@ -1193,8 +1194,14 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
-      #Determine overlay of data on SiteGrid
-      idw_Site[[i]] <- st_as_sf(intersect(idw_nn[[i]], Site_Grid_spdf))
+      #Determine overlay of data on SiteGrid:: 
+      idw_simple[[i]] <- st_simplify(st_as_sf(idw_nn[[i]]))
+      Site_simple <- st_as_sf(Site_Grid_spdf)
+    browser()
+      #idw_Site[[i]] <- st_intersection(idw_simple[[i]], Site_simple)
+      idw_Site[[i]] <- lapply(seq_along(idw_simple), function(i) {
+        chunked_intersection(polygons = idw_simple[[i]], site = Site_simple, chunk_size = 500)
+      })
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
@@ -1722,3 +1729,16 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   ##End summary output
 } 
 #
+chunked_intersection <- function(polygons, site, chunk_size = 1000) {
+# Split polygons into chunks
+n <- nrow(polygons)
+chunks <- split(polygons, (seq_len(n) - 1) %/% chunk_size)
+
+# Process each chunk
+result <- map_dfr(chunks, function(chunk) {
+  st_intersection(chunk, site) %>%
+    st_make_valid() %>%  # Ensure valid geometries
+    suppressWarnings()   # Quiet common minor warnings
+})
+return(result)
+}
