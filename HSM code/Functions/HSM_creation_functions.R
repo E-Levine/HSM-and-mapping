@@ -200,3 +200,23 @@ load_matching_shp <- function(Parameter_name, StartDate = Start_date, EndDate = 
   files_loaded <<- loaded_files
 }
 #
+##Clean oyster layer files:
+clean_oysters <- function(single_file = NA) {
+  if(is.na(single_file)){
+    for(i in seq_along(files_loaded)){
+      file <- get(files_loaded[[i]], envir = .GlobalEnv)
+      file_name <- unlist(files_loaded[[i]])
+      file@data <- file@data %>% dplyr::select("OYSTER")
+      file <- st_as_sf(file)
+      assign(file_name, file, envir = .GlobalEnv)
+    }
+  } else {
+    files <- get("files_loaded", envir = .GlobalEnv)
+    file_loaded <- files[sapply(files, function(x) grepl(single_file, x))]
+    file_name <- unlist(file_loaded)
+    file <- get(file_name, envir = .GlobalEnv)
+    file@data <- file@data %>% dplyr::select("OYSTER")
+    file <- st_as_sf(file)
+    assign(file_name, file, envir = .GlobalEnv)
+  }
+}
