@@ -1197,7 +1197,6 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
       #Determine overlay of data on SiteGrid:: 
       idw_simple[[i]] <- st_simplify(st_as_sf(idw_nn[[i]]))
       Site_simple <- st_as_sf(Site_Grid_spdf)
-    browser()
       #idw_Site[[i]] <- st_intersection(idw_simple[[i]], Site_simple)
       idw_Site[[i]] <- lapply(seq_along(idw_simple), function(i) {
         chunked_intersection(polygons = idw_simple[[i]], site = Site_simple, chunk_size = 500)
@@ -1736,7 +1735,7 @@ chunks <- split(polygons, (seq_len(n) - 1) %/% chunk_size)
 
 # Process each chunk
 result <- map_dfr(chunks, function(chunk) {
-  st_intersection(chunk, site) %>%
+  st_intersection(site, chunk) %>%
     st_make_valid() %>%  # Ensure valid geometries
     suppressWarnings()   # Quiet common minor warnings
 })

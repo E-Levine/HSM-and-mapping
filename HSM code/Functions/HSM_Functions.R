@@ -106,13 +106,13 @@ create_folders <- function(Site_Code, Version) {
 #
 #### File separation
 #
-KML_separation <- function(Status_of_KML){
+KML_separation <- function(Status_of_KML, one_file = NA){
   if(interactive()){
     result<- select.list(c("Yes", "No"), title = paste0("\nCan KML files be saved locally to the '",Site_Code,"_",Version,"' folder?"))
     if(result == "No"){
       message("KML files will not be saved. A local copy of the site boundary KML is required at a minimum. Section-specific KMLs are not required.")
     } else {
-      if(length(Status_of_KML) == 1){
+      if(length(Status_of_KML) == 1 && is.na(one_file)){
         #If separation required:
         kml_file <- st_read(paste0("Reference files/KML/PreProcessing/", Site_Code, "_", Version, "/", Site_Code,"_all.kml")) #Load file
         Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
@@ -212,7 +212,11 @@ Identify_dataframes <- function(object_list){
 #
 #
 ####Creation of HSI curves
-curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, Parameter_step = NA, Parameter_title, show_points, bimodal_Yvalues = NA, step_values = NA){
+curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, Parameter_step = NA, Parameter_title = Param_title, show_points, bimodal_Yvalues = NA, step_values = NA){
+  #Remove previous items:
+  if(exists("curve_points", envir = globalenv())){rm(curve_points, envir = globalenv())}
+  if(exists("p", envir = globalenv())){ rm(p, envir = globalenv())}
+  if(exists("predictions", envir = globalenv())){rm(predictions, envir = globalenv())}
   #Line dataframe
   curve_points <<- line_dataframe(LineType, Parameter_values, step_values, Parameter_limits)
   #
@@ -252,8 +256,8 @@ predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, i
     {if(LineType != "logistic") scale_y_continuous(limits = c(-0.001, 1.01), expand = c(0, 0))} +
     {if(LineType == "logistic") scale_y_continuous(limits = c(-0.01, 1.05), expand = c(0, 0))} +
     {if(LineType != "categorical") scale_x_continuous(limits = Parameter_limits, expand = c(0, 0))} +
-    xlab(Parameter_title) +  ylab("SI Score") +
-    {if(!is.na(Parameter_name)) ggtitle(Parameter_name)}+
+    xlab(Parameter_name) +  ylab("SI Score") +
+    {if(!is.na(Parameter_title)) ggtitle(Parameter_title)}+
     theme_classic() +
     theme(axis.title = element_text(size = 20, color = "black"), axis.text = element_text(size = 18, color = "black")) + 
     theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), plot.title = element_text(size = 20, face = "bold"))
@@ -265,19 +269,22 @@ predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, i
 #
 ###Curve data gather/combination:
 curve_point_data <- function(data_table = curve_points){
-  Param_summ_name <- "Parameter_summary"
+  if(exists("Curve_Summary", envir = globalenv())){rm(Curve_Summary, envir = globalenv())}
+  if(exists("Parameter_Summ", envir = globalenv())){rm(Parameter_Summ, envir = globalenv())}
+  #
+  Curve_summ_name <- "Curve_Summary"
   #Check for model setup Excel file, check if sheet already exists, load if exists:
   if(file.exists(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))){
     print(paste0(Site_Code, " ", Version, " Excel file found."))
-    #Get list of sheet names in model setup file. Skip if already present. 
-    if(!exists("Model_sheets")){Model_sheets <<- excel_sheets(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))}
+    #Get list of sheet names in model setup file 
+   Model_sheets <<- excel_sheets(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
     #
     #Load sheet if exists, message if it doesn't 
-    if(Param_summ_name %in% Model_sheets) {
-      assign(Param_summ_name, suppressWarnings(read_excel(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), sheet = Param_summ_name)))
-      print(paste0(Param_summ_name, " Excel sheet loaded succesfully."))
+    if(Curve_summ_name %in% Model_sheets) {
+      assign(Curve_summ_name, suppressWarnings(read_excel(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), sheet = Curve_summ_name)))
+      print(paste0(Curve_summ_name, " Excel sheet loaded succesfully."))
     } else {
-      print(paste0(Param_summ_name, " Excel sheet will be created."))
+      print(paste0(Curve_summ_name, " Excel sheet will be created."))
     }
   } else {
     stop("Excel file not found. Please check that the model setup file is located in the Data folder. R code file '1_SetUp_Folders' should have already been run.")
@@ -285,17 +292,18 @@ curve_point_data <- function(data_table = curve_points){
   #
   curve_points_f <- get("data_table")
   ##Create data table or add to existing data:
-  if(exists(Param_summ_name)){
+  if(exists(Curve_summ_name)){
     #Add data to existing data
-    curve_points_f <- curve_points_f %>% mutate(Curve = Parameter_name, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
-    combined_data <- rbind(get(Param_summ_name), curve_points_f)
-    assign(Param_summ_name, combined_data, envir = globalenv())
+    curve_points_f <- curve_points_f %>% mutate(Curve = Param_title, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
+    combined_data <- rbind(get(Curve_summ_name), curve_points_f)
+    assign("Parameter_Summ", curve_points_f, envir = globalenv())
+    assign(Curve_summ_name, combined_data, envir = globalenv())
   } else {
     #Create data frame to save to Excel 
-    combined_data <- curve_points_f %>% mutate(Curve = Parameter_name, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
-    assign(Param_summ_name, combined_data, envir = globalenv())
+    combined_data <- curve_points_f %>% mutate(Curve = Param_title, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
+    assign(Curve_summ_name, combined_data, envir = globalenv())
   }
-  message(paste0("Objects created in the global environment: '", Param_summ_name,"', 'Model_sheets'."))
+  message(paste0("Objects created in the global environment: '", Curve_summ_name,"', 'Model_sheets'."))
   return(tail(combined_data, 10))
 }
 #
@@ -303,15 +311,17 @@ curve_point_data <- function(data_table = curve_points){
 # Save data and/or figure created
 save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
   #
+  Curve_summ_name <- "Curve_Summary"
+  #
   if(interactive()){
     result<- select.list(c("Yes", "No"), title = paste0("\nCan a summary of the HSI curve be saved locally to the version tracking file?"))
     if(result == "No"){
       message("HSI curve summary will not be saved to the model version tracking file.")
     } else {
       #For all save types, save the curve point information:
-      if (exists(Param_summ_name)) {
-        temp_data <- get(Param_summ_name)
-        sheet_name <- Param_summ_name
+      if (exists(Curve_summ_name, envir = globalenv())) {
+        temp_data <- get(Curve_summ_name)
+        sheet_name <- Curve_summ_name
         # Load the workbook
         wb <- loadWorkbook(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
         # Check if the sheet exists
@@ -326,7 +336,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
         # Save the workbook
         saveWorkbook(wb, paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
       } else {
-        warning("The variable does not exist.")
+        warning("Summary of the variable does not exist.")
       }
     }
   }
@@ -341,7 +351,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
       #Save if scores is specified:
       if(save_option == "scores") {
         #Desired names
-        base_filename <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
+        base_filename <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Param_title,".xlsx")
         #Check if the file already exists
         if (file.exists(base_filename)) {
           #Append current date in YYYY-MM-DD format before the extension
@@ -359,7 +369,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
       #Save if figure is specified:
       if(save_option == "figure") {
         # Desired file name and specs
-        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
+        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Param_title,".jpg")
         width_pixels <- 1000
         aspect_ratio <- 3/4
         height_pixels <- round(width_pixels * aspect_ratio)
@@ -381,7 +391,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
       #Save if both is specified:
       if(save_option == "both") {
         #Desired names
-        base_filename_x <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
+        base_filename_x <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Param_title,".xlsx")
         #Check if the file already exists
         if (file.exists(base_filename_x)) {
           #Append current date in YYYY-MM-DD format before the extension
@@ -396,7 +406,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
         #
         #
         # Desired file name and specs
-        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
+        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Param_title,".jpg")
         width_pixels <- 1000
         aspect_ratio <- 3/4
         height_pixels <- round(width_pixels * aspect_ratio)

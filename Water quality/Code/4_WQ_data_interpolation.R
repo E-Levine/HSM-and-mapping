@@ -9,7 +9,7 @@
 #Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
-               readxl, openxlsx, progress,
+               readxl, openxlsx, progress, writexl,
                sf, sp, terra,
                tmap, tmaptools, gridExtra, #Mapping and figures
                mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
@@ -19,16 +19,16 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
 #
 source("Code/WQ_functions.R")
 #
-Site_code <- c("SS")       #Two letter estuary code
+Site_code <- c("US")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
 State_Grid <- c("E2")      #Two-letter StateGrid ID
 Alt_Grid <- c("F2")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("SSHSM") #Project code given to data, found in file name
+Project_code <- c("USHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
-Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
+Param_name <- c("Temperature, water")#Column/parameter name of interest - from WQ data file.
 Param_name_2 <- c("Annual")#Additional identify for parameter: i.e. Annual, Quarterly, etc.
 #
 color_temp <- c("cool")    #"warm" or "cool"
@@ -112,9 +112,9 @@ if(color_temp == "warm") {
 #Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values, Threshold
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
-WQ_summ <- summarize_data(WQ_data, Time_period = "Year", Summ_method = "Means")
+WQ_summ <- summarize_data(WQ_data, Time_period = "Year", Summ_method = "Threshold", Month_range = c(5, 10), Threshold_parameters = c("below", 20))
 head(WQ_summ)
-#
+#write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "WQ_", Param_name, "_", Param_name_2,"_spawning_below20.xlsx"), format_headers = TRUE)
 #
 #
 #Data as spatial df:
