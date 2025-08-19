@@ -114,7 +114,7 @@ if(color_temp == "warm") {
 #
 WQ_summ <- summarize_data(WQ_data, Time_period = "Year", Summ_method = "Threshold", Month_range = c(5, 10), Threshold_parameters = c("below", 20))
 head(WQ_summ)
-#write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "WQ_", Param_name, "_", Param_name_2,"_spawning_below20.xlsx"), format_headers = TRUE)
+#write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,"_spawning_below20.xlsx"), format_headers = TRUE)
 #
 #
 #Data as spatial df:

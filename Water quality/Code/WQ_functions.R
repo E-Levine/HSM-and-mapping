@@ -1138,9 +1138,10 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
   } %>%
     summarise(Count = n()),
   temp_raw %>% summarise(Total = n())) %>%
-    #Proportion of samples realted to threshold
+    #Proportion of samples related to threshold
     mutate(Threshold = Count/Total)
   #
+  temp <- rbind(temp, temp_raw %>% anti_join(temp) %>% summarise(Total = n()) %>% mutate(Count = 0, Threshold = 0/Total))
     return(temp)
 }
 #
