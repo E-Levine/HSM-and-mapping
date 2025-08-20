@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 #source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("US") #two-letter site code
+Site_Code <- c("UN") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -60,7 +60,7 @@ load_model_files()
 ####Assign scores
 #
 ##Oysters
-temp <- US_v1_data
+temp <- UN_v1_data
 #Function to assign values based on the reference table
 assign_oyster_values <- function(shapefile_data) {
   #
@@ -535,18 +535,27 @@ US_HSM_data <- US_v1_data_totals %>% st_drop_geometry() %>%
   mutate(Curve_count = as.numeric(rowSums(dplyr::select(., ends_with("_count")), na.rm = TRUE))) %>%
   mutate(HSM_all = case_when(Channel_total == 1 ~ (Oyster_total + Seagrass_total + Salinity_total + Temperature_total)/Curve_count,
                              Channel_total == 0 ~ 0, 
-                             TRUE ~ NA_real_))
+                             TRUE ~ NA_real_)) %>%
+  mutate(HSM_all = round(HSM_all, 2),
+         HSM_allR = round(HSM_all, 1))
+#Define the breaks for grouping (0 to 1 by 0.1)
+breaks <- seq(0, 1, by = 0.1)
+#Assign groups using cut()
+US_HSM_data <- US_HSM_data %>%
+  mutate(HSM_grp = as.factor(cut(HSM_allR, breaks = breaks, include.lowest = TRUE, right = FALSE)))
 #
-#US_HSM_spdf <- US_v1_data
 US_HSM_spdf <- left_join(US_v1_data, US_HSM_data)
 #
+#
+US_HSM_spdf_working <- US_HSM_spdf %>% group_by(HSM_all) %>%
+  summarise(geometry = st_union(geometry))
 #Check data
 library(viridis)
-leaflet_map <- tm_shape(name = "SS - South", US_HSM_spdf)+
-  tm_polygons(col = "HSM_all", palette = viridis(n = 10, direction = -1), border.col = NA)
+tm_shape(US_HSM_spdf)+
+  tm_polygons("HSM_grp")
 #
 tmap_leaflet(leaflet_map)
 #
-##Save shapefile output:
+##Save shape file output:
 st_write(US_HSM_spdf, paste0(Site_Code, "_", Version, "/Output/Shapefiles/", Site_Code, "_", Version, "_HSM_model.shp"), delete_dsn = TRUE)
          
