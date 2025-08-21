@@ -23,7 +23,7 @@ Version <- c("v1") #Model version
 #
 ###Load shape file with data:
 #
-#Load data from all matching folders
+#Load data from all matching folders: SiteCode_Version_data
 load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "_HSM_datalayer"){
   data_dir <- paste0(SiteCode, "_", VersionNumber, "/Output/Shapefiles/")
   file_name <- shp_filename
@@ -60,7 +60,7 @@ load_model_files()
 ####Assign scores
 #
 ##Oysters
-temp <- UN_v1_data
+temp <- get(paste0(Site_Code, "_", Version, "_data"))
 #Function to assign values based on the reference table
 assign_oyster_values <- function(shapefile_data) {
   #
@@ -147,6 +147,41 @@ assign_buffer_values <- function(shapefile_data) {
 Channel_scores <- assign_buffer_values(temp)
 #
 #
+##Function to process range value columns: average of values
+process_ranges <- function(df){
+  #Identify range columns:
+  matching_columns <- grep("R[EAI].", names(df), value = TRUE)
+  
+  if(length(matching_columns) == 0){
+    message("No range columns identified.")
+    return(df)
+  }
+  
+  #Extract pattern codes after R
+  codes <- gsub(".*R([A-Z]{2}).*", "\\1", matching_columns)
+  
+  # Create grouping based on second letter after R
+  groups <- substr(codes, 2, 2)
+  unique_groups <- unique(groups)
+  message("Found range patterns: ", paste(unique_groups, collapse=", "))
+  
+  for (group in unique_groups){
+    group_cols <- matching_columns[groups == group]
+    #Create new column name
+    new_col <- paste0(gsub("R[A-Z].*", "R", group_cols[1]), "v", group)
+    message("Processing group ", group, " (", length(group_cols), " columns)")
+    message("- Columns: ", paste(group_cols, collapse=", "))  
+    
+    #Calculate row averages for the matching columns
+    df[[new_col]] <- rowMeans(st_drop_geometry(df)[, group_cols, drop = FALSE], na.rm = TRUE)
+  }
+  
+  #Remove the original Rang columns
+  df <- df[, !names(df) %in% matching_columns]
+  return(df)
+}
+#process_ranges(temp)
+#
 #
 ##Salinity - all year
 assign_salinity_values <- function(shapefile_data, curve_table, type = "separate") {
@@ -160,6 +195,8 @@ assign_salinity_values <- function(shapefile_data, curve_table, type = "separate
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster look up
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
+  #
+  #If ensemble, get average interpolated value
   if(type == "ensemble"){
     #Create a new data frame for averaged columns
     averaged_data <- data.frame(PGID = data$PGID)
@@ -182,6 +219,8 @@ assign_salinity_values <- function(shapefile_data, curve_table, type = "separate
     data <- averaged_data
     data_columns <- names(data)[-1]  # Update data_columns to reflect the new averaged columns
   }
+  #
+  ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
     #Find corresponding values from the reference table
@@ -189,10 +228,16 @@ assign_salinity_values <- function(shapefile_data, curve_table, type = "separate
                           score_lookup[as.character(data[[col]])],
                           0)
   }
+  #
+  ##Check for ranges and process:
+  data <- process_ranges(data)
+  #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
                       paste0(names(data), "_score", helper))
   names(data) <- new_names
+  #
+  ##Output 
   print(head(data))
   return(data)
 }
@@ -212,6 +257,7 @@ assign_sal_spawn_values <- function(shapefile_data, curve_table, type = "separat
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
+  #If ensemble, get average interpolated value
   if(type == "ensemble"){
     #Create a new data frame for averaged columns
     averaged_data <- data.frame(PGID = data$PGID)
@@ -235,6 +281,7 @@ assign_sal_spawn_values <- function(shapefile_data, curve_table, type = "separat
     data_columns <- names(data)[-1]  # Update data_columns to reflect the new averaged columns
   }
   #
+  ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
     #Find corresponding values from the reference table
@@ -242,10 +289,15 @@ assign_sal_spawn_values <- function(shapefile_data, curve_table, type = "separat
                           score_lookup[as.character(data[[col]])],
                           0)
   }
+  ##Check for ranges and process:
+  data <- process_ranges(data)
+  #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
                       paste0(names(data), "_score", helper))
   names(data) <- new_names
+  #
+  ##Output
   print(head(data))
   return(data)
 }
@@ -268,6 +320,7 @@ assign_temperature_values <- function(shapefile_data, curve_table, type = "separ
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
+  #If ensemble, get average interpolated value
   if(type == "ensemble"){
     #Create a new data frame for averaged columns
     averaged_data <- data.frame(PGID = data$PGID)
@@ -291,6 +344,8 @@ assign_temperature_values <- function(shapefile_data, curve_table, type = "separ
     data_columns <- names(data)[-1]  # Update data_columns to reflect the new averaged columns
   }
   #
+  #
+  ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
     #Find corresponding values from the reference table
@@ -298,10 +353,15 @@ assign_temperature_values <- function(shapefile_data, curve_table, type = "separ
                           score_lookup[as.character(data[[col]])],
                           0)
   }
+  #
+  ##Check for ranges and process:
+  data <- process_ranges(data)
+  #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
                       paste0(names(data), "_score", helper))
   names(data) <- new_names
+  ##Output
   print(head(data))
   return(data)
 }
@@ -322,6 +382,7 @@ assign_temperature_spawn_values <- function(shapefile_data, curve_table, type = 
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
+  #If ensemble, get average interpolated value
   if(type == "ensemble"){
     #Create a new data frame for averaged columns
     averaged_data <- data.frame(PGID = data$PGID)
@@ -345,6 +406,8 @@ assign_temperature_spawn_values <- function(shapefile_data, curve_table, type = 
     data_columns <- names(data)[-1]  # Update data_columns to reflect the new averaged columns
   }
   #
+  #
+  ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
     #Find corresponding values from the reference table
@@ -352,6 +415,10 @@ assign_temperature_spawn_values <- function(shapefile_data, curve_table, type = 
                           score_lookup[as.character(data[[col]])],
                           0)
   }
+  #
+  ##Check for ranges and process:
+  data <- process_ranges(data)
+  #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
                       paste0(names(data), "_score", helper))
@@ -370,6 +437,8 @@ assign_threshold_values <- function(shapefile_data, type = "separate") {
   data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(PGID, contains("spwnT"))
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #
+  #
+  #If ensemble, get average interpolated value
   if(type == "ensemble"){
     #Create a new data frame for averaged columns
     averaged_data <- data.frame(PGID = data$PGID)
@@ -462,7 +531,7 @@ join_score_dataframes <- function(shp_df, join_by = "PGID", env = .GlobalEnv, ve
   return(shp_df)
 }
 #
-US_v1_data_scores <- join_score_dataframes(temp)
+assign(paste0(Site_Code, "_", Version, "_scores_data"), join_score_dataframes(temp))
 #
 #
 #
@@ -479,6 +548,7 @@ calculate_totals <- function(data_scores){
     mutate(Oyster_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
     mutate(Oyster_count = ncol(dplyr::select(., -c(PGID, Oyster_total)))) %>% 
     dplyr::select(PGID, Oyster_total, Oyster_count) %>%
+    mutate(Oyster_ave = Oyster_total/Oyster_count) %>%
     mutate(row_id = row_number())
   #
   #Seagrass score
@@ -487,6 +557,7 @@ calculate_totals <- function(data_scores){
     mutate(Seagrass_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
     mutate(Seagrass_count = ncol(dplyr::select(., -c(PGID, Seagrass_total)))) %>% 
     dplyr::select(PGID, Seagrass_total, Seagrass_count) %>%
+    mutate(Seagrass_ave = Seagrass_total/Seagrass_count) %>%
     mutate(row_id = row_number())
   #
   #Channel score
@@ -504,6 +575,7 @@ calculate_totals <- function(data_scores){
     mutate(Salinity_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
     mutate(Salinity_count = ncol(dplyr::select(., -c(PGID, Salinity_total)))) %>% 
     dplyr::select(PGID, Salinity_total, Salinity_count) %>%
+    mutate(Salinity_ave = Salinity_total/Salinity_count) %>%
     mutate(row_id = row_number())
   #
   #Temperature score
@@ -512,6 +584,7 @@ calculate_totals <- function(data_scores){
     mutate(Temperature_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
     mutate(Temperature_count = ncol(dplyr::select(., -c(PGID, Temperature_total)))) %>% 
     dplyr::select(PGID, Temperature_total, Temperature_count) %>%
+    mutate(Temperature_ave = Temperature_total/Temperature_count) %>%
     mutate(row_id = row_number())
   #
   #Combine all totals to data frame
@@ -528,34 +601,102 @@ calculate_totals <- function(data_scores){
   #
 }
 #
-US_v1_data_totals <- calculate_totals(US_v1_data_scores)
+assign(paste0(Site_Code, "_", Version, "_data_totals"), calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data"))))
+#
+clean_model_data <- function(data){
+  data_clean <- data %>% dplyr::select(-dplyr::ends_with("_count"), -dplyr::ends_with("_total"), dplyr::any_of("Channel_total"))
+  #
+  print(head(data_clean))
+  return(data_clean)
+}
+#
+assign(paste0(Site_Code, "_", Version, "_data_clean"), clean_model_data(get(paste0(Site_Code, "_", Version, "_data_totals"))))
 #
 #
-US_HSM_data <- US_v1_data_totals %>% st_drop_geometry() %>% 
-  mutate(Curve_count = as.numeric(rowSums(dplyr::select(., ends_with("_count")), na.rm = TRUE))) %>%
-  mutate(HSM_all = case_when(Channel_total == 1 ~ (Oyster_total + Seagrass_total + Salinity_total + Temperature_total)/Curve_count,
+#
+#
+#
+UN_HSM_data <- UN_v1_data_clean %>% st_drop_geometry() %>% 
+  mutate(Curve_count = sum(grepl("_ave$", names(st_drop_geometry(UN_v1_data_clean))))) %>% #as.numeric(rowSums(dplyr::select(., ends_with("_count")), na.rm = TRUE))) %>%
+  mutate(HSM_all = case_when(Channel_total == 1 ~ (Oyster_ave + Seagrass_ave + Salinity_ave + Temperature_ave)/Curve_count,
                              Channel_total == 0 ~ 0, 
                              TRUE ~ NA_real_)) %>%
-  mutate(HSM_all = round(HSM_all, 2),
-         HSM_allR = round(HSM_all, 1))
+  mutate(HSM_allR = round(HSM_all, 2))
 #Define the breaks for grouping (0 to 1 by 0.1)
-breaks <- seq(0, 1, by = 0.1)
+breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
 #Assign groups using cut()
-US_HSM_data <- US_HSM_data %>%
-  mutate(HSM_grp = as.factor(cut(HSM_allR, breaks = breaks, include.lowest = TRUE, right = FALSE)))
+UN_HSM_data_grps <- UN_HSM_data %>%
+  mutate(HSM_grp = as.factor(cut(HSM_allR, breaks = breaks, include.lowest = TRUE, right = FALSE))) %>%
+  mutate(HSM_grp = case_when(HSM_allR == 0 ~ "0", 
+                             HSM_grp == '[0,0.1)' ~ '(0,0.1)',
+                             TRUE ~ as.character(HSM_grp))) %>%
+  mutate(HSM_grp = factor(HSM_grp, levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")))
+summary(UN_HSM_data_grps$HSM_grp)
 #
-US_HSM_spdf <- left_join(US_v1_data, US_HSM_data)
+legend_holder <- data.frame(PGID = c("T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10"),
+                            HSM_grp = factor(c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]"), 
+                                             levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")),
+                            Lat_DD_Y = rep(12.0423067, 11),
+                            Long_DD_X = rep(-61.7468122, 11))
 #
+#US_HSM_data_grps <- bind_rows(US_HSM_data_grps, legend_holder)
 #
-US_HSM_spdf_working <- US_HSM_spdf %>% group_by(HSM_all) %>%
-  summarise(geometry = st_union(geometry))
+UN_HSM_spdf <- left_join(UN_v1_data, UN_HSM_data_grps)
+#
 #Check data
 library(viridis)
 tm_shape(US_HSM_spdf)+
   tm_polygons("HSM_grp")
 #
-tmap_leaflet(leaflet_map)
 #
 ##Save shape file output:
-st_write(US_HSM_spdf, paste0(Site_Code, "_", Version, "/Output/Shapefiles/", Site_Code, "_", Version, "_HSM_model.shp"), delete_dsn = TRUE)
-         
+#st_write(US_HSM_spdf, paste0(Site_Code, "_", Version, "/Output/Shapefiles/", Site_Code, "_", Version, "_HSM_model.shp"), delete_dsn = TRUE)
+#
+# Function to save shapefile and split if necessary
+save_shapefile <- function(data, SiteCode = Site_Code, VerNum = Version) {
+  #
+  #Temporary file path for the shapefile
+  temp_file_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/temp.shp")
+  temp_dbf <- sub("\\.shp$", ".dbf", temp_file_path)
+  file_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/", SiteCode, "_", VerNum, "_HSM_model.shp")
+  #Write the shape file to a temporary location
+  st_write(data, temp_file_path, delete_dsn = TRUE)
+  
+  # Check the file size
+  file_size <- file.info(temp_dbf)$size
+  # If the file size is greater than 2 GB (2 * 1024^3 bytes)
+  if (file_size > (2 * 1024^3)) {
+    # Split the data into chunks
+    chunk_size <- 2 * 1024^3  # 2 GB
+    num_chunks <- ceiling(file_size / chunk_size)
+    
+    # Calculate the number of rows per chunk
+    rows_per_chunk <- ceiling(nrow(data) / num_chunks)
+    
+    #New file path
+    new_path <- sub("\\.shp", "", file_path)
+    for (i in seq_len(num_chunks)) {
+      # Determine the row indices for the current chunk
+      start_row <- (i - 1) * rows_per_chunk + 1
+      end_row <- min(i * rows_per_chunk, nrow(data))
+      
+      # Create a subset of the data for the current chunk
+      chunk_data <- data[start_row:end_row, ]
+      
+      # Create a new file path for the chunk
+      chunk_file_path <- paste0(new_path, "_section", i, ".shp")
+      
+      # Write the chunk to a new shapefile
+      st_write(chunk_data, chunk_file_path, delete_dsn = TRUE)
+    }
+    
+    message("Data split into ", num_chunks, " files.")
+  } else {
+    # If the file size is under 2 GB, save normally
+    st_write(data, file_path, delete_dsn = TRUE)
+    message("Shapefile saved successfully.")
+  }
+}
+# Example usage: Assuming 'my_sf_data' is your sf object
+# save_shapefile(my_sf_data)        
+save_shapefile(UN_HSM_spdf)
