@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 #source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("UN") #two-letter site code
+Site_Code <- c("US") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -86,6 +86,35 @@ assign_oyster_values <- function(shapefile_data) {
 }
 #
 Oyster_scores <- assign_oyster_values(temp)
+#
+#
+#
+#Function to assign values based on the reference table
+assign_oybuffer_values <- function(shapefile_data) {
+  #
+  #Identify columns that contain "Oyster" in their names. Limit data for processing:
+  buffer_columns <- grep("Buffer", names(shapefile_data), value = TRUE)
+  data <- shapefile_data %>% dplyr::select(PGID, all_of(buffer_columns)) %>% st_drop_geometry()
+  # Iterate over each identified column
+  for (col in buffer_columns) {
+    #Find corresponding values from the reference table
+    data[[col]] <- sapply(data[[col]], function(x) {
+      match_value <- `Oyster reef buffer`$Value[match(x, `Oyster reef buffer`$Param)]
+      # Return the matched value or 0 if not found
+      ifelse(is.na(match_value), 0, match_value)
+    })
+  }
+  #Rename columns by note "_score"
+  new_names <- ifelse(grepl("Buffer", names(data)), 
+                      paste0(names(data), "_score"),
+                      names(data))
+  names(data) <- new_names
+  print(head(data))
+  return(data)
+}
+#
+Oybuffer_scores <- assign_oybuffer_values(temp)
+#
 #
 #
 #
@@ -476,6 +505,7 @@ Temperture_thres_scores <- assign_threshold_values(temp, type = "ensemble")
 #
 #
 #
+#
 ###Add scores back to data
 join_score_dataframes <- function(shp_df, join_by = "PGID", env = .GlobalEnv, verbose = TRUE) {
   # Input validation
@@ -551,6 +581,15 @@ calculate_totals <- function(data_scores){
     mutate(Oyster_ave = Oyster_total/Oyster_count) %>%
     mutate(row_id = row_number())
   #
+  #Buffer score
+  buffer_total <- data_scores %>% st_drop_geometry() %>%
+    dplyr::select(PGID, contains("ReefBuffer") & ends_with("score")) %>%
+    mutate(Buffer_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
+    mutate(Buffer_count = ncol(dplyr::select(., -c(PGID, Buffer_total)))) %>% 
+    dplyr::select(PGID, Buffer_total, Buffer_count) %>%
+    mutate(Buffer_ave = Buffer_total/Buffer_count) %>%
+    mutate(row_id = row_number())
+  #
   #Seagrass score
   seagrass_total <- data_scores %>% st_drop_geometry() %>%
     dplyr::select(PGID, contains("Seagrass") & ends_with("score")) %>%
@@ -590,6 +629,7 @@ calculate_totals <- function(data_scores){
   #Combine all totals to data frame
   all_totals <- (data_scores %>% mutate(row_id = row_number())) %>%
     left_join(oyster_total, by = c("row_id", "PGID")) %>%
+    left_join(buffer_total, by = c("row_id", "PGID")) %>%
     left_join(seagrass_total, by = c("row_id", "PGID")) %>%
     left_join(channel_total, by = c("row_id", "PGID")) %>%
     left_join(salinity_total, by = c("row_id", "PGID")) %>%
@@ -616,30 +656,29 @@ assign(paste0(Site_Code, "_", Version, "_data_clean"), clean_model_data(get(past
 #
 #
 #
-UN_HSM_data <- UN_v1_data_clean %>% st_drop_geometry() %>% 
-  mutate(Curve_count = sum(grepl("_ave$", names(st_drop_geometry(UN_v1_data_clean))))) %>% #as.numeric(rowSums(dplyr::select(., ends_with("_count")), na.rm = TRUE))) %>%
-  mutate(HSM_all = case_when(Channel_total == 1 ~ (Oyster_ave + Seagrass_ave + Salinity_ave + Temperature_ave)/Curve_count,
+US_HSM_data <- US_v1_data_clean %>% st_drop_geometry() %>% 
+  mutate(Curve_count = sum(grepl("_ave$", names(st_drop_geometry(US_v1_data_clean))))) %>% 
+  mutate(HSM_all = case_when(Channel_total == 1 ~ (Oyster_ave + Buffer_ave + Seagrass_ave + Salinity_ave + Temperature_ave)/Curve_count,
                              Channel_total == 0 ~ 0, 
                              TRUE ~ NA_real_)) %>%
   mutate(HSM_allR = round(HSM_all, 2))
 #Define the breaks for grouping (0 to 1 by 0.1)
 breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
 #Assign groups using cut()
-UN_HSM_data_grps <- UN_HSM_data %>%
+US_HSM_data_grps <- US_HSM_data %>%
   mutate(HSM_grp = as.factor(cut(HSM_allR, breaks = breaks, include.lowest = TRUE, right = FALSE))) %>%
   mutate(HSM_grp = case_when(HSM_allR == 0 ~ "0", 
                              HSM_grp == '[0,0.1)' ~ '(0,0.1)',
                              TRUE ~ as.character(HSM_grp))) %>%
-  mutate(HSM_grp = factor(HSM_grp, levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")))
-summary(UN_HSM_data_grps$HSM_grp)
+  mutate(HSM_grp = factor(HSM_grp, levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]"))) %>%
+  mutate(HSM_gyr = factor(case_when(HSM_grp %in% c("(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)") ~ "Poor",
+                             HSM_grp %in% c("[0.4,0.5)", "[0.5,0.6)") ~ "Moderate",
+                             HSM_grp %in% c("[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]") ~ "Good",
+                           TRUE ~ HSM_grp), levels = c("0", "Poor", "Moderate", "Good")))
+summary(US_HSM_data_grps$HSM_grp)
+summary(US_HSM_data_grps$HSM_gyr)
 #
-legend_holder <- data.frame(PGID = c("T0", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10"),
-                            HSM_grp = factor(c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]"), 
-                                             levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")),
-                            Lat_DD_Y = rep(12.0423067, 11),
-                            Long_DD_X = rep(-61.7468122, 11))
 #
-#US_HSM_data_grps <- bind_rows(US_HSM_data_grps, legend_holder)
 #
 UN_HSM_spdf <- left_join(UN_v1_data, UN_HSM_data_grps)
 #
