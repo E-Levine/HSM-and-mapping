@@ -24,12 +24,26 @@ Version <- c("v1") #Model version
 ###Load shape file with data:
 #
 #Load data from all matching folders: SiteCode_Version_data
-load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "_HSM_datalayer"){
+load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "_test_datalayer"){
   data_dir <- paste0(SiteCode, "_", VersionNumber, "/Output/Shapefiles/")
-  file_name <- shp_filename
-  output_name <- paste0(SiteCode, "_", VersionNumber, "_data")
+  output_name <- paste0(SiteCode, "_", VersionNumber, "_data")  
+  #
+  # Build match pattern:
+  pattern <- paste0("^", SiteCode, ".*", shp_filename, "\\.shp$")
+  # List all matching shapefiles
+  shp_files <- list.files(path = data_dir, pattern = pattern, full.names = TRUE)
+  
+  if (length(shp_files) == 0) {
+    stop("No shapefiles found matching the pattern.")
+  } else if (length(shp_files) == 1) {
+    shape_obj <- st_read(shp_files[1])
+  } else {
+    # Read and combine all shapefiles
+    shape_list <- lapply(shp_files, st_read)
+    shape_obj <- do.call(rbind, shape_list)
+  }
   #Load shape file, assign name
-  shape_obj <- st_read(paste0(data_dir, SiteCode, file_name, ".shp"))
+  #shape_obj <- st_read(paste0(data_dir, SiteCode, file_name, ".shp"))
   assign(output_name, shape_obj, envir = .GlobalEnv)
   #Load Parameter summary file
   Param_summ <<- read_excel(paste0(SiteCode, "_", VersionNumber, "/Data/", SiteCode, "_", VersionNumber, "_model_setup.xlsx"), sheet = "Parameter_Summary")
@@ -583,8 +597,8 @@ calculate_totals <- function(data_scores){
   #
   #Buffer score
   buffer_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, contains("ReefBuffer") & ends_with("score")) %>%
-    mutate(Buffer_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
+    dplyr::select(PGID, contains("Buffer") & ends_with("score")) %>%
+    mutate(Buffer_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
     mutate(Buffer_count = ncol(dplyr::select(., -c(PGID, Buffer_total)))) %>% 
     dplyr::select(PGID, Buffer_total, Buffer_count) %>%
     mutate(Buffer_ave = Buffer_total/Buffer_count) %>%
@@ -671,25 +685,25 @@ US_HSM_data_grps <- US_HSM_data %>%
                              HSM_grp == '[0,0.1)' ~ '(0,0.1)',
                              TRUE ~ as.character(HSM_grp))) %>%
   mutate(HSM_grp = factor(HSM_grp, levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]"))) %>%
-  mutate(HSM_gyr = factor(case_when(HSM_grp %in% c("(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)") ~ "Poor",
+  mutate(HSM_gyr = factor(case_when(HSM_grp %in% c("(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)") ~ "Low",
                              HSM_grp %in% c("[0.4,0.5)", "[0.5,0.6)") ~ "Moderate",
-                             HSM_grp %in% c("[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]") ~ "Good",
-                           TRUE ~ HSM_grp), levels = c("0", "Poor", "Moderate", "Good")))
+                             HSM_grp %in% c("[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]") ~ "High",
+                           TRUE ~ HSM_grp), levels = c("0", "Low", "Moderate", "High")))
 summary(US_HSM_data_grps$HSM_grp)
 summary(US_HSM_data_grps$HSM_gyr)
 #
 #
 #
-UN_HSM_spdf <- left_join(UN_v1_data, UN_HSM_data_grps)
+US_HSM_spdf <- left_join(US_v1_data, US_HSM_data_grps)
 #
 #Check data
 library(viridis)
-tm_shape(US_HSM_spdf)+
+tm_shape(UN_HSM_spdf)+
   tm_polygons("HSM_grp")
 #
 #
 ##Save shape file output:
-#st_write(US_HSM_spdf, paste0(Site_Code, "_", Version, "/Output/Shapefiles/", Site_Code, "_", Version, "_HSM_model.shp"), delete_dsn = TRUE)
+#st_write(UN_HSM_spdf, paste0(Site_Code, "_", Version, "/Output/Shapefiles/", Site_Code, "_", Version, "_HSM_model.shp"), delete_dsn = TRUE)
 #
 # Function to save shapefile and split if necessary
 save_shapefile <- function(data, SiteCode = Site_Code, VerNum = Version) {
@@ -738,4 +752,4 @@ save_shapefile <- function(data, SiteCode = Site_Code, VerNum = Version) {
 }
 # Example usage: Assuming 'my_sf_data' is your sf object
 # save_shapefile(my_sf_data)        
-save_shapefile(UN_HSM_spdf)
+save_shapefile(US_HSM_spdf)
