@@ -17,14 +17,14 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 #source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("US") #two-letter site code
+Site_Code <- c("UN") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
 ###Load shape file with data:
 #
 #Load data from all matching folders: SiteCode_Version_data
-load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "_test_datalayer"){
+load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "_datalayer"){
   data_dir <- paste0(SiteCode, "_", VersionNumber, "/Output/Shapefiles/")
   output_name <- paste0(SiteCode, "_", VersionNumber, "_data")  
   #
@@ -42,8 +42,7 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
     shape_list <- lapply(shp_files, st_read)
     shape_obj <- do.call(rbind, shape_list)
   }
-  #Load shape file, assign name
-  #shape_obj <- st_read(paste0(data_dir, SiteCode, file_name, ".shp"))
+  #assign shp to object
   assign(output_name, shape_obj, envir = .GlobalEnv)
   #Load Parameter summary file
   Param_summ <<- read_excel(paste0(SiteCode, "_", VersionNumber, "/Data/", SiteCode, "_", VersionNumber, "_model_setup.xlsx"), sheet = "Parameter_Summary")
@@ -65,7 +64,6 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
       warning(paste("File does not exist:", file_path))
     }
   }
-  
 }
 #
 load_model_files()
@@ -78,8 +76,8 @@ temp <- get(paste0(Site_Code, "_", Version, "_data"))
 #Function to assign values based on the reference table
 assign_oyster_values <- function(shapefile_data) {
   #
-  #Identify columns that contain "Oyster" in their names. Limit data for processing:
-  oyster_columns <- grep("Oyster", names(shapefile_data), value = TRUE)
+  #Identify columns that contain "Oyst" in their names. Limit data for processing:
+  oyster_columns <- grep("Oyst", names(shapefile_data), value = TRUE)
   data <- shapefile_data %>% dplyr::select(PGID, all_of(oyster_columns)) %>% st_drop_geometry()
   # Iterate over each identified column
   for (col in oyster_columns) {
@@ -90,9 +88,9 @@ assign_oyster_values <- function(shapefile_data) {
       ifelse(is.na(match_value), 0, match_value)
     })
   }
-  #Rename columns by note "_score"
-  new_names <- ifelse(grepl("Oyster", names(data)), 
-                      paste0(names(data), "_score"),
+  #Rename columns by note "SC"
+  new_names <- ifelse(grepl("Oyst", names(data)), 
+                      paste0(names(data), "SC"),
                       names(data))
   names(data) <- new_names
   print(head(data))
@@ -106,8 +104,8 @@ Oyster_scores <- assign_oyster_values(temp)
 #Function to assign values based on the reference table
 assign_oybuffer_values <- function(shapefile_data) {
   #
-  #Identify columns that contain "Oyster" in their names. Limit data for processing:
-  buffer_columns <- grep("Buffer", names(shapefile_data), value = TRUE)
+  #Identify columns that contain "Buff" in their names. Limit data for processing:
+  buffer_columns <- grep("Buff", names(shapefile_data), value = TRUE)
   data <- shapefile_data %>% dplyr::select(PGID, all_of(buffer_columns)) %>% st_drop_geometry()
   # Iterate over each identified column
   for (col in buffer_columns) {
@@ -118,9 +116,9 @@ assign_oybuffer_values <- function(shapefile_data) {
       ifelse(is.na(match_value), 0, match_value)
     })
   }
-  #Rename columns by note "_score"
-  new_names <- ifelse(grepl("Buffer", names(data)), 
-                      paste0(names(data), "_score"),
+  #Rename columns by note "SC"
+  new_names <- ifelse(grepl("Buff", names(data)), 
+                      paste0(names(data), "SC"),
                       names(data))
   names(data) <- new_names
   print(head(data))
@@ -136,9 +134,10 @@ Oybuffer_scores <- assign_oybuffer_values(temp)
 assign_seagrass_values <- function(shapefile_data) {
   #
   variable_name <- "Seagrass"
+  column_name <- "Sgrs"
   Score_tab <- get(variable_name)
-  #Identify columns that contain variable_name in their names. Limit data for processing:
-  data_columns <- grep(variable_name, names(shapefile_data), value = TRUE)
+  #Identify columns that contain column_name in their names. Limit data for processing:
+  data_columns <- grep(column_name, names(shapefile_data), value = TRUE)
   data <- shapefile_data %>% dplyr::select(PGID, all_of(data_columns)) %>% st_drop_geometry()
   # Iterate over each identified column
   for (col in data_columns) {
@@ -149,9 +148,9 @@ assign_seagrass_values <- function(shapefile_data) {
       ifelse(is.na(match_value), 1, match_value)
     })
   }
-  #Rename columns by note "_score"
-  new_names <- ifelse(grepl(variable_name, names(data)), 
-                      paste0(names(data), "_score"),
+  #Rename columns by note "SC"
+  new_names <- ifelse(grepl(column_name, names(data)), 
+                      paste0(names(data), "SC"),
                       names(data))
   names(data) <- new_names
   print(head(data))
@@ -167,8 +166,9 @@ Seagrass_scores <- assign_seagrass_values(temp)
 assign_buffer_values <- function(shapefile_data) {
   #
   variable_name <- "Channel"
-  #Identify columns that contain variable_name in their names. Limit data for processing:
-  data_columns <- grep(variable_name, names(shapefile_data), value = TRUE)
+  column_name <- "Chnl"
+  #Identify columns that contain column_name in their names. Limit data for processing:
+  data_columns <- grep(column_name, names(shapefile_data), value = TRUE)
   data <- shapefile_data %>% dplyr::select(PGID, all_of(data_columns)) %>% st_drop_geometry()
   # Iterate over each identified column
   for (col in data_columns) {
@@ -178,9 +178,9 @@ assign_buffer_values <- function(shapefile_data) {
       ifelse(is.na(x), 1, 0)
     })
   }
-  #Rename columns by note "_score"
-  new_names <- ifelse(grepl(variable_name, names(data)), 
-                      paste0(names(data), "_score"),
+  #Rename columns by note "SC"
+  new_names <- ifelse(grepl(column_name, names(data)), 
+                      paste0(names(data), "SC"),
                       names(data))
   names(data) <- new_names
   print(head(data))
@@ -230,7 +230,7 @@ process_ranges <- function(df){
 assign_salinity_values <- function(shapefile_data, curve_table, type = "separate") {
   #
   table_name <- deparse(substitute(curve_table))
-  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "_L", "")
+  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
   data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(-contains("spwn")) %>%
@@ -277,7 +277,7 @@ assign_salinity_values <- function(shapefile_data, curve_table, type = "separate
   #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "_score", helper))
+                      paste0(names(data), "SC", helper))
   names(data) <- new_names
   #
   ##Output 
@@ -291,7 +291,7 @@ Salinity_scores <- assign_salinity_values(temp, Salinity_adult, type = "ensemble
 assign_sal_spawn_values <- function(shapefile_data, curve_table, type = "separate") {
   #
   table_name <- deparse(substitute(curve_table))
-  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "_L", "")
+  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
   data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(PGID, contains("spwn")) %>%
@@ -337,7 +337,7 @@ assign_sal_spawn_values <- function(shapefile_data, curve_table, type = "separat
   #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "_score", helper))
+                      paste0(names(data), "SC", helper))
   names(data) <- new_names
   #
   ##Output
@@ -354,7 +354,7 @@ Salinity_spawn_scores <- left_join(Salinity_spawn_scores_t, assign_sal_spawn_val
 assign_temperature_values <- function(shapefile_data, curve_table, type = "separate") {
   #
   table_name <- deparse(substitute(curve_table))
-  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "_L", "")
+  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
   data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(-contains("spwn")) %>%
@@ -402,7 +402,7 @@ assign_temperature_values <- function(shapefile_data, curve_table, type = "separ
   #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "_score", helper))
+                      paste0(names(data), "SC", helper))
   names(data) <- new_names
   ##Output
   print(head(data))
@@ -415,7 +415,7 @@ Temperature_scores <- assign_temperature_values(temp, Temperature_adult, type = 
 assign_temperature_spawn_values <- function(shapefile_data, curve_table, type = "separate") {
   #
   table_name <- deparse(substitute(curve_table))
-  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "_L", "")
+  helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
   data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% 
@@ -464,7 +464,7 @@ assign_temperature_spawn_values <- function(shapefile_data, curve_table, type = 
   #
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "_score", helper))
+                      paste0(names(data), "SC", helper))
   names(data) <- new_names
   print(head(data))
   return(data)
@@ -508,7 +508,7 @@ assign_threshold_values <- function(shapefile_data, type = "separate") {
   data <- data %>% mutate(across(-PGID, ~1-.x))
   #Rename columns by note "_score"
   new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "_score"))
+                      paste0(names(data), "SC"))
   names(data) <- new_names
   print(head(data))
   return(data)
@@ -583,61 +583,61 @@ assign(paste0(Site_Code, "_", Version, "_scores_data"), join_score_dataframes(te
 calculate_totals <- function(data_scores){
   #Oyster score
   oyster_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, contains("Oyster") & ends_with("score")) %>%
+    dplyr::select(PGID, contains("Oyst") & ends_with("SC")) %>%
     mutate(across(contains("2024"), ~ .*1),
            across(contains("2023"), ~ .*0.8),
            across(contains("2022"), ~ .*0.6),
            across(contains("2021"), ~ .*0.4),
            across(contains("2020"), ~ .*0.2)) %>%
-    mutate(Oyster_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
-    mutate(Oyster_count = ncol(dplyr::select(., -c(PGID, Oyster_total)))) %>% 
-    dplyr::select(PGID, Oyster_total, Oyster_count) %>%
-    mutate(Oyster_ave = Oyster_total/Oyster_count) %>%
+    mutate(OystTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
+    mutate(OystCO = ncol(dplyr::select(., -c(PGID, OystTO)))) %>% 
+    dplyr::select(PGID, OystTO, OystCO) %>%
+    mutate(OystAV = OystTO/OystCO) %>%
     mutate(row_id = row_number())
   #
   #Buffer score
   buffer_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, contains("Buffer") & ends_with("score")) %>%
-    mutate(Buffer_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
-    mutate(Buffer_count = ncol(dplyr::select(., -c(PGID, Buffer_total)))) %>% 
-    dplyr::select(PGID, Buffer_total, Buffer_count) %>%
-    mutate(Buffer_ave = Buffer_total/Buffer_count) %>%
+    dplyr::select(PGID, contains("Buff") & ends_with("SC")) %>%
+    mutate(BuffTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
+    mutate(BuffCO = ncol(dplyr::select(., -c(PGID, BuffTO)))) %>% 
+    dplyr::select(PGID, BuffTO, BuffCO) %>%
+    mutate(BuffAV = BuffTO/BuffCO) %>%
     mutate(row_id = row_number())
   #
   #Seagrass score
   seagrass_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, contains("Seagrass") & ends_with("score")) %>%
-    mutate(Seagrass_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
-    mutate(Seagrass_count = ncol(dplyr::select(., -c(PGID, Seagrass_total)))) %>% 
-    dplyr::select(PGID, Seagrass_total, Seagrass_count) %>%
-    mutate(Seagrass_ave = Seagrass_total/Seagrass_count) %>%
+    dplyr::select(PGID, contains("Sgrs") & ends_with("SC")) %>%
+    mutate(SgrsTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
+    mutate(SgrsCO = ncol(dplyr::select(., -c(PGID, SgrsTO)))) %>% 
+    dplyr::select(PGID, SgrsTO, SgrsCO) %>%
+    mutate(SgrsAV = SgrsTO/SgrsCO) %>%
     mutate(row_id = row_number())
   #
   #Channel score
   channel_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, contains("Channel") & ends_with("score")) %>%
+    dplyr::select(PGID, contains("Chnl") & ends_with("SC")) %>%
     #If type noted to any of the channel columns (meaning score was 0), score = 0
-    mutate(Channel_total = ifelse(if_any(everything(dplyr::select(., -PGID)), ~. == 0), 0, 1)) %>%
-    #mutate(Channel_count = ncol(dplyr::select(., -c(PGID, Channel_total)))) %>% 
-    dplyr::select(PGID, Channel_total) %>% #, Channel_count) %>%
+    mutate(ChnlTO = ifelse(if_any(everything(dplyr::select(., -PGID)), ~. == 0), 0, 1)) %>%
+    #mutate(ChannelCO = ncol(dplyr::select(., -c(PGID, ChnlTO)))) %>% 
+    dplyr::select(PGID, ChnlTO) %>% #, ChnlCO) %>%
     mutate(row_id = row_number())
   #
   #Salinity score
   salinity_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, starts_with("S") & ends_with("E_score")) %>%
-    mutate(Salinity_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
-    mutate(Salinity_count = ncol(dplyr::select(., -c(PGID, Salinity_total)))) %>% 
-    dplyr::select(PGID, Salinity_total, Salinity_count) %>%
-    mutate(Salinity_ave = Salinity_total/Salinity_count) %>%
+    dplyr::select(PGID, starts_with("S") & ends_with("ESC")) %>%
+    mutate(STO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
+    mutate(SCO = ncol(dplyr::select(., -c(PGID, STO)))) %>% 
+    dplyr::select(PGID, STO, SCO) %>%
+    mutate(SAV = STO/SCO) %>%
     mutate(row_id = row_number())
   #
   #Temperature score
   temperature_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, starts_with("T") & ends_with("E_score")) %>%
-    mutate(Temperature_total = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
-    mutate(Temperature_count = ncol(dplyr::select(., -c(PGID, Temperature_total)))) %>% 
-    dplyr::select(PGID, Temperature_total, Temperature_count) %>%
-    mutate(Temperature_ave = Temperature_total/Temperature_count) %>%
+    dplyr::select(PGID, starts_with("T") & ends_with("ESC")) %>%
+    mutate(TTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
+    mutate(TCO = ncol(dplyr::select(., -c(PGID, TTO)))) %>% 
+    dplyr::select(PGID, TTO, TCO) %>%
+    mutate(TAV = TTO/TCO) %>%
     mutate(row_id = row_number())
   #
   #Combine all totals to data frame
@@ -658,7 +658,7 @@ calculate_totals <- function(data_scores){
 assign(paste0(Site_Code, "_", Version, "_data_totals"), calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data"))))
 #
 clean_model_data <- function(data){
-  data_clean <- data %>% dplyr::select(-dplyr::ends_with("_count"), -dplyr::ends_with("_total"), dplyr::any_of("Channel_total"))
+  data_clean <- data %>% dplyr::select(-dplyr::ends_with("CO"), -dplyr::ends_with("TO"), dplyr::any_of("ChnlTO"))
   #
   print(head(data_clean))
   return(data_clean)
@@ -671,26 +671,26 @@ assign(paste0(Site_Code, "_", Version, "_data_clean"), clean_model_data(get(past
 #
 #
 US_HSM_data <- US_v1_data_clean %>% st_drop_geometry() %>% 
-  mutate(Curve_count = sum(grepl("_ave$", names(st_drop_geometry(US_v1_data_clean))))) %>% 
-  mutate(HSM_all = case_when(Channel_total == 1 ~ (Oyster_ave + Buffer_ave + Seagrass_ave + Salinity_ave + Temperature_ave)/Curve_count,
-                             Channel_total == 0 ~ 0, 
+  mutate(CurveCO = sum(grepl("AV$", names(st_drop_geometry(US_v1_data_clean))))) %>% 
+  mutate(HSM = case_when(ChnlTO == 1 ~ (OystAV + BuffAV + SgrsAV + SAV + TAV)/CurveCO,
+                             ChnlTO == 0 ~ 0, 
                              TRUE ~ NA_real_)) %>%
-  mutate(HSM_allR = round(HSM_all, 2))
+  mutate(HSMround = round(HSM, 2))
 #Define the breaks for grouping (0 to 1 by 0.1)
 breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
 #Assign groups using cut()
 US_HSM_data_grps <- US_HSM_data %>%
-  mutate(HSM_grp = as.factor(cut(HSM_allR, breaks = breaks, include.lowest = TRUE, right = FALSE))) %>%
-  mutate(HSM_grp = case_when(HSM_allR == 0 ~ "0", 
-                             HSM_grp == '[0,0.1)' ~ '(0,0.1)',
-                             TRUE ~ as.character(HSM_grp))) %>%
-  mutate(HSM_grp = factor(HSM_grp, levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]"))) %>%
-  mutate(HSM_gyr = factor(case_when(HSM_grp %in% c("(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)") ~ "Low",
-                             HSM_grp %in% c("[0.4,0.5)", "[0.5,0.6)") ~ "Moderate",
-                             HSM_grp %in% c("[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]") ~ "High",
-                           TRUE ~ HSM_grp), levels = c("0", "Low", "Moderate", "High")))
-summary(US_HSM_data_grps$HSM_grp)
-summary(US_HSM_data_grps$HSM_gyr)
+  mutate(HSMgrp = as.factor(cut(HSMround, breaks = breaks, include.lowest = TRUE, right = FALSE))) %>%
+  mutate(HSMgrp = case_when(HSMround == 0 ~ "0", 
+                             HSMgrp == '[0,0.1)' ~ '(0,0.1)',
+                             TRUE ~ as.character(HSMgrp))) %>%
+  mutate(HSMgrp = factor(HSMgrp, levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]"))) %>%
+  mutate(HSMgyr = factor(case_when(HSMgrp %in% c("(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)") ~ "Low",
+                             HSMgrp %in% c("[0.4,0.5)", "[0.5,0.6)") ~ "Moderate",
+                             HSMgrp %in% c("[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]") ~ "High",
+                           TRUE ~ HSMgrp), levels = c("0", "Low", "Moderate", "High")))
+summary(US_HSM_data_grps$HSMgrp)
+summary(US_HSM_data_grps$HSMgyr)
 #
 #
 #
