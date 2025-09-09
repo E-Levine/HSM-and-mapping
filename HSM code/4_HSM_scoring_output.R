@@ -21,7 +21,7 @@ Site_Code <- c("UN") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
-###Load shape file with data:
+###Load shape file with data: default shp_filename = "_datalayer"
 load_model_files()
 #
 #
@@ -87,8 +87,8 @@ assign(paste0(Site_Code, "_", Version, "_data_clean"), clean_model_data(get(past
 #
 #SCORING
 #
-US_HSM_data <- US_v1_data_clean %>% st_drop_geometry() %>% 
-  mutate(CurveCO = sum(grepl("AV$", names(st_drop_geometry(US_v1_data_clean))))) %>% 
+HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>% st_drop_geometry() %>% 
+  mutate(CurveCO = sum(grepl("AV$", names(st_drop_geometry(get(paste0(Site_Code, "_", Version, "_data_clean"))))))) %>% 
   mutate(HSM = case_when(ChnlTO == 1 ~ (OystAV + BuffAV + SgrsAV + SAV + TAV)/CurveCO,
                              ChnlTO == 0 ~ 0, 
                              TRUE ~ NA_real_)) %>%
@@ -96,7 +96,7 @@ US_HSM_data <- US_v1_data_clean %>% st_drop_geometry() %>%
 #Define the breaks for grouping (0 to 1 by 0.1)
 breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
 #Assign groups using cut()
-US_HSM_data_grps <- US_HSM_data %>%
+HSM_data_grps <- HSM_data %>%
   mutate(HSMgrp = as.factor(cut(HSMround, breaks = breaks, include.lowest = TRUE, right = FALSE))) %>%
   mutate(HSMgrp = case_when(HSMround == 0 ~ "0", 
                              HSMgrp == '[0,0.1)' ~ '(0,0.1)',
@@ -106,18 +106,18 @@ US_HSM_data_grps <- US_HSM_data %>%
                              HSMgrp %in% c("[0.4,0.5)", "[0.5,0.6)") ~ "Moderate",
                              HSMgrp %in% c("[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]") ~ "High",
                            TRUE ~ HSMgrp), levels = c("0", "Low", "Moderate", "High")))
-summary(US_HSM_data_grps$HSMgrp)
-summary(US_HSM_data_grps$HSMgyr)
+summary(HSM_data_grps$HSMgrp)
+summary(HSM_data_grps$HSMgyr)
 #
 #
 #
-US_HSM_spdf <- left_join(US_v1_data, US_HSM_data_grps)
+HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps)
 #
 #Check data
-library(viridis)
-tm_shape(UN_HSM_spdf)+
-  tm_polygons("HSM_grp")
+#library(viridis)
+#tm_shape(US_HSM_spdf)+
+#  tm_polygons(fill = "HSM_grp", col = NA)
 #
 #
 ##Save shape file output:
-save_shapefile(US_HSM_spdf)
+save_shapefile(HSM_spdf)

@@ -215,15 +215,19 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
   pattern <- paste0("^", SiteCode, ".*", shp_filename, "\\.shp$")
   # List all matching shapefiles
   shp_files <- list.files(path = data_dir, pattern = pattern, full.names = TRUE)
-  
   if (length(shp_files) == 0) {
     stop("No shapefiles found matching the pattern.")
-  } else if (length(shp_files) == 1) {
-    shape_obj <- st_read(shp_files[1])
   } else {
-    # Read and combine all shapefiles
-    shape_list <- lapply(shp_files, st_read)
-    shape_obj <- do.call(rbind, shape_list)
+    #Print list of files loaded:
+    message("Files loaded:\n", paste(shp_files, collapse = "\n"))
+
+    if (length(shp_files) == 1) {
+      shape_obj <- st_read(shp_files[1])
+      } else {
+        # Read and combine all shapefiles
+        shape_list <- lapply(shp_files, st_read)
+        shape_obj <- do.call(rbind, shape_list)
+      }
   }
   #assign shp to object
   assign(output_name, shape_obj, envir = .GlobalEnv)
@@ -283,7 +287,7 @@ assign_oyster_scores <- function(shapefile_data) {
 assign_oybuffer_scores <- function(shapefile_data) {
   #
   # Check if curve info exists in the global environment
-  if (!exists(`Oyster reef buffer`, envir = .GlobalEnv)) {
+  if (!exists("Oyster reef buffer", envir = .GlobalEnv)) {
     stop("Error: 'Oyster reef buffer' not found in the global environment. Please ensure it is loaded and available.")
   }
   #Identify columns that contain "Buff" in their names. Limit data for processing:
@@ -346,7 +350,7 @@ assign_seagrass_scores <- function(shapefile_data) {
 assign_buffer_scores <- function(shapefile_data) {
   #
   # Check if curve info exists in the global environment
-  if (!exists("Channel", envir = .GlobalEnv)) {
+  if (!exists("Channel buffer", envir = .GlobalEnv)) {
     stop("Error: 'Channel' not found in the global environment. Please ensure it is loaded and available.")
   }
   #
@@ -831,22 +835,32 @@ clean_model_data <- function(data){
 }
 #
 #
+
 # Function to save shapefile and split if necessary
-save_shapefile <- function(data, SiteCode = Site_Code, VerNum = Version) {
+save_model_output <- function(data, SiteCode = Site_Code, VerNum = Version) {
+  #
+  #Cleaned shp and CSV data
+  HSM_shp_output <- data %>% dplyr::select(-ends_with("SC"), -ends_with("SCL"),-contains("Shape"), -ends_with("CO"), -ends_with("TO"))
+  HSM_csv <- data %>% st_set_geometry(NULL) %>% as.data.frame()
+  #
+  ##Output CSV data file
+  CSV_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", SiteCode, "_", VerNum, "_model_data.csv")
+  data.table::fwrite(HSM_csv, CSV_path)
+  message(paste0("CSV data file saved to ", CSV_path))
   #
   #Temporary file path for the shapefile
   temp_file_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/temp.shp")
   temp_dbf <- sub("\\.shp$", ".dbf", temp_file_path)
   file_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/", SiteCode, "_", VerNum, "_HSM_model.shp")
   #Write the shape file to a temporary location
-  st_write(data, temp_file_path, delete_dsn = TRUE)
+  st_write(HSM_shp_output, temp_file_path, delete_dsn = TRUE)
   
   # Check the file size
   file_size <- file.info(temp_dbf)$size
-  # If the file size is greater than 2 GB (2 * 1024^3 bytes)
-  if (file_size > (2 * 1024^3)) {
+  # If the file size is greater than 2 GB (2 * 1024^3 bytes) - modified to be conservative
+  if (file_size > (2 * 1000^3)) {
     # Split the data into chunks
-    chunk_size <- 2 * 1024^3  # 2 GB
+    chunk_size <- 2 * 1000^3  # 2 GB
     num_chunks <- ceiling(file_size / chunk_size)
     
     # Calculate the number of rows per chunk
@@ -857,10 +871,10 @@ save_shapefile <- function(data, SiteCode = Site_Code, VerNum = Version) {
     for (i in seq_len(num_chunks)) {
       # Determine the row indices for the current chunk
       start_row <- (i - 1) * rows_per_chunk + 1
-      end_row <- min(i * rows_per_chunk, nrow(data))
+      end_row <- min(i * rows_per_chunk, nrow(HSM_shp_output))
       
       # Create a subset of the data for the current chunk
-      chunk_data <- data[start_row:end_row, ]
+      chunk_data <- HSM_shp_output[start_row:end_row, ]
       
       # Create a new file path for the chunk
       chunk_file_path <- paste0(new_path, "_section", i, ".shp")
@@ -872,9 +886,9 @@ save_shapefile <- function(data, SiteCode = Site_Code, VerNum = Version) {
     message("Data split into ", num_chunks, " files.")
   } else {
     # If the file size is under 2 GB, save normally
-    st_write(data, file_path, delete_dsn = TRUE)
+    st_write(HSM_shp_output, file_path, delete_dsn = TRUE)
     message("Shapefile saved successfully.")
   }
 }
 # Example usage: Assuming 'my_sf_data' is your sf object
-# save_shapefile(my_sf_data)  
+# save_model_output(my_sf_data)  
