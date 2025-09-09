@@ -341,11 +341,18 @@ Selected_data <- function(BufferOrN, Adding, Removing, ProjectCode){
   Project_code <- ProjectCode
   #
   ##Export cleaned final data
-  if(BufferOrN == "Buffer") {
-    write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_selected_buffer_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-  } else {
-    write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_closest_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the selected data be saved locally to the 'Compiled-data' folder?")
+    if(result == "No"){
+      message("The selected data will not be saved.")
+    } else {
+      if(BufferOrN == "Buffer") {
+        write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_selected_buffer_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+      } else {
+        write_xlsx(WQ_stations_final_df, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_closest_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+      }
     }
+  }
   #
   return(print(head(WQ_stations_final %>% as.data.frame())))
 }
@@ -442,6 +449,11 @@ location_boundary <- function(SelectionType, SelectedStations, BoundingBox, Proj
 Modified_data <- function(Selection_Method, Adding, Removing, ProjectCode){
   ##Code (3-4 letters preferred) to identify project selected data is for:
   Project_code <- ProjectCode
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the modified data be saved locally to the 'Compiled-data' folder?")
+    if(result == "No"){
+      message("The selected data will not be saved.")
+    } else {
   #Both NA
   if(is.na(Adding) == TRUE && is.na(Removing) == TRUE){
     if(Selection_Method == "Station_name"){
@@ -534,7 +546,9 @@ Modified_data <- function(Selection_Method, Adding, Removing, ProjectCode){
             write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
           } else {WQ_stations_final <- (paste0("Adding or removing stations by name for ", Data_source, "is not yet supported."))}
         }
-      }
+    }
+    }
+  }
   return(print(head(WQ_stations_final)))
   }
 #
@@ -950,6 +964,28 @@ summary.autofitVariogram <- function(object, ...) {
 #
 ####Data summarization functions####
 #
+#Load WQ data file
+load_WQ_data <- function(){
+  if(Folder == "compiled" && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the data be saved locally to the project version folder?")
+    if(result == "No"){
+      message("A copy of the data will not be saved to the project folder.")
+      files <- list.files(path = "Data/Compiled-data/", 
+                          pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
+      WQ_data <<- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+        dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
+                      Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
+    } else {
+      files <- list.files(path = "Data/Compiled-data/", 
+                          pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
+      WQ_data <<- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+        dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
+                      Parameter = contains("CharacteristicName"), Value = contains("MeasureValue")) 
+      write_xlsx(WQ_data, paste0("../",Site_code, "_", Version,"/Data/", Site_code, "_cleaned_WQ_data.xlsx"), format_headers = TRUE)
+    }
+  } else {paste("Code needs to be updated for 'final' folder location.")}
+}
+#
 summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
   #
   Time_period <- match.arg(Time_period)
@@ -1102,9 +1138,10 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
   } %>%
     summarise(Count = n()),
   temp_raw %>% summarise(Total = n())) %>%
-    #Proportion of samples realted to threshold
+    #Proportion of samples related to threshold
     mutate(Threshold = Count/Total)
   #
+  temp <- rbind(temp, temp_raw %>% anti_join(temp) %>% summarise(Total = n()) %>% mutate(Count = 0, Threshold = 0/Total))
     return(temp)
 }
 #
@@ -1123,6 +1160,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
   idw_output <- list()
   idw_spdf <- list()
   idw_nn <- list()
+  idw_simple <- list()
   idw_Site <- list()
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
@@ -1157,8 +1195,13 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
-      #Determine overlay of data on SiteGrid
-      idw_Site[[i]] <- st_as_sf(intersect(idw_nn[[i]], Site_Grid_spdf))
+      #Determine overlay of data on SiteGrid:: 
+      idw_simple[[i]] <- st_simplify(st_as_sf(idw_nn[[i]]))
+      Site_simple <- st_as_sf(Site_Grid_spdf)
+      #idw_Site[[i]] <- st_intersection(idw_simple[[i]], Site_simple)
+      idw_Site[[i]] <- lapply(seq_along(idw_simple), function(i) {
+        chunked_intersection(polygons = idw_simple[[i]], site = Site_simple, chunk_size = 500)
+      })
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
@@ -1654,7 +1697,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
       message("Summary data will not be saved.")
     } else {
       sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-      sheet_name <- paste0(Param_name, "_models")
+      sheet_name <- "Interpolation_Summary"
       summ_info <- data.frame(Parameter = Param_name,
                               Type = Param_name_2,
                               Statistic = Stat_type,
@@ -1662,26 +1705,40 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
                               Weights = paste(as.vector(weight_values), collapse = ", "),
                               Date_range = paste0(Start_year, "-", End_year),
                               Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")},
-                              Threshold_value = threshold_val)
+                              Threshold_value = threshold_val,
+                              Date_update = Sys.Date())
       #Load the workbook
       wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
-      # Check if the sheet exists
+      #Check if the sheet exists
       if (sheet_name %in% sheet_names) {
-        # If it exists, overwrite the existing sheet
+        #If it exists, append data to the existing sheet
         existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
         new_data <- rbind(existing_data, summ_info)
         writeData(wb, sheet = sheet_name, new_data)
       } else {
-        # If it does not exist, create a new sheet
+        #If it does not exist, create a new sheet
         addWorksheet(wb, sheet_name)
         writeData(wb, sheet = sheet_name, summ_info)
       }
-      # Save the workbook
+      #Save the workbook
       saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
       #Print a message to confirm saving
-      cat("Summary information was saved as:", sheet_name, "\n")
+      cat("Summary information was saved within:", sheet_name, "\n")
     }
   }
   ##End summary output
 } 
 #
+chunked_intersection <- function(polygons, site, chunk_size = 1000) {
+# Split polygons into chunks
+n <- nrow(polygons)
+chunks <- split(polygons, (seq_len(n) - 1) %/% chunk_size)
+
+# Process each chunk
+result <- map_dfr(chunks, function(chunk) {
+  st_intersection(site, chunk) %>%
+    st_make_valid() %>%  # Ensure valid geometries
+    suppressWarnings()   # Quiet common minor warnings
+})
+return(result)
+}
