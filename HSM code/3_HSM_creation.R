@@ -24,7 +24,7 @@ Alt_Grid <- c(NA) #Two-letter StateGrid ID, enter NA if no secondary StateGrid n
 ##Parameters
 Sections_designated <- c("Y") #Y/N are section designations used
 ##Polygon data:
-FL_Oysters <- c("Y") #Oyster beds in Florida: Include Oyster layer data ("Data"), include layer data and scoring ("Score"), or don't include data or scoring ("None")
+#FL_Oysters <- c("Y") #Oyster beds in Florida: Include Oyster layer data ("Data"), include layer data and scoring ("Score"), or don't include data or scoring ("None")
 #
 #
 #
@@ -34,9 +34,20 @@ FL_Oysters <- c("Y") #Oyster beds in Florida: Include Oyster layer data ("Data")
 load_working_info(Site_Code, Version)
 #
 #Assign site and section designations to grid cells. Data and shapefile can be saved using Save_data = "Y" and save a figure using Save_figure = "Y".
-get_base_grid(State_Grid, Alt_Grid, Site_Code, Version, Sections_designated, Save_data = "Y", Save_figure = "Y")
+get_base_grid(Site_Code, Version, Sections_designated, Save_data = "N", Save_figure = "N")
 #
 #
 ###END OF SECTION
 #
 #
+####Load data layer files, add to grid####
+#
+#Refer to Parameter_Order Excel sheet, Parameter column for names to reference data:
+df_list[3]
+#Use Parameter name and date range to gather data needed
+find_folder_names("Oysters")
+#
+#If folders match, load shape files:
+Start_date <- "2020-01-01"
+End_date <- "2024-12-31"
+load_matching_shp("Oysters")
