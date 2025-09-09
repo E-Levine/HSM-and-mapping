@@ -119,5 +119,5 @@ HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grp
 #  tm_polygons(fill = "HSM_grp", col = NA)
 #
 #
-##Save shape file output:
-save_shapefile(HSM_spdf)
+##Output data file and shape file:
+save_model_output(HSM_spdf)
