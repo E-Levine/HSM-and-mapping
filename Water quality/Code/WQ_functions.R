@@ -3,6 +3,356 @@
 #
 #
 ####Set up####
+#
+#Loading raw files
+#library(readxl)
+read_raw_data_files <- function(SiteCode, DataSource, year_ranges) {
+  # year_ranges: a list of vectors, each with two elements: start_year and end_year
+  # Example: list(c(2000, 2007), c(2008, 2014), c(2015, 2019), c(2020, 2023))
+  #
+  # Determine overall start and end year for site file
+  overall_start_year <- as.numeric(Start_year)
+  overall_end_year <- as.numeric(End_year)
+  #
+  ##Read in Excel site file
+  Location_data <- NULL
+  if(DataSource == "Portal"){
+    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
+    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z")))
+  } else if(DataSource == "WA"){
+    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
+    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z"),
+                                              col_types = c("text", "text", "text", "text", "text", "text", "numeric", "numeric", "text", "date", "numeric", "text",
+                                                            "text", "text", "text", "numeric", "text", "text", "text", "numeric", "text")))
+  } else if(DataSource == "FIM"){
+    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_", overall_start_year, "_", overall_end_year,".xlsx")
+    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z", "NULL")))
+  } else {paste0("Code not yet updated for ", DataSource," data.")}
+  #
+  #
+  ##Get Excel Restuls file(s)
+  Results_data <- NULL
+  #
+  if(!(DataSource %in% c("WA", "FIM"))){
+    Results_list <- list()
+    for (i in seq_along(year_ranges)) {
+      start_year <- year_ranges[[i]][1]
+      end_year <- year_ranges[[i]][2]
+      #
+      file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource, "_Results_", start_year, "_", end_year, ".xlsx")
+      #Read the Excel file, handle NA values as specified
+      Results_list[[i]] <- as.data.frame(read_excel(file_path, na = c("NA", " ", "", "Z")))
+    }
+    #Combine all data frames into one
+    Results_data <- do.call(rbind, Results_list)
+    #Save output
+    assign("Results_data", Results_data, envir = .GlobalEnv)
+  } else {
+    message("Skipping Results_data reading for Data_source: ", DataSource)
+  }
+  
+  #
+  ##Save outputs:
+  assign("Location_data", Location_data, envir = .GlobalEnv)
+  message(paste0("Raw data loaded for ", SiteCode))
+}
+#
+#Subset columns of data
+#library(dplyr)
+process_location_data <- function(DataSource = Data_source, LocationData = Location_data, SiteCode = Site_code) {
+  # Define columns to keep based on Data_source
+  if (DataSource == "Portal") {
+    keep_site <- c("MonitoringLocationIdentifier", "OrganizationIdentifier", "OrganizationFormalName", "MonitoringLocationName", 
+                   "MonitoringLocationTypeName", "MonitoringLocationDescriptionText", "LatitudeMeasure", "LongitudeMeasure", 
+                   "HorizontalCoordinateReferenceSystemDatumName", "StateCode", "CountyCode", "ProviderName")
+  } else if (DataSource == "WA") {
+    keep_site <- c("WBodyID", "WaterBodyName", "DataSource", "StationID", "StationName", "Actual_StationID", "Actual_Latitude", "Actual_Longitude", 
+                   "SampleDate", "Parameter", "Characteristic", "Result_Value", "Result_Unit")
+  } else if (DataSource == "FIM") {
+    keep_site <- colnames(LocationData)
+  } else {
+    stop(paste0("Data_source '", DataSource, "' not recognized."))
+  }
+  # Subset columns
+  Location_data_sub <- LocationData[keep_site]
+  # Add Estuary column before specific column depending on Data_source
+  if (DataSource == "Portal") {
+    Location_data_sub <- Location_data_sub %>% add_column(Estuary = SiteCode, .before = "MonitoringLocationIdentifier")
+  } else if (DataSource == "WA") {
+    Location_data_sub <- Location_data_sub %>% add_column(Estuary = SiteCode, .before = "WBodyID")
+  } else if (DataSource == "FIM") {
+    Location_data_sub <- Location_data_sub %>% add_column(Estuary = SiteCode, .before = "TripID")
+  }
+  glimpse(Location_data_sub)
+  return(Location_data_sub)
+}
+#
+#Subset results data
+process_results_data <- function(DataSource, ResultsData){
+  # Check inputs
+  if (missing(DataSource) || missing(ResultsData)) {
+    stop("Please provide both DataSource and ResultsData arguments.")
+  }
+  ##Select Results data - Portal data - not currently setup for using WA or FIM data
+  #Subset df by columns to keep - change list in include more columns as needed 
+  Results <- NULL
+  if(!(DataSource %in% c("WA", "FIM"))){
+    if(DataSource == "Portal"){
+      keep_results_portal <- c("MonitoringLocationIdentifier", "ResultIdentifier", "ActivityStartDate", "ActivityStartTime/Time", 
+                               "ActivityStartTime/TimeZoneCode", "CharacteristicName", "ResultMeasureValue", "ResultMeasure/MeasureUnitCode")
+      cols_to_keep <- intersect(keep_results_portal, colnames(ResultsData))
+      Results <- ResultsData[cols_to_keep]
+    } else {
+      message("Skipping Results_data subsetting for Data_source: ", DataSource)
+    } 
+  }
+  #
+  if(!is.null(Results)) {
+    dplyr::glimpse(Results)
+  }
+  return(Results)
+}
+#
+#Create combine location and results object:
+create_combined <- function(DataSource, LocationData, ResultsData){
+  if(DataSource == "Portal"){
+    Combined_data <- merge(LocationData, ResultsData, by = "MonitoringLocationIdentifier")
+  } else if(DataSource == "WA"){
+    Combined_data <- LocationData
+  } else if(DataSource == "FIM"){
+    Combined_data <- LocationData %>% 
+      gather("Characteristic", "Measurement", -Estuary, -TripID, -Reference, -Sampling_Date, -Longitude, -Latitude, -Zone, -StartTime) %>% 
+      mutate(Result_Unit = case_when(Characteristic == "Depth" ~ "m", Characteristic == "Temperature" ~ "degC", Characteristic == "DissolvedO2" ~ "mg/L", TRUE ~ NA))
+  }
+  return(Combined_data)
+}
+#
+#Station mapping
+library(sf)      # for st_as_sf, st_transform
+transform_crop_wq <- function(DataSource, FilteredData, EstuaryArea) {
+  #Validate inputs
+  if (missing(DataSource) || missing(FilteredData) || missing(EstuaryArea)) {
+    stop("Please provide DataSource, FilteredData, and EstuaryArea.")
+  }
+  #Define source CRS string
+  source_crs_str <- "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs +type=crs"
+  target_crs_str <- "+proj=longlat +datum=WGS84 +no_defs +type=crs"
+  #Select coordinate columns based on DataSource
+  if (DataSource == "Portal" || DataSource == "WA") {
+    coords <- FilteredData[, c(9, 8)]  # longitude, latitude columns
+  } else if (DataSource == "FIM") {
+    coords <- FilteredData[, c(5, 6)]
+  } else {
+    stop(paste0("DataSource '", DataSource, "' not recognized."))
+  }
+  #Create sf object with source CRS 
+  WQ_sf <- st_as_sf(FilteredData, coords = colnames(coords), crs = source_crs_str, remove = FALSE)  #spdf <- SpatialPointsDataFrame(coords = coords, data = FilteredData, proj4string = CRS(source_crs_str))
+  #Transform CRS to WGS84
+  WQ_sf <- st_transform(WQ_sf, crs = target_crs_str)#spTransform(spdf, CRS(target_crs_str))
+  #Message for WA data (optional)
+  if (DataSource == "WA") {
+    message("Data may need to be checked. Code not finished for WQ data.")
+  }
+  #Check CRS of EstuaryArea and WQ_sp 
+  estuary_crs <- st_crs(EstuaryArea)
+  wq_sf_crs <- st_crs(st_as_sf(WQ_sf))
+  print(paste("Estuary CRS:", estuary_crs))
+  print(paste("Data CRS:", wq_sf_crs))
+  #Convert to sf and transform to EstuaryArea CRS if needed
+  if (!(estuary_crs == wq_sf_crs)) {
+    WQ_sf <- st_transform(WQ_sf, crs = estuary_crs)
+  } 
+  #Add KML classification for points inside EstuaryArea
+  inside_logical <- st_intersects(WQ_sf, EstuaryArea, sparse = FALSE)[,1]
+  Inside_data <- WQ_sf[inside_logical, ] %>% mutate(KML = "In")
+  #Add KML classification for points outside EstuaryArea
+  outside_logical <- st_disjoint(WQ_sf, EstuaryArea, sparse = FALSE)[,1]
+  Outside_data <- WQ_sf[outside_logical, ] %>% mutate(KML = "Out")
+  #Combine inside and outside data
+  EstuaryData <- bind_rows(Inside_data, Outside_data) %>% mutate(KML = as.factor(KML))
+  return(EstuaryData)
+}
+#
+#Color and map stations/estuary
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(tmap)
+
+mapping_wq_data_sf <- function(DataSource, WQ_sf_object, EstuaryArea, FL_outline, SiteCode) {
+  #Validate inputs
+  if (missing(DataSource) || missing(WQ_sf_object) || missing(EstuaryArea) || missing(FL_outline) || missing(SiteCode)) {
+    stop("Please provide all required arguments: DataSource, WQ_sf_object, EstuaryArea, FL_outline, Combined, SiteCode")
+  }
+  #Ensure all inputs are sf objects
+  if (!inherits(WQ_sf_object, "sf")) stop("WQ_sf_object must be an sf object")
+  if (!inherits(EstuaryArea, "sf")) stop("EstuaryArea must be an sf object")
+  if (!inherits(FL_outline, "sf")) stop("FL_outline must be an sf object")
+  #
+  #Summarize counts by unique station/location/date/KML based on DataSource
+  if (DataSource == "Portal") {
+    distinct_df <- WQ_sf_object %>% 
+      distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>%
+      group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("LongitudeMeasure", "LatitudeMeasure"), crs = st_crs(WQ_sf_object), remove = FALSE)
+  } else if (DataSource == "WA") {
+    distinct_df <- WQ_sf_object %>% 
+      distinct(StationID, Actual_Latitude, Actual_Longitude, SampleDate, KML) %>%
+      group_by(StationID, Actual_Latitude, Actual_Longitude, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("Actual_Longitude", "Actual_Latitude"), crs = st_crs(WQ_sf_object), remove = FALSE)
+  } else if (DataSource == "FIM") {
+    distinct_df <- WQ_sf_object %>% 
+      distinct(Reference, Latitude, Longitude, Sampling_Date, KML) %>%
+      group_by(Reference, Latitude, Longitude, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("Longitude", "Latitude"), crs = st_crs(WQ_sf_object), remove = FALSE)
+  } else {
+    stop("DataSource not recognized. Must be one of 'Portal', 'WA', or 'FIM'.")
+  }
+  #Prepare ggplot visualization
+  if (DataSource == "Portal") {
+    static <- ggplot() +
+      geom_sf(data = EstuaryArea, fill = "gray") +
+      geom_sf(data = FL_outline) +
+      geom_point(data = distinct_df, aes(x = LongitudeMeasure, y = LatitudeMeasure, color = KML),
+                 size = 2.5,) +
+      scale_color_manual(values = c(In = "red", Out = "black")) +
+      coord_sf(xlim = c(st_bbox(EstuaryArea)["xmin"], st_bbox(EstuaryArea)["xmax"]),
+               ylim = c(st_bbox(EstuaryArea)["ymin"], st_bbox(EstuaryArea)["ymax"]))
+    
+    map <- tmap_leaflet(
+      tm_shape(EstuaryArea) + tm_polygons() +
+        tm_shape(FL_outline) + tm_borders() +
+        tm_shape(distinct_df) +
+        tm_dots(col = "KML", palette = c("red", "black"), size = 0.8, legend.show = TRUE,
+                popup.vars = c("StationID" = "MonitoringLocationIdentifier",
+                               "Latitude" = "LatitudeMeasure",
+                               "Longitude" = "LongitudeMeasure",
+                               "Samples" = "N")) +
+        tm_layout(main.title = paste(SiteCode, DataSource, "WQ Stations"))
+    )
+  } else if (DataSource == "WA") {
+    static <- ggplot() +
+      geom_sf(data = EstuaryArea, fill = "gray") +
+      geom_sf(data = FL_outline) +
+      geom_point(data = distinct_df, aes(x = Actual_Longitude, y = Actual_Latitude, color = KML),
+                 size = 2.5) +
+      scale_color_manual(values = c("In" = "red", "Out" = "black")) +
+      coord_sf(xlim = c(st_bbox(EstuaryArea)["xmin"], st_bbox(EstuaryArea)["xmax"]),
+               ylim = c(st_bbox(EstuaryArea)["ymin"], st_bbox(EstuaryArea)["ymax"]))
+    
+    map <- tmap_leaflet(
+      tm_shape(EstuaryArea) + tm_polygons() +
+        tm_shape(FL_outline) + tm_borders() +
+        tm_shape(distinct_df) +
+        tm_dots("Stations", col = "KML", palette = c(In = "red", Out = "black"), size = 0.8, legend.show = TRUE,
+                popup.vars = c("StationID" = "StationID",
+                               "Latitude" = "Actual_Latitude",
+                               "Longitude" = "Actual_Longitude",
+                               "Samples" = "N")) +
+        tm_layout(main.title = paste(SiteCode, DataSource, "WQ Stations"))
+    )
+  } else if (DataSource == "FIM") {
+    static <- ggplot() +
+      geom_sf(data = EstuaryArea, fill = "gray") +
+      geom_sf(data = FL_outline) +
+      geom_point(data = distinct_df, aes(x = Longitude, y = Latitude, color = KML),
+                 size = 2.5) +
+      scale_color_manual(values = c("In" = "red", "Out" = "black")) +
+      coord_sf(xlim = c(st_bbox(EstuaryArea)["xmin"], st_bbox(EstuaryArea)["xmax"]),
+               ylim = c(st_bbox(EstuaryArea)["ymin"], st_bbox(EstuaryArea)["ymax"]))
+    
+    map <- tmap_leaflet(
+      tm_shape(EstuaryArea) + tm_polygons() +
+        tm_shape(FL_outline) + tm_borders() +
+        tm_shape(distinct_df) +
+        tm_dots("Stations", col = "KML", palette = c(In = "red", Out = "black"), size = 0.8, legend.show = TRUE,
+                popup.vars = c("StationID" = "Reference",
+                               "Latitude" = "Latitude",
+                               "Longitude" = "Longitude",
+                               "Samples" = "N")) +
+        tm_layout(main.title = paste(SiteCode, DataSource, "WQ Stations"))
+    )
+  }
+  # Return a list with combined data and plots
+  return(list(
+    Stations_list = distinct_df,
+    Static_plot = static,
+    Interactive_map = map
+  ))
+}
+#
+#Save data:
+library(dplyr)
+library(writexl)
+library(fs) # for file_info()
+
+process_and_save_data <- function(CombinedData, DataSource, SiteCode, StartYr, EndYr) {
+  #
+    if (DataSource == "Portal") {
+    Combined_filteredk <- CombinedData %>% 
+      mutate(ResultMeasureValue = as.numeric(ResultMeasureValue)) %>%
+      mutate(ResultMeasureValue = case_when(CharacteristicName == "Specific conductance" & Result_Unit == "mS/cm" ~ ResultMeasureValue * 1000, # mS/cm to uS/cm
+                                            CharacteristicName == "Stream flow, instantaneous" & Result_Unit == "ft3/s" ~ ResultMeasureValue * 0.0283168, # ft3/s to m3/s
+                                            TRUE ~ ResultMeasureValue),
+             Result_Unit = case_when(CharacteristicName == "Salinity" ~ "ppt",
+                                     CharacteristicName == "Conductivity" ~ "uS/cm",
+                                     CharacteristicName == "Specific conductance" ~ "uS/cm",
+                                     CharacteristicName == "pH" ~ NA_character_,
+                                     CharacteristicName == "Stream flow, instantaneous" ~ "m3/s",
+                                     TRUE ~ Result_Unit)) %>%
+      relocate(KML, .after = last_col())
+    } else if (DataSource == "WA") {
+      Combined_filteredk <- CombinedData %>% 
+        mutate(Result_Unit = case_when(Characteristic == "Salinity" ~ "ppt",
+                                       Characteristic == "pH" ~ NA_character_,
+                                       Characteristic == 'Dissolved oxygen saturation' ~ "%",
+                                       Characteristic == 'Secchi disc depth' ~ "m",
+                                       TRUE ~ Result_Unit))
+      } else if (DataSource == "FIM") {
+        # No changes needed
+        Combined_filteredk <- CombinedData
+      } 
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan cleaned water quality data be saved to local folders?")
+    if(result == "No"){
+      message("Data will not be saved.")
+    } else {
+      #Save path base
+      base_path <- paste0("Data/Raw-cleaned/", SiteCode, "_", DataSource, "_combined_filtered_")
+      Combined_filteredk_export <- Combined_filteredk %>% mutate(geometry = sf::st_as_text(geometry))
+      #Save combined filtered data temporarily to check file size
+      temp_file <- tempfile(fileext = ".xlsx")
+      write_xlsx(Combined_filteredk_export, temp_file, format_headers = TRUE)
+      file_size_mb <- file_info(temp_file)$size / (1000^2) # size in MB
+      file.remove(temp_file)
+      
+      if (file_size_mb <= 1000^2) {
+        # Save as one file
+        final_file <- paste0(base_path, StartYr, "_", EndYr, ".xlsx")
+        write_xlsx(Combined_filteredk_export, final_file, format_headers = TRUE)
+        message("Saved combined filtered data as one file: ", final_file)
+        } else {
+          #Estimate rows per chunk to keep file size under max_file_size_mb
+          total_rows <- nrow(Combined_filteredk_export)
+          est_rows_per_file <- floor(total_rows * 1000^2 / file_size_mb)
+          est_rows_per_file <- max(est_rows_per_file, 1) # at least 1 row
+          #Split data into chunks
+          chunks <- split(Combined_filteredk_export, (seq_len(total_rows) - 1) %/% est_rows_per_file)
+          #Save each chunk sequentially
+          for (i in seq_along(chunks)) {
+            chunk_file <- paste0(base_path, StartYr, "_", EndYr, "_part", i, ".xlsx")
+            write_xlsx(chunks[[i]], chunk_file, format_headers = TRUE)
+            message("Saved chunk ", i, " to file: ", chunk_file)
+            message("File too large (", round(file_size_mb, 2), " MB). Data split and saved as ",max(chunks), " files:")
+          }
+        }
+    }
+  }
+}
+  #
 #Combining filtered files
 combine_files <- function(Number_files, Estuarycode, DataSource, Start1, End1, Start2, End2, Start3, End3){
 if(Filtered_files == 1){
