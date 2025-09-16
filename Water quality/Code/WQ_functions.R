@@ -1579,6 +1579,7 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     dplyr::select(any_of(c("Year", "Month", "Quarter")), Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
     rename(Working_Param = any_of(Param_name))
   #
+  message(Param_name," summarized by ", Summ_method)
   return(output_data)
   #
 }
@@ -1675,7 +1676,7 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
 #
 ####Interpolation####
 #
-perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Site_Grid_df, Parameter = Param_name) {
+perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter = Param_name) { #Site_Grid, Site_Grid_df
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
@@ -1689,12 +1690,13 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
   idw_nn <- list()
   idw_simple <- list()
   idw_Site <- list()
-  # Create a progress bar
+  #Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
                          total = length(stats) * 4,  
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
   #
+  cat("Starting time:",Sys.time())
   tryCatch({
     #Loop over each statistic
     for(i in seq_along(stats)){
@@ -1704,20 +1706,20 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
       # Filter data for current statistic
       stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
       ##IDW: model(Parameter), data to use, grid to apply to 
-      idw_model <- suppressMessages(idw(stat_data$Working_Param~1, stat_data, newdata = grid))
-      #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      idw_output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
+      idw_model <- suppressMessages(idw(stat_data$Working_Param ~ 1, stat_data, newdata = grid))
+      
+      #Convert to data frame to rename and add parameters levels as values rounded to 0.1 #idw_output
+      idw_spdf[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
         mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
-      #
+      
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
       #Convert interpolated values to spatial data
-      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw_output[[i]][,c("Longitude","Latitude")], data = idw_output[[i]][c("Statistic", "Pred_Value")], 
-                                              proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-      #
+      coordinates(idw_spdf[[i]]) <- ~ Longitude + Latitude
+      proj4string(idw_spdf[[i]]) <- proj4string(idw_model)
       #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-      idw_nn[[i]] <- dismo::voronoi(idw_spdf[[i]], ext = extent(Site_Grid)) 
+      idw_nn[[i]] <- dismo::voronoi(idw_spdf[[i]], ext = extent(grid))#Site_Grid)) 
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
@@ -1725,7 +1727,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
       #Determine overlay of data on SiteGrid:: 
       idw_simple[[i]] <- st_simplify(st_as_sf(idw_nn[[i]]))
       Site_simple <- st_as_sf(Site_Grid_spdf)
-      #idw_Site[[i]] <- st_intersection(idw_simple[[i]], Site_simple)
+      #
       idw_Site[[i]] <- lapply(seq_along(idw_simple), function(i) {
         chunked_intersection(polygons = idw_simple[[i]], site = Site_simple, chunk_size = 500)
       })
@@ -1744,7 +1746,9 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid
     pb$terminate()
   }, finally = {
     pb$terminate() 
-  })
+  }
+  cat("Ending time:", Sys.time(), "\n")
+  )
   #
   return(idw_Site)
 }
