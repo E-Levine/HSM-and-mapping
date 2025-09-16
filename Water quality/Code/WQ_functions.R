@@ -1505,17 +1505,54 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     threshold_value <<- as.numeric(Threshold_parameters[2])
   }
   #
-  ##Clean and group data
-  temp_df <- data_frame %>% 
-    #Filter to desired parameter
-    dplyr::filter(str_detect(Parameter, Parameter_name)) %>%
-    #Add in missing group columns
-    mutate(Year = year(as.Date(ActivityStartDate)),
-           Month = month(as.Date(ActivityStartDate), label = TRUE)) %>%
-    #Assign quarters, starting at month specified or default start of January
-    {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
-    #Filter to specified months if applicable
-    {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . } %>%
+  #Function to filter and prepare temp_df based on Parameter_name
+  get_temp_df <- function(param_name) {
+    data_frame %>% 
+      #Filter to desired parameter
+      dplyr::filter(str_detect(Parameter, param_name)) %>%
+      #Add in missing group columns
+      mutate(Year = year(as.Date(ActivityStartDate)),
+             Month = month(as.Date(ActivityStartDate), label = TRUE)) %>%
+      #Assign quarters, starting at month specified or default start of January
+      {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
+      #Filter to specified months if applicable
+      {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . }
+  }
+  #
+  #Initial filtering
+  temp_df <- get_temp_df(Parameter_name)
+  #List unique Parameter values in temp_df
+  unique_params <- unique(data_frame$Parameter)
+  cat("Current paramter value:\n")
+  print(Parameter_name)
+  cat("\n Unique Parameter values found:\n")
+  print(unique_params)
+  #
+  #Prompt to continue or update Parameter_name:
+  if(interactive()){
+    repeat {
+      user_input <- readline(prompt = "Type 'c' to continue with current Parameter_name, or enter a new Parameter_name to update: \n(Note: Changing the parameter value here will change the 'Param_name' object. \n Enter a new name without quotation marks.)")
+      user_input <- trimws(user_input)
+      if(tolower(user_input) == "c") {
+        # Continue with current Parameter_name
+        cat(paste("Continuing with current parameter:", Parameter_name))
+        break
+      } else if(nchar(user_input) > 0) {
+        # Update Parameter_name and re-filter
+        Parameter_name <- user_input
+        Param_name <<- user_input
+        temp_df <- get_temp_df(Parameter_name)
+        cat("Updated to parameter value:", Parameter_name, "\n")
+        break
+      } else {
+        cat("Invalid input. Please type 'c' or enter a new Parameter_name.\n")
+      }
+    }
+  } else {
+    cat("Non-interactive session detected; continuing with current Parameter_name.\n")
+  }
+  #Continue with grouping and summarizing
+  temp_df <- temp_df %>%
     #Grouping for evals: station, specified time period
     group_by(Estuary, Latitude, Longitude, Parameter, !!sym(Time_period))
   #
