@@ -1396,22 +1396,84 @@ summary.autofitVariogram <- function(object, ...) {
 load_WQ_data <- function(){
   if(Folder == "compiled" && interactive()){
     result <- select.list(c("Yes", "No"), title = "\nCan the data be saved locally to the project version folder?")
-    if(result == "No"){
-      message("A copy of the data will not be saved to the project folder.")
-      files <- list.files(path = "Data/Compiled-data/", 
-                          pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
-      WQ_data <<- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
-        dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
-                      Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
-    } else {
-      files <- list.files(path = "Data/Compiled-data/", 
-                          pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
-      WQ_data <<- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
-        dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
-                      Parameter = contains("CharacteristicName"), Value = contains("MeasureValue")) 
-      write_xlsx(WQ_data, paste0("../",Site_code, "_", Version,"/Data/", Site_code, "_cleaned_WQ_data.xlsx"), format_headers = TRUE)
+    files <- list.files(path = "Data/Compiled-data/", 
+                        pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
+    WQ_data <- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+      dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
+                    Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
+    
+    #Check if Latitude and Longitude columns exist and are not all NA
+    lat_exists <- "Latitude" %in% colnames(WQ_data) && any(!is.na(WQ_data$Latitude))
+    long_exists <- "Longitude" %in% colnames(WQ_data) && any(!is.na(WQ_data$Longitude))
+    
+    if(!(lat_exists && long_exists)){
+      #Try to find a geometry column (common names: geometry, geom, Shape, WKT, etc.)
+      geom_col <- grep("geometry|geom|shape|wkt", tolower(colnames(WQ_data)), value = TRUE)
+      if(length(geom_col) > 0){
+        #Use first geometry column found
+        geom_col <- geom_col[1]
+        #Convert to sf object assuming WKT format
+        sf_points <- tryCatch({
+          st_as_sfc(WQ_data[[geom_col]], crs = 4326)
+        }, error = function(e) NULL)
+        if(!is.null(sf_points)){
+          coords <- st_coordinates(sf_points)
+          WQ_data$Longitude <- coords[,1]
+          WQ_data$Latitude <- coords[,2]
+        } else {
+          message("Geometry column found but could not parse coordinates.")
+        }
+      } else {
+        message("No geometry column found and Latitude/Longitude missing.")
+      }
     }
-  } else {paste("Code needs to be updated for 'final' folder location.")}
+    
+    WQ_data <<- WQ_data
+    #
+    if(result == "Yes"){
+      write_xlsx(WQ_data, paste0("../",Site_code, "_", Version,"/Data/", Site_code, "_cleaned_WQ_data.xlsx"), format_headers = TRUE)
+      } else {
+        message("A copy of the data will not be saved to the project folder.")
+        } 
+    } else {
+      paste("Code needs to be updated for 'final' folder location.")
+    }
+}
+
+#
+#
+#Load and clip state grids to estuary area
+#library(sf)
+#library(dplyr)
+load_site_grid <- function(StateGrid, SiteArea, Alt_Grid = NA) {
+  #Load primary PicoGrid
+  PicoGrid <- st_read(
+    paste0("../Reference files/Grids/Florida_PicoGrid_WGS84_", StateGrid, "/Florida_PicoGrid_WGS84_", StateGrid, "_clip.shp"),
+    quiet = TRUE
+  )
+  #Load alternative PicoGrid if provided and not NA
+  if (!is.na(Alt_Grid)) {
+    Alt_PicoGrid <- st_read(
+      paste0("../Reference files/Grids/Florida_PicoGrid_WGS84_", Alt_Grid,"/Florida_PicoGrid_WGS84_", Alt_Grid, "_clip.shp"),
+      quiet = TRUE
+    )
+  }
+  #Filter grids by intersection with Site_area
+  PicoGrid_clipped <- PicoGrid[lengths(st_intersects(PicoGrid, SiteArea)) > 0, ]
+  
+  if (!is.na(Alt_Grid)) {
+    Alt_PicoGrid_clipped <- Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, SiteArea)) > 0, ]
+    #Combine clipped grids
+    Site_Grid <- bind_rows(PicoGrid_clipped, Alt_PicoGrid_clipped) %>%
+      rename(Longitude = Long_DD_X, Latitude = Lat_DD_Y)
+    #Clean up
+    rm(PicoGrid, Alt_PicoGrid, PicoGrid_clipped, Alt_PicoGrid_clipped)
+  } else {
+    Site_Grid <- PicoGrid_clipped %>%
+      rename(Longitude = Long_DD_X, Latitude = Lat_DD_Y)
+    rm(PicoGrid, PicoGrid_clipped)
+  }
+  return(Site_Grid)
 }
 #
 summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
