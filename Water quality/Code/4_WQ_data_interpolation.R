@@ -19,11 +19,11 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
 #
 source("Code/WQ_functions.R")
 #
-Site_code <- c("WC")       #Two letter estuary code
+Site_code <- c("SL")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
-State_Grid <- c("F2")      #Two-letter StateGrid ID
-Alt_Grid <- c("F3")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("WCHSM") #Project code given to data, found in file name
+State_Grid <- c("H4")      #Two-letter StateGrid ID
+Alt_Grid <- c(NA)        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("SLHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
@@ -119,8 +119,6 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitu
 #
 ##Inverse distance weighted
 idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name)
-idw_data <- perform_idw_interpolation_sf(Site_data_spdf, grid, Site_Grid_spdf, Param_name)
-
 #
 ##Nearest neighbor
 nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ)

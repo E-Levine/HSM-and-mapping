@@ -1676,80 +1676,90 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
 #
 ####Interpolation####
 #
-perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter = Param_name) { #Site_Grid, Site_Grid_df
+perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter) {
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
-  #Initiate lists 
-  idw_output <- list()
-  idw_spdf <- list()
-  idw_nn <- list()
-  idw_simple <- list()
-  idw_Site <- list()
-  #Create a progress bar
-  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 4,  
-                         complete = "=", incomplete = "-", current = ">",
-                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #Progress bar setup
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = (length(stats) * 4) + 2,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
   #
-  cat("Starting time:",Sys.time())
+  cat("Starting time:", format(Sys.time()), "\n")
+  #
   tryCatch({
-    #Loop over each statistic
-    for(i in seq_along(stats)){
-      ##MODELLING:
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+      }
+    #Initialize lists to store results
+    idw_nn <- list()
+    idw_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf and get centroids
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    #
+    for(i in seq_along(stats)) {
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
-      # Filter data for current statistic
+      #Filter data for current statistic
       stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
-      ##IDW: model(Parameter), data to use, grid to apply to 
-      idw_model <- suppressMessages(idw(stat_data$Working_Param ~ 1, stat_data, newdata = grid))
-      
-      #Convert to data frame to rename and add parameters levels as values rounded to 0.1 #idw_output
-      idw_spdf[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
+      #
+      #IDW interpolation (power=2 by default)
+      idw_model <- suppressMessages(idw(formula = Working_Param ~ 1, locations = stat_data, newdata = grid, idp = 2))
+      #
+      #Convert to data.frame and rename columns
+      idw_df <- as.data.frame(idw_model) %>% rename(Longitude = x1, Latitude = x2, Prediction = var1.pred) %>%
         mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
-      
+      #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
-      #Convert interpolated values to spatial data
-      coordinates(idw_spdf[[i]]) <- ~ Longitude + Latitude
-      proj4string(idw_spdf[[i]]) <- proj4string(idw_model)
-      #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-      idw_nn[[i]] <- dismo::voronoi(idw_spdf[[i]], ext = extent(grid))#Site_Grid)) 
+      #
+      #Convert to SpatialPointsDataFrame
+      coordinates(idw_df) <- ~Longitude + Latitude
+      proj4string(idw_df) <- proj4string(idw_model)
+      #
+      #Create Voronoi polygons clipped to grid extent
+      idw_nn[[i]] <- dismo::voronoi(idw_df, ext = raster::extent(grid))
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
-      #Determine overlay of data on SiteGrid:: 
-      idw_simple[[i]] <- st_simplify(st_as_sf(idw_nn[[i]]))
-      Site_simple <- st_as_sf(Site_Grid_spdf)
       #
-      idw_Site[[i]] <- lapply(seq_along(idw_simple), function(i) {
-        chunked_intersection(polygons = idw_simple[[i]], site = Site_simple, chunk_size = 500)
-      })
+      # Convert voronoi polygons to sf
+      voronoi_sf <- st_as_sf(idw_nn[[i]])
+      #
+      #Spatial join: assign Voronoi polygon values to centroids, join centroids with voronoi polygons by spatial intersection
+      centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      #Rename column based on model type
-      names(idw_Site[[i]])[names(idw_Site[[i]]) == "Pred_Value"] <- "Pred_Value_idw"
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
+      #Rename prediction column
+      centroids_joined <- centroids_joined %>%
+        rename(Pred_Value_idw = Pred_Value)
+      #
+      #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
+      site_sf <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID")
+      idw_Site[[i]] <- site_sf
+      #
     }
-    close(pb)
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
-  }
-  cat("Ending time:", Sys.time(), "\n")
-  )
+    })
   #
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
+  #
+  pb$terminate()
+  pb_active <- FALSE
   return(idw_Site)
 }
 #
