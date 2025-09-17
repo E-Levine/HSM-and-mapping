@@ -1749,6 +1749,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
       #
       #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
       site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID")
+      idw_Site[[i]] <- site_sf_temp
       #
     }
     })
@@ -1769,7 +1770,7 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
   stats <- unique(Site_data_spdf@data$Statistic)
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 3,  
+                         total = (length(stats) * 3)+2,  
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
   pb_active <- TRUE
@@ -1781,7 +1782,14 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
   #
   #
   tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
     #
+    #Convert Site_Grid_spdf polygons to sf
     site_sf <- st_as_sf(Site_Grid_spdf)
     centroids_sf <- st_centroid(site_sf)
     # 
@@ -1791,9 +1799,10 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ] 
       WQ_data_stat <- WQsumm %>% filter(Statistic == stats[i])
-      nn_model[[i]] <- st_as_sf(voronoi(x = vect(WQ_data_stat, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area))
+      ##NN: Convert to terra vect and create Voronoi polygons clipped to Site_area
+      vect_data <- vect(WQ_data_stat, geom = c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs")
+      nn_model[[i]] <- st_as_sf(voronoi(x = vect_data, bnd = Site_area))
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
@@ -1806,18 +1815,18 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
       Sys.sleep(1/1000)
       nn_joined <- nn_joined %>% dplyr::rename(Pred_Value_nn = Working_Param)
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
-    }
       #Join centroid predictions back to Site_Grid polygons
       site_sf_temp <- site_sf %>% left_join(st_drop_geometry(nn_joined)[, c("PGID", "Pred_Value_nn")], by = "PGID")
       nn_Site[[i]] <- site_sf_temp
       }
   })
   #
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
+  #
+  pb$terminate()
+  pb_active <- FALSE
   return(nn_Site)
 }
 #
