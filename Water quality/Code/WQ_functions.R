@@ -1748,8 +1748,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         rename(Pred_Value_idw = Pred_Value)
       #
       #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
-      site_sf <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID")
-      idw_Site[[i]] <- site_sf
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID")
       #
     }
     })
@@ -1768,16 +1767,24 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
   WQsumm <- WQ_summ
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
-  #Initiate lists 
-  nn_model <- list()
-  nn_Site <- list()
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
                          total = length(stats) * 3,  
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
+  #Initiate lists 
+  nn_model <- list()
+  nn_Site <- list()
+  #
   #
   tryCatch({
+    #
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    # 
     #Loop over each statistic
     for(i in seq_along(stats)){
       ##MODELLING:
@@ -1786,28 +1793,25 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
       # Filter data for current statistic
       stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ] 
       WQ_data_stat <- WQsumm %>% filter(Statistic == stats[i])
-      ##NN: model(Parameter), data to use, grid to apply to 
       nn_model[[i]] <- st_as_sf(voronoi(x = vect(WQ_data_stat, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area))
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
       #Assign predictions to grid
-      nn_Site[[i]] <- st_intersection(nn_model[[i]], st_as_sf(Site_Grid %>% dplyr::select(Latitude:MGID)))
+      nn_joined <- st_join(centroids_sf, nn_model[[i]][, c("Working_Param")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      #Rename column based on model type
-      names(nn_Site[[i]])[names(nn_Site[[i]]) == "Working_Param"] <- "Pred_Value_nn"
+      nn_joined <- nn_joined %>% dplyr::rename(Pred_Value_nn = Working_Param)
       #
       pb$message(paste("Completed:", stats[i], Param_name))
     }
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
+      #Join centroid predictions back to Site_Grid polygons
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(nn_joined)[, c("PGID", "Pred_Value_nn")], by = "PGID")
+      nn_Site[[i]] <- site_sf_temp
+      }
   })
   #
   #Print note if threshold is being used:
