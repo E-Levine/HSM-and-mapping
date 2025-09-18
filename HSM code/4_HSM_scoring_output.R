@@ -111,7 +111,7 @@ summary(HSM_data_grps$HSMgyr)
 #
 #
 #
-HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps)
+HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps) %>% st_zm()
 #
 #Check data
 #library(viridis)

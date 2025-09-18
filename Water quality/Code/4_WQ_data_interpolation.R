@@ -19,11 +19,11 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
 #
 source("Code/WQ_functions.R")
 #
-Site_code <- c("SL")       #Two letter estuary code
+Site_code <- c("WC")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
-State_Grid <- c("H4")      #Two-letter StateGrid ID
-Alt_Grid <- c(NA)        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("SLHSM") #Project code given to data, found in file name
+State_Grid <- c("F2")      #Two-letter StateGrid ID
+Alt_Grid <- c("F3")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("WCHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
@@ -127,7 +127,7 @@ nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_G
 tps_data <- perform_tps_interpolation(Site_data_spdf, raster_t, Site_area, Site_Grid, Param_name)
 #
 ####Ordinary Kriging
-ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Param_name)
+ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name)
 #
 #
 #
@@ -137,7 +137,7 @@ ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid, Site_Grid_s
 join_interpolation(Site_Grid_df)
 #
 #Generates plots for each model and output of all models together - run for each parameter
-plotting <- plot_interpolations(result_Threshold, Site_Grid)
+plotting <- plot_interpolations(result_Mean, Site_Grid)
 #
 #
 #
