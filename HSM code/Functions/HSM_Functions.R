@@ -438,7 +438,6 @@ library(openxlsx)
 library(fs)
 # Copy summary excel info 
 copy_curve_summary <- function(source_site, source_version) {
-  browser()
   #Model set up file locations:
   source_file <- paste0(source_site, "_", source_version,"/Data/", source_site, "_", source_version, "_model_setup.xlsx")
   dest_file <- paste0(Site_Code, "_", Version,"/Data/", Site_Code, "_", Version, "_model_setup.xlsx")
@@ -484,6 +483,7 @@ copy_curve_files <- function(source_site, source_version) {
   all_files <- list.files(source_folder, full.names = TRUE)
   #List of file to copy
   files_to_copy <- all_files[tolower(tools::file_ext(all_files)) %in% c(excel_exts, image_exts)]
+  curves_to_copy <- sub(".*HSI curves/([^.]*)\\..*", "\\1", files_to_copy) %>% unique()
   #Date for file naming
   current_date <- format(Sys.Date(), "%Y%m%d")
   
@@ -502,7 +502,9 @@ copy_curve_files <- function(source_site, source_version) {
     file_copy(src_path, dest_path, overwrite = FALSE)
   }
   
-  message(paste(length(files_to_copy), "Excel and curve figures copied from", source_folder, "to", dest_folder))
+  message(paste0(length(files_to_copy), " Excel and curve figures copied from ", source_folder, " to ", dest_folder,"\n",
+  "Curves included:\n", 
+  paste(curves_to_copy, collapse = "\n")))
 }
 # Example usage:
 #copy_curve_summary("SL", "v1")
