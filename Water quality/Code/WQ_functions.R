@@ -1927,77 +1927,98 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
   return(tps_Site)
 }
 #
-perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Parameter = Param_name) {
+perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter = Param_name) {
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
-  #Initiate lists 
-  ok_output <- list()
-  ok_spdf <- list()
-  ok_nn <- list()
-  ok_Site <- list()
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 4, 
+                         total = (length(stats) * 4)+2, 
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
   #
   tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #Initiate lists 
+    ok_nn <- list()
+    ok_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf and get centroids
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    site_crs <- st_crs(site_sf)
+    #
     #Loop over each statistic
     for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
-      # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
-      stat_temp <- as.data.frame(stat_data) %>% group_by(Longitude, Latitude, Statistic) %>%
-        summarize(Working_Param = mean(Working_Param, na.rm = TRUE))
-      coordinates(stat_temp) <- ~Longitude + Latitude  # Replace with your actual coordinate columns
-      proj4string(stat_temp) <- CRS(proj4string(stat_data))  # Keep the same projection as the original
-      stat_data <- stat_temp
-      ##IOK: model(Parameter), data to use, grid to apply to 
-      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data, miscFitOptions = list(merge.small.bins = FALSE))
-      ok_model <- gstat(formula = Working_Param~1, locations = stat_data, model = ok_fit$var_model, data = st_as_sf(stat_data))
-      ok_pred <- predict(ok_model, grid)
+      #Filter data for current statistic and aggregate mean Working_Param by location
+      stat_data_df <- {
+        coords <- coordinates(Site_data_spdf)
+        data_df <- Site_data_spdf@data
+        data.frame(Longitude = coords[,1], Latitude = coords[,2], data_df) %>%
+          filter(Statistic == stats[i]) %>%
+          group_by(Longitude, Latitude, Statistic) %>%
+          summarize(Working_Param = mean(Working_Param, na.rm = TRUE), .groups = "drop")
+      }
+      #Convert to sf points with correct CRS
+      stat_data_sf <- st_as_sf(stat_data_df, coords = c("Longitude", "Latitude"), crs = st_crs(Site_data_spdf))
+      #
+      ##OK: model(Parameter), data to use, grid to apply to 
+      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data_sf, miscFitOptions = list(merge.small.bins = FALSE))
+      ok_model <- gstat(formula = Working_Param~1, locations = stat_data_sf, model = ok_fit$var_model)#, data = st_as_sf(stat_data))
+      ok_pred <- predict(ok_model, newdata = grid)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      ok_output[[i]] <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
+      ok_df <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
         mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
+      #Convert to SpatialPointsDataFrame
+      coordinates(ok_df) <- ~Longitude + Latitude
+      proj4string(ok_df) <- proj4string(ok_pred)
+      
       #Convert interpolated values to spatial data
-      ok_spdf[[i]] <- SpatialPointsDataFrame(coords = ok_output[[i]][,c("Longitude","Latitude")], data = ok_output[[i]][c("Statistic", "Pred_Value")], 
-                                             proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-      #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-      ok_nn[[i]] <- dismo::voronoi(ok_spdf[[i]], ext = extent(Site_Grid))#
+      ok_nn[[i]] <- dismo::voronoi(ok_df, ext = raster::extent(grid))#
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
+      #Convert voronoi polygons to sf
+      voronoi_sf <- st_as_sf(ok_nn[[i]])
       #Determine overlay of data on SiteGrid
-      ok_Site[[i]] <- st_as_sf(intersect(ok_nn[[i]], Site_Grid_spdf))
+      centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      #Rename column based on model type
-      names(ok_Site[[i]])[names(ok_Site[[i]]) == "Pred_Value"] <- "Pred_Value_ok"
+      ##Rename column based on model type
+      centroids_joined <- centroids_joined %>%
+        dplyr::rename(Pred_Value_ok = Pred_Value)
+      #Join centroid predictions back to Site_Grid polygons
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_ok")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
+      ok_Site[[i]] <- site_sf_temp
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
-      
     }
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
   })
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
   #
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
+  pb$terminate()
+  pb_active <- FALSE
+  #
   return(ok_Site)
 }
 #
