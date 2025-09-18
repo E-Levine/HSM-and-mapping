@@ -442,7 +442,7 @@ copy_curve_summary <- function(source_site, source_version) {
   source_file <- paste0(source_site, "_", source_version,"/Data/", source_site, "_", source_version, "_model_setup.xlsx")
   dest_file <- paste0(Site_Code, "_", Version,"/Data/", Site_Code, "_", Version, "_model_setup.xlsx")
   #
-  sheet_name <- "HSI_Curve_Summary"
+  sheet_name <- "Curve_Summary"
   #Get model set up files
   wb_source <- loadWorkbook(source_file)
   #
@@ -465,7 +465,7 @@ copy_curve_summary <- function(source_site, source_version) {
   addWorksheet(wb_dest, sheet_name)
   writeData(wb_dest, sheet = sheet_name, df)
   saveWorkbook(wb_dest, dest_file, overwrite = TRUE)
-  message(paste0("Sheet '", sheet_name, "' copied from ", source_file, " to ", dest_file))
+  message(paste0("Sheet '", sheet_name, "' copied from '", source_file, "' to '", dest_file, "'"))
 }
 # Copy HSI curve data and figures
 copy_curve_files <- function(source_site, source_version) {
@@ -502,7 +502,7 @@ copy_curve_files <- function(source_site, source_version) {
     file_copy(src_path, dest_path, overwrite = FALSE)
   }
   
-  message(paste0(length(files_to_copy), " Excel and curve figures copied from ", source_folder, " to ", dest_folder,"\n",
+  message(paste0(length(files_to_copy), " Excel and curve figures copied from '", source_folder, "' to '", dest_folder,"' \n",
   "Curves included:\n", 
   paste(curves_to_copy, collapse = "\n")))
 }
