@@ -1830,21 +1830,36 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
   return(nn_Site)
 }
 #
-perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_Grid, Parameter = Param_name) {
+perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_Grid_spdf, Parameter = Param_name) {
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
-  #Initiate lists 
-  tps_model <- list()
-  tps_over <- list()
-  tps_Site <- list()
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 3,  
+                         total = (length(stats) * 3)+2,  
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
   #
   tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #Initiate lists 
+    tps_model <- list()
+    tps_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf, get centroids, area as terra for speed
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    centroids_sf <- centroids_sf %>% dplyr::select(PGID:MGID)
+    Site_area_vec <- vect(Site_area)
+    #
     #Loop over each statistic
     for(i in seq_along(stats)){
       ##MODELLING:
@@ -1856,38 +1871,59 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       Param_vec <- vect(stat_data)
       crs(Param_vec) <- "EPSG:4326"
       Param_ras <- rasterize(Param_vec, raster_t, field = "Working_Param")
+      #Extract valid calles and values for TPS
+      vals <- values(Param_ras)
+      valid_idx <- which(!is.na(vals))
+      coords <- xyFromCell(Param_ras, valid_idx)
+      vals_valid <- vals[valid_idx]
+      #coords_valid <- coords[valid_idx, , drop = FALSE]
       #thin plate spline model
-      tps_model_a <- interpolate(raster_t, Tps(xyFromCell(Param_ras, 1:ncell(Param_ras)),
-                                               values(Param_ras)))
-      #Limit data to area of interest
-      tps_model[[i]] <- crop(mask(tps_model_a, Site_area),Site_area) %>% as.polygons() %>% as("Spatial")
+      tps_fit <- Tps(coords, vals_valid)
+      all_cords <- xyFromCell(raster_t, 1:ncell(raster_t))
+      interp_vals <- predict(tps_fit, all_cords)
+      tps_raster <- raster_t
+      values(tps_raster) <- interp_vals
+      #Crop and mask to site
+      tps_crop <- crop(tps_raster, Site_area_vec)
+      tps_mask <- mask(tps_crop, Site_area_vec)
+      #Extract points, convert to sf
+      pts_mat <- terra::as.points(tps_mask)#rasterToPoints(tps_mask)
+      tps_model[[i]] <- st_as_sf(pts_mat, coords = c("x", "y"), crs = site_crs)
+      tps_model_simp <- st_simplify(tps_model[[i]], dTolerance = 10)
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
-      #Get mean data for each location
-      tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) %>% 
-        mutate(Statistic = stats[i], .before = Latitude)
+      #Get nearest data point for each location
+      nearest_idx <- st_nearest_feature(centroids_sf, tps_model_simp)
+      centroids_joined <- centroids_sf %>%
+        mutate(Statistic = stats[i], Pred_Value_tps = tps_model_simp$lyr.1[nearest_idx])
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
       #Rename column based on model type
-      names(tps_Site[[i]])[names(tps_Site[[i]]) == "lyr.1"] <- "Pred_Value_tps"
+      if ("layer" %in% names(centroids_joined)) {
+        centroids_joined <- centroids_joined %>%
+          rename(Pred_Value_tps = layer)
+      } else if ("lyr.1" %in% names(centroids_joined)) {
+        centroids_joined <- centroids_joined %>%
+          rename(Pred_Value_tps = lyr.1)
+      }
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
-    }
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
-  })
+      #Join centroid predictions back to Site_Grid polygons
+      site_sf <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_tps")], by = "PGID")
+      tps_Site[[i]] <- site_sf
+      #
+      }
+    })
   #
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
+  #
+  pb$terminate()
+  pb_active <- FALSE
   return(tps_Site)
 }
 #
