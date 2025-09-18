@@ -1748,7 +1748,8 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         rename(Pred_Value_idw = Pred_Value)
       #
       #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
-      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID")
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
       idw_Site[[i]] <- site_sf_temp
       #
     }
@@ -1816,7 +1817,8 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
       nn_joined <- nn_joined %>% dplyr::rename(Pred_Value_nn = Working_Param)
       #
       #Join centroid predictions back to Site_Grid polygons
-      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(nn_joined)[, c("PGID", "Pred_Value_nn")], by = "PGID")
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(nn_joined)[, c("PGID", "Pred_Value_nn")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
       nn_Site[[i]] <- site_sf_temp
       }
   })
@@ -1912,8 +1914,9 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       }
       #
       #Join centroid predictions back to Site_Grid polygons
-      site_sf <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_tps")], by = "PGID")
-      tps_Site[[i]] <- site_sf
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_tps")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
+      tps_Site[[i]] <- site_sf_temp
       #
       }
     })
