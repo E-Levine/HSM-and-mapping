@@ -2119,10 +2119,10 @@ final_interpolation <- function(model = c("ensemble", "single"), selected_models
   if(model == "ensemble"){
     #Determine column names to match and limit to desired columns:
     pred_cols <- paste0("Pred_Value_", selected_models)
-    result_data_final <- results_data %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    result_data_final <- results_data %>% dplyr::select(PGID, Latitude:County, Statistic, all_of(pred_cols))
     #
     #Determine model weights:
-    model_weighting(result_data_final, c(0.75, 0.25))
+    model_weighting(result_data_final, weighting)
     ##Create ensemble values
     ens_model <- result_data_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
       mutate(Pred_Value_ens = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values))))) %>%
