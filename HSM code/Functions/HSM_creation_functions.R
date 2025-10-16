@@ -538,7 +538,7 @@ assign_temperature_scores <- function(shapefile_data, curve_table, type = "separ
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(-contains("spwn")) %>%
+  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(-matches(".*spwn.*")) %>% dplyr::select(-matches("T[AB]\\d{1,3}")) %>%
     mutate_if(is.numeric, round, digits = 2)
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
@@ -598,7 +598,7 @@ assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = 
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
   data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% 
-    dplyr::select(PGID, contains("spwn")) %>% dplyr::select(-contains("spwnT")) %>%
+    dplyr::select(PGID, contains("spwn")) %>% dplyr::select(-contains("spwnT")) %>% #Keep spwn but not spwn threshold
     mutate_if(is.numeric, round, digits = 2)
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
@@ -654,7 +654,7 @@ assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = 
 assign_threshold_scores <- function(shapefile_data, type = "separate") {
   #
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(PGID, contains("spwnT"))
+  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(PGID, matches(".*spwnT.*|T[AB]\\d{1,3}"))
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #
   #
@@ -858,9 +858,9 @@ save_model_output <- function(data, SiteCode = Site_Code, VerNum = Version) {
   # Check the file size
   file_size <- file.info(temp_dbf)$size
   # If the file size is greater than 2 GB (2 * 1024^3 bytes) - modified to be conservative
-  if (file_size > (2 * 1000^3)) {
+  if (file_size > (2 * 900^3)) {
     # Split the data into chunks
-    chunk_size <- 2 * 1000^3  # 2 GB
+    chunk_size <- 2 * 900^3  # 2 GB
     num_chunks <- ceiling(file_size / chunk_size)
     
     # Calculate the number of rows per chunk

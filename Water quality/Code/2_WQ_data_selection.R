@@ -9,7 +9,6 @@
 #
 #Load require packages (install as necessary)
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_unlock()
 pacman::p_load(plyr, tidyverse, readxl, writexl, #Df manipulation, basic summary
                ggmap, tibble, zoo, measurements,
                sf, raster, spData, nngeo,
@@ -20,7 +19,7 @@ source("Code/WQ_functions.R")
 #
 #
 ###Setup - specs####
-Site_code <- c("SL")    #Two letter estuary code
+Site_code <- c("WC")    #Two letter estuary code
 Version <- c("v1")      #Version of HSM
 Data_source <- c("Portal") #Source of data: "Portal", "WA", "FIM"
 #
@@ -86,37 +85,8 @@ if(exists("Station_locations")){
 Combined_data_counts <- Spatial_data(Filtered_data)
 #
 #Visualize locations of WQ stations compared to fixed stations (if specified)
-if(Data_source == "Portal"){
-  (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
-                         tm_polygons() + 
-                         tm_shape(FL_outline) + #Outline of shoreline
-                         tm_borders()+
-                         {if(length(Stations_selected) > 1) tm_shape(SpatialPointsDataFrame(coords = Stations_selected[,c(3,4)], data = Stations_selected, proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))) + tm_dots(col = "darkblue", size = 1)}+
-                         tm_shape(Combined_data_counts) + #Stations relation to estuary area
-                         tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
-                                 popup.vars = c("StationID" = "MonitoringLocationIdentifier", "Latitude" = "LatitudeMeasure", "Longitude" = "LongitudeMeasure", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
-} else if(Data_source == "WA"){
-  (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
-                         tm_polygons() + 
-                         tm_shape(FL_outline) + #Outline of shoreline
-                         tm_borders()+
-                         {if(length(Stations_selected) > 1) tm_shape(SpatialPointsDataFrame(coords = Stations_selected[,c(3,4)], data = Stations_selected, proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))) + tm_dots(col = "darkblue", size = 1)}+
-                         tm_shape(Combined_data_counts) + #Stations relation to estuary area
-                         tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
-                                 popup.vars = c("StationID" = "StationID", "Latitude" = "Actual_Latitude", "Longitude" = "Actual_Longitude", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
-} else if (Data_source == "FIM") {
-  (map <- tmap_leaflet(tm_shape(Estuary_area) + #Estuary area
-                         tm_polygons() + 
-                         tm_shape(FL_outline) + #Outline of shoreline
-                         tm_borders()+
-                         {if(length(Stations_selected) > 1) tm_shape(SpatialPointsDataFrame(coords = Stations_selected[,c(3,4)], data = Stations_selected, proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))) + tm_dots(col = "darkblue", size = 1)}+
-                         tm_shape(Combined_data_counts) + #Stations relation to estuary area
-                         tm_dots("KML", palette = c(In = "red", Out = "black"), size = 0.25, legend.show = TRUE,
-                                 popup.vars = c("StationID" = "Reference", "Latitude" = "Latitude", "Longitude" = "Longitude", "Samples" = "N")) +
-                         tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", sep = " "))))
-}
+create_station_map(Data_source, Estuary_area, StateOutline = FL_outline, Stations_sf = Combined_data_counts, SiteCode = Site_code)
+#
 #
 #
 ##END OF SECTION
@@ -191,7 +161,7 @@ bbox <- NA
 #
 #
 #ProjectCode = short code to specify project data gathered for: CAGE, TBWQ (general)
-WQ_stations_selected <- location_boundary(Selection_Method, Selected_WQ_stations, bbox, ProjectCode = "SLCTE", WidgetSave = "N")
+WQ_stations_selected <- location_boundary(Selection_Method, Selected_WQ_stations, bbox, ProjectCode = "WCHSM", WidgetSave = "N")
 WQ_stations_selected$BoundedMap #Confirm stations, can chose to include or exclude stations
 #
 #
@@ -203,7 +173,7 @@ To_exclude <- data.frame(StationID = c("21FLSFWM_WQX-18967", "	21FLSFWM_WQX-2822
 #
 ##Run to include/exclude stations as specified above and save output of final data:
 #Use same project code from above.
-Modified_data(Selection_Method, To_include, To_exclude, ProjectCode = "SLHSM")
+Modified_data(Selection_Method, ProjectCode = "WCHSM")
 #
 #
 #

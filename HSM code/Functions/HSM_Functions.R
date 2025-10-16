@@ -434,6 +434,83 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
 }
 #
 #
+library(openxlsx)
+library(fs)
+# Copy summary excel info 
+copy_curve_summary <- function(source_site, source_version) {
+  #Model set up file locations:
+  source_file <- paste0(source_site, "_", source_version,"/Data/", source_site, "_", source_version, "_model_setup.xlsx")
+  dest_file <- paste0(Site_Code, "_", Version,"/Data/", Site_Code, "_", Version, "_model_setup.xlsx")
+  #
+  sheet_name <- "Curve_Summary"
+  #Get model set up files
+  wb_source <- loadWorkbook(source_file)
+  #
+  if (file.exists(dest_file)) {
+    wb_dest <- loadWorkbook(dest_file)
+  } else {
+    stop("No model setup found for the current site and model version.")
+  }
+  #Copy source sheet
+  df <- read.xlsx(wb_source, sheet = sheet_name)
+  #Check for model sheet, remove if specified or abort copy
+  if (sheet_name %in% names(wb_dest)) {
+    answer <- readline(prompt = paste0("Sheet '",sheet_name,"' already exists in '", dest_file, "'. Overwrite? (y/n): "))
+    if (tolower(answer) != "y") {
+      message("Copy aborted by user.")
+      return(invisible(FALSE))
+    }  
+  }
+  #Add sheet and save file
+  addWorksheet(wb_dest, sheet_name)
+  writeData(wb_dest, sheet = sheet_name, df)
+  saveWorkbook(wb_dest, dest_file, overwrite = TRUE)
+  message(paste0("Sheet '", sheet_name, "' copied from '", source_file, "' to '", dest_file, "'"))
+}
+# Copy HSI curve data and figures
+copy_curve_files <- function(source_site, source_version) {
+  #folder locations
+  source_folder <- paste0(source_site, "_", source_version, "/Data/HSI curves/")
+  dest_folder <- paste0(Site_Code, "_", Version, "/Data/HSI curves/")
+  #Check for HSI curves folder
+  if (!dir.exists(dest_folder)) {
+    dir.create(dest_folder, recursive = TRUE)
+  }
+  #Possible file types
+  excel_exts <- c("xls", "xlsx", "xlsm", "xlsb")
+  image_exts <- c("png", "jpg", "jpeg", "bmp", "gif", "tiff", "svg")
+  #List of all possible files
+  all_files <- list.files(source_folder, full.names = TRUE)
+  #List of file to copy
+  files_to_copy <- all_files[tolower(tools::file_ext(all_files)) %in% c(excel_exts, image_exts)]
+  curves_to_copy <- sub(".*HSI curves/([^.]*)\\..*", "\\1", files_to_copy) %>% unique()
+  #Date for file naming
+  current_date <- format(Sys.Date(), "%Y%m%d")
+  
+  for (src_path in files_to_copy) {
+    base_name <- basename(src_path)
+    dest_path <- file.path(dest_folder, base_name)
+    
+    # If file exists in destination, append date before extension
+    if (file.exists(dest_path)) {
+      file_ext <- tools::file_ext(base_name)
+      file_name <- tools::file_path_sans_ext(base_name)
+      new_name <- paste0(file_name, "_", current_date, ".", file_ext)
+      dest_path <- file.path(dest_folder, new_name)
+    }
+    
+    file_copy(src_path, dest_path, overwrite = FALSE)
+  }
+  
+  message(paste0(length(files_to_copy), " Excel and curve figures copied from '", source_folder, "' to '", dest_folder,"' \n",
+  "Curves included:\n", 
+  paste(curves_to_copy, collapse = "\n")))
+}
+# Example usage:
+#copy_curve_summary("SL", "v1")
+#copy_curve_files("SL", "v1")
+#
+#
 ###SUB-FUNCTIONS
 #
 # Create the line data frame
