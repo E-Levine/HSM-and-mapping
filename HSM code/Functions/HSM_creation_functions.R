@@ -864,7 +864,7 @@ save_model_output <- function(data, SiteCode = Site_Code, VerNum = Version) {
     num_chunks <- ceiling(file_size / chunk_size)
     
     # Calculate the number of rows per chunk
-    rows_per_chunk <- ceiling(nrow(data) / num_chunks)
+    rows_per_chunk <- ceiling(nrow(HSM_shp_output) / num_chunks)
     
     #New file path
     new_path <- sub("\\.shp", "", file_path)
