@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("UN") #two-letter site code
+Site_Code <- c("WC") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -111,7 +111,7 @@ summary(HSM_data_grps$HSMgyr)
 #
 #
 #
-HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps)
+HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps) %>% st_zm()
 #
 #Check data
 #library(viridis)
