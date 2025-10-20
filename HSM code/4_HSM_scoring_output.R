@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("US") #two-letter site code
+Site_Code <- c("SS") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -54,7 +54,7 @@ Salinity_scores <- assign_salinity_scores(temp, Salinity_adult, type = "ensemble
 #
 #Spawning period
 Salinity_spawn_scores_t <- assign_sal_spawn_scores(temp, Salinity_adult, type = "ensemble")
-Salinity_spawn_scores <- left_join(Salinity_spawn_scores_t, assign_sal_spawn_scores(temp, Salinity_larvae, type = "ensemble"))
+Salinity_spawn_scores <- left_join(Salinity_spawn_scores_t, assign_sal_spawn_scores(temp, Salinity_larvae, type = "ensemble")) 
 #
 #
 #
@@ -63,7 +63,7 @@ Temperature_scores <- assign_temperature_scores(temp, Temperature_adult, type = 
 #
 #Spawning period
 Temperature_spawn_scores_t <- assign_temperature_spawn_scores(temp, Temperature_adult, type = "ensemble")
-Temperature_spawn_scores <- left_join(Temperature_spawn_scores_t, assign_temperature_spawn_scores(temp, Temperature_larvae, type = "ensemble"))
+Temperature_spawn_scores <- left_join(Temperature_spawn_scores_t, assign_temperature_spawn_scores(temp, Temperature_larvae, type = "ensemble")) 
 #
 #Threshold period - number = proportion above.below the threshold - score is inverse of values
 Temperture_thres_scores <- assign_threshold_scores(temp, type = "ensemble")
@@ -74,11 +74,19 @@ Temperture_thres_scores <- assign_threshold_scores(temp, type = "ensemble")
 #
 ###Add scores back to data
 assign(paste0(Site_Code, "_", Version, "_scores_data"), join_score_dataframes(temp))
+##Work with just scores
+assign(paste0(Site_Code, "_", Version, "_scores_only"),  get(paste0(Site_Code, "_", Version, "_scores_data")) %>% 
+         dplyr::select(PGID, Lat_DD_Y, Long_DD_X, ends_with("SC"), ends_with("SCL")))
 #
-#
+##Set working with "all" data or with just "scores" data:
+model_data <- c("all")
 #
 ###Calculate total HSM score
-assign(paste0(Site_Code, "_", Version, "_data_totals"), calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data"))))
+if(model_data == "all"){
+  assign(paste0(Site_Code, "_", Version, "_data_totals"), calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data"))))
+} else {
+  assign(paste0(Site_Code, "_", Version, "_data_totals"), calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_only"))))
+}
 #
 #Clean model data frame
 assign(paste0(Site_Code, "_", Version, "_data_clean"), clean_model_data(get(paste0(Site_Code, "_", Version, "_data_totals"))))
@@ -111,7 +119,8 @@ summary(HSM_data_grps$HSMgyr)
 #
 #
 #
-HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps) %>% st_zm()
+HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps) %>% st_zm() %>% 
+  dplyr::select(any_of(c("PGID", "Lat_DD_Y", "Long_DD_X", "State_Ref", "Ref_Region", "County", "Section")), contains("HSM"))
 #
 #Check data
 #library(viridis)
