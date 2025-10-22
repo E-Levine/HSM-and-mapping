@@ -52,6 +52,7 @@ rsconnect/
 *_working.*
 
 # Project files
+*.zip
 #Ignore all folders except for Data layers, HSM code, and Reference files:
 *.zip
 !**.gitkeep

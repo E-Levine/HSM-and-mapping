@@ -145,7 +145,7 @@ plotting <- plot_interpolations(result_Mean, Site_Grid)
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- final_interpolation("ensemble", c("idw", "ok"), result_Threshold, c(0.75, 0.25), Site_Grid)
+final_data <- final_interpolation("ensemble", c("idw", "ok"), result_Mean, c(0.75, 0.25), Site_Grid)
 #
 #
 ####Save model####
