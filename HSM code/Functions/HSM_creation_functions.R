@@ -213,24 +213,61 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
   #
   # Build match pattern:
   pattern <- paste0("^", SiteCode, ".*", shp_filename, "\\.shp$")
-  # List all matching shapefiles
+  # List all matching shape files
   shp_files <- list.files(path = data_dir, pattern = pattern, full.names = TRUE)
   if (length(shp_files) == 0) {
     stop("No shapefiles found matching the pattern.")
   } else {
     #Print list of files loaded:
     message("Files loaded:\n", paste(shp_files, collapse = "\n"))
-
+    #
     if (length(shp_files) == 1) {
       shape_obj <- st_read(shp_files[1])
       } else {
-        # Read and combine all shapefiles
-        shape_list <- lapply(shp_files, st_read)
-        shape_obj <- do.call(rbind, shape_list)
+        # Read and combine all shape files
+        shape_list <- lapply(shp_files, function(file) {
+          sf_obj <- st_read(file)
+          # Extract Section from file name
+          base_name <- basename(file)  # e.g., "ABC123_datalayer.shp"
+          #without_ext <- sub("\\.shp$", "", base_name)  # Remove .shp extension, e.g., "ABC123_datalayer"
+          section <- str_extract(base_name,"(?<=Model_)(.*)(?=_datalayer)")  # Remove _datalayer suffix, e.g., "ABC123"
+          sf_obj$Section <- section  # Add Section column
+          return(sf_obj)
+        })
+        shape_obj <- do.call(rbind, shape_list)  
+        #shape_list <- lapply(shp_files, st_read)
+        #shape_obj <- do.call(rbind, shape_list)
       }
   }
+  #Check for and remove duplicate rows (created during split)
+  # Install and load necessary packages
+  if (!require(data.table)) install.packages("data.table")
+  library(data.table)
+  # Convert to data.table (handles both sf and data.frame)
+  if (inherits(shape_obj, "sf")) {
+    object_type <- "sf"
+    geometry_col <- attr(shape_obj, "sf_column")
+    setDT(shape_obj)  # Converts sf to data.table in place
+  } else if (!is.data.table(shape_obj)) {
+    object_type <- "not_sf"
+    setDT(shape_obj)  # Convert standard data.frame to data.table
+    geometry_col <- NULL
+  }
+  #Get column names
+  group_by_cols <- setdiff(names(shape_obj), c("Section", geometry_col))
+  # Perform grouping by "PGID" and remove duplicates
+  result <- shape_obj[, .SD[1], by = group_by_cols]
+  # If it was an sf object, convert back to sf to preserve geometry
+  if (object_type == "sf") {
+    setDF(result)  # Convert back to data.frame (if needed)
+    result_sf <- st_as_sf(result)  # Re-attach sf class
+    result <- result_sf  # Update result to the sf object
+  }
+  #Clean up memory
+  rm(shape_obj)  # Remove original object
+  gc()    # Run garbage collection, especially for large data
   #assign shp to object
-  assign(output_name, shape_obj, envir = .GlobalEnv)
+  assign(output_name, result, envir = .GlobalEnv)
   #Load Parameter summary file
   Param_summ <<- read_excel(paste0(SiteCode, "_", VersionNumber, "/Data/", SiteCode, "_", VersionNumber, "_model_setup.xlsx"), sheet = "Parameter_Summary")
   #Load curve summary file
