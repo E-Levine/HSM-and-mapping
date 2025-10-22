@@ -17,86 +17,86 @@ create_folders <- function(Site_Code, Version) {
               - ",Site_Code, "_", Version,"/Output/Map files
               - ",Site_Code, "_", Version,"/Output/Shapefiles"))
     } else {
-  # Create main folder
-  main_folder <- paste0(Site_Code, "_", Version)
-  if (!dir.exists(main_folder)) {
-    dir.create(main_folder) 
-    print(paste(Site_Code, " version ", Version, " folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " folder already exists."))
-  }
-  # Create Data folder
-  data_folder <- paste0(main_folder, "/Data")
-  if (!dir.exists(data_folder)) {
-    dir.create(data_folder) 
-    print(paste(Site_Code, " version ", Version, " Data folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " Data folder already exists."))
-  }
-  # Create Data/Layers folder
-  layers_folder <- paste0(main_folder, "/Data/Layers")
-  if (!dir.exists(layers_folder)) {
-    dir.create(layers_folder) 
-    print(paste(Site_Code, " version ", Version, " Layers folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " Layers folder already exists."))
-  }
-  # Create KML folder (in Data/Layers)
-  kml_folder <- paste0(main_folder, "/Data/Layers/KML")
-  if (!dir.exists(kml_folder)) {
-    dir.create(kml_folder)  
-    print(paste(Site_Code, " version ", Version, " KML folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " KML folder already exists."))
-  }
-  # Create HSI curves folder (in Data)
-  HSMcurves_folder <- paste0(main_folder, "/Data/HSI curves")
-  if (!dir.exists(HSMcurves_folder)) {
-    dir.create(HSMcurves_folder)  
-    print(paste(Site_Code, " version ", Version, " HSI curves folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " HSI curves folder already exists."))
-  }
-  # Create Output folder
-  output_folder <- paste0(main_folder, "/Output")
-  if (!dir.exists(output_folder)) {
-    dir.create(output_folder) 
-    print(paste(Site_Code, " version ", Version, " Output folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " Output folder already exists."))
-  }
-  # Create Output/Data files folder
-  outputData_folder <- paste0(main_folder, "/Output/Data files")
-  if (!dir.exists(outputData_folder)) {
-    dir.create(outputData_folder) 
-    print(paste(Site_Code, " version ", Version, " Output Data files folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " Output Data files folder already exists."))
-  }
-  # Create Output/Figure files folder
-  outputFigure_folder <- paste0(main_folder, "/Output/Figure files")
-  if (!dir.exists(outputFigure_folder)) {
-    dir.create(outputFigure_folder) 
-    print(paste(Site_Code, " version ", Version, " Output Figure files folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " Output Figure files folder already exists."))
-  }
-  # Create Output/Map files folder
-  outputMap_folder <- paste0(main_folder, "/Output/Map files")
-  if (!dir.exists(outputMap_folder)) {
-    dir.create(outputMap_folder) 
-    print(paste(Site_Code, " version ", Version, " Output Map files folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " Output Map files folder already exists."))
-  }
-  # Create Output/Shapefiles folder
-  outputShape_folder <- paste0(main_folder, "/Output/Shapefiles")
-  if (!dir.exists(outputShape_folder)) {
-    dir.create(outputShape_folder) 
-    print(paste(Site_Code, " version ", Version, " Output Shapefiles folder created."))
-  } else {
-    print(paste(Site_Code, " version ", Version, " Output Shapefiles folder already exists."))
-  }
+      # Create main folder
+      main_folder <- paste0(Site_Code, "_", Version)
+      if (!dir.exists(main_folder)) {
+        dir.create(main_folder) 
+        print(paste(Site_Code, " version ", Version, " folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " folder already exists."))
+      }
+      # Create Data folder
+      data_folder <- paste0(main_folder, "/Data")
+      if (!dir.exists(data_folder)) {
+        dir.create(data_folder) 
+        print(paste(Site_Code, " version ", Version, " Data folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " Data folder already exists."))
+      }
+      # Create Data/Layers folder
+      layers_folder <- paste0(main_folder, "/Data/Layers")
+      if (!dir.exists(layers_folder)) {
+        dir.create(layers_folder) 
+        print(paste(Site_Code, " version ", Version, " Layers folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " Layers folder already exists."))
+      }
+      # Create KML folder (in Data/Layers)
+      kml_folder <- paste0(main_folder, "/Data/Layers/KML")
+      if (!dir.exists(kml_folder)) {
+        dir.create(kml_folder)  
+        print(paste(Site_Code, " version ", Version, " KML folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " KML folder already exists."))
+      }
+      # Create HSI curves folder (in Data)
+      HSMcurves_folder <- paste0(main_folder, "/Data/HSI curves")
+      if (!dir.exists(HSMcurves_folder)) {
+        dir.create(HSMcurves_folder)  
+        print(paste(Site_Code, " version ", Version, " HSI curves folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " HSI curves folder already exists."))
+      }
+      # Create Output folder
+      output_folder <- paste0(main_folder, "/Output")
+      if (!dir.exists(output_folder)) {
+        dir.create(output_folder) 
+        print(paste(Site_Code, " version ", Version, " Output folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " Output folder already exists."))
+      }
+      # Create Output/Data files folder
+      outputData_folder <- paste0(main_folder, "/Output/Data files")
+      if (!dir.exists(outputData_folder)) {
+        dir.create(outputData_folder) 
+        print(paste(Site_Code, " version ", Version, " Output Data files folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " Output Data files folder already exists."))
+      }
+      # Create Output/Figure files folder
+      outputFigure_folder <- paste0(main_folder, "/Output/Figure files")
+      if (!dir.exists(outputFigure_folder)) {
+        dir.create(outputFigure_folder) 
+        print(paste(Site_Code, " version ", Version, " Output Figure files folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " Output Figure files folder already exists."))
+      }
+      # Create Output/Map files folder
+      outputMap_folder <- paste0(main_folder, "/Output/Map files")
+      if (!dir.exists(outputMap_folder)) {
+        dir.create(outputMap_folder) 
+        print(paste(Site_Code, " version ", Version, " Output Map files folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " Output Map files folder already exists."))
+      }
+      # Create Output/Shapefiles folder
+      outputShape_folder <- paste0(main_folder, "/Output/Shapefiles")
+      if (!dir.exists(outputShape_folder)) {
+        dir.create(outputShape_folder) 
+        print(paste(Site_Code, " version ", Version, " Output Shapefiles folder created."))
+      } else {
+        print(paste(Site_Code, " version ", Version, " Output Shapefiles folder already exists."))
+      }
     }
   }
 }
@@ -106,13 +106,13 @@ create_folders <- function(Site_Code, Version) {
 #
 #### File separation
 #
-KML_separation <- function(Status_of_KML){
+KML_separation <- function(Status_of_KML, one_file = NA){
   if(interactive()){
     result<- select.list(c("Yes", "No"), title = paste0("\nCan KML files be saved locally to the '",Site_Code,"_",Version,"' folder?"))
     if(result == "No"){
       message("KML files will not be saved. A local copy of the site boundary KML is required at a minimum. Section-specific KMLs are not required.")
     } else {
-      if(length(Status_of_KML) == 1){
+      if(length(Status_of_KML) == 1 && is.na(one_file)){
         #If separation required:
         kml_file <- st_read(paste0("Reference files/KML/PreProcessing/", Site_Code, "_", Version, "/", Site_Code,"_all.kml")) #Load file
         Polygons <- kml_file %>% group_by(Name) %>% summarise(count = n()) #Identify all polygons
@@ -144,8 +144,8 @@ KML_separation <- function(Status_of_KML){
         message(paste0("Files copied from [Reference files/KML/] to [", Site_Code, "_", Version, "/Data/Layers/KML]."))
       }
     }
-    }
   }
+}
 #
 #
 #
@@ -212,7 +212,11 @@ Identify_dataframes <- function(object_list){
 #
 #
 ####Creation of HSI curves
-curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, Parameter_step = NA, Parameter_title, show_points, bimodal_Yvalues = NA, step_values = NA){
+curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, Parameter_step = NA, Parameter_title = Param_title, show_points, bimodal_Yvalues = NA, step_values = NA){
+  #Remove previous items:
+  if(exists("curve_points", envir = globalenv())){rm(curve_points, envir = globalenv())}
+  if(exists("p", envir = globalenv())){ rm(p, envir = globalenv())}
+  if(exists("predictions", envir = globalenv())){rm(predictions, envir = globalenv())}
   #Line dataframe
   curve_points <<- line_dataframe(LineType, Parameter_values, step_values, Parameter_limits)
   #
@@ -239,11 +243,11 @@ curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, 
   } else if(LineType == "step"){
     predictions <- step_fit(FitType, curve_points, seq_values, step_values)
   } else if(FitType == "NA"){
-  predictions <- curve_points %>% mutate(Param = factor(curve_points$Param, levels = (curve_points %>% arrange(desc(Value)))$Param), Value = as.numeric(Value)) 
-}
-#
-predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, ifelse(Value < 0, 0, Value))))
-#
+    predictions <- curve_points %>% mutate(Param = factor(curve_points$Param, levels = (curve_points %>% arrange(desc(Value)))$Param), Value = as.numeric(Value)) 
+  }
+  #
+  predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, ifelse(Value < 0, 0, Value))))
+  #
   #Generate the plot
   p <<- ggplot() +
     {if(LineType != "categorical") geom_line(data = predictions, aes(x = Param, y = Value), linetype = 1, linewidth = 1.5)} +
@@ -252,8 +256,8 @@ predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, i
     {if(LineType != "logistic") scale_y_continuous(limits = c(-0.001, 1.01), expand = c(0, 0))} +
     {if(LineType == "logistic") scale_y_continuous(limits = c(-0.01, 1.05), expand = c(0, 0))} +
     {if(LineType != "categorical") scale_x_continuous(limits = Parameter_limits, expand = c(0, 0))} +
-    xlab(Parameter_title) +  ylab("SI Score") +
-    {if(!is.na(Parameter_name)) ggtitle(Parameter_name)}+
+    xlab(Parameter_name) +  ylab("SI Score") +
+    {if(!is.na(Parameter_title)) ggtitle(Parameter_title)}+
     theme_classic() +
     theme(axis.title = element_text(size = 20, color = "black"), axis.text = element_text(size = 18, color = "black")) + 
     theme(plot.margin = unit(c(0.5, 0.5, 0.5, 0.5), "cm"), plot.title = element_text(size = 20, face = "bold"))
@@ -265,19 +269,22 @@ predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, i
 #
 ###Curve data gather/combination:
 curve_point_data <- function(data_table = curve_points){
-  Param_summ_name <- "Parameter_summary"
+  if(exists("Curve_Summary", envir = globalenv())){rm(Curve_Summary, envir = globalenv())}
+  if(exists("Parameter_Summ", envir = globalenv())){rm(Parameter_Summ, envir = globalenv())}
+  #
+  Curve_summ_name <- "Curve_Summary"
   #Check for model setup Excel file, check if sheet already exists, load if exists:
   if(file.exists(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))){
     print(paste0(Site_Code, " ", Version, " Excel file found."))
-    #Get list of sheet names in model setup file. Skip if already present. 
-    if(!exists("Model_sheets")){Model_sheets <<- excel_sheets(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))}
+    #Get list of sheet names in model setup file 
+    Model_sheets <<- excel_sheets(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
     #
     #Load sheet if exists, message if it doesn't 
-    if(Param_summ_name %in% Model_sheets) {
-      assign(Param_summ_name, suppressWarnings(read_excel(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), sheet = Param_summ_name)))
-      print(paste0(Param_summ_name, " Excel sheet loaded succesfully."))
+    if(Curve_summ_name %in% Model_sheets) {
+      assign(Curve_summ_name, suppressWarnings(read_excel(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), sheet = Curve_summ_name)))
+      print(paste0(Curve_summ_name, " Excel sheet loaded succesfully."))
     } else {
-      print(paste0(Param_summ_name, " Excel sheet will be created."))
+      print(paste0(Curve_summ_name, " Excel sheet will be created."))
     }
   } else {
     stop("Excel file not found. Please check that the model setup file is located in the Data folder. R code file '1_SetUp_Folders' should have already been run.")
@@ -285,17 +292,18 @@ curve_point_data <- function(data_table = curve_points){
   #
   curve_points_f <- get("data_table")
   ##Create data table or add to existing data:
-  if(exists(Param_summ_name)){
+  if(exists(Curve_summ_name)){
     #Add data to existing data
-    curve_points_f <- curve_points_f %>% mutate(Curve = Parameter_name, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
-    combined_data <- rbind(get(Param_summ_name), curve_points_f)
-    assign(Param_summ_name, combined_data, envir = globalenv())
+    curve_points_f <- curve_points_f %>% mutate(Curve = Param_title, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
+    combined_data <- rbind(get(Curve_summ_name), curve_points_f)
+    assign("Parameter_Summ", curve_points_f, envir = globalenv())
+    assign(Curve_summ_name, combined_data, envir = globalenv())
   } else {
     #Create data frame to save to Excel 
-    combined_data <- curve_points_f %>% mutate(Curve = Parameter_name, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
-    assign(Param_summ_name, combined_data, envir = globalenv())
+    combined_data <- curve_points_f %>% mutate(Curve = Param_title, Date_Updated = Sys.Date()) %>% dplyr::select(Curve, everything())
+    assign(Curve_summ_name, combined_data, envir = globalenv())
   }
-  message(paste0("Objects created in the global environment: '", Param_summ_name,"', 'Model_sheets'."))
+  message(paste0("Objects created in the global environment: '", Curve_summ_name,"', 'Model_sheets'."))
   return(tail(combined_data, 10))
 }
 #
@@ -303,32 +311,32 @@ curve_point_data <- function(data_table = curve_points){
 # Save data and/or figure created
 save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
   #
+  Curve_summ_name <- "Curve_Summary"
+  #
   if(interactive()){
     result<- select.list(c("Yes", "No"), title = paste0("\nCan a summary of the HSI curve be saved locally to the version tracking file?"))
     if(result == "No"){
       message("HSI curve summary will not be saved to the model version tracking file.")
     } else {
       #For all save types, save the curve point information:
-      if (exists(Param_summ_name)) {
-        temp_data <- get(Param_summ_name)
-        sheet_name <- "HSI_Curve_Summary"
-        #Load the workbook
+      if (exists(Curve_summ_name, envir = globalenv())) {
+        temp_data <- get(Curve_summ_name)
+        sheet_name <- Curve_summ_name
+        # Load the workbook
         wb <- loadWorkbook(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
-        #Check if the sheet exists
+        # Check if the sheet exists
         if (sheet_name %in% sheet_names) {
-          #If it exists, append data to the existing sheet
-          existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
-          new_data <- rbind(existing_data, temp_data)
-          writeData(wb, sheet = sheet_name, new_data)
+          # If it exists, overwrite the existing sheet
+          writeData(wb, sheet = sheet_name, temp_data)
         } else {
-          #If it does not exist, create a new sheet
+          # If it does not exist, create a new sheet
           addWorksheet(wb, sheet_name)
           writeData(wb, sheet = sheet_name, temp_data)
         }
-        #Save the workbook
+        # Save the workbook
         saveWorkbook(wb, paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
       } else {
-        warning("The variable does not exist.")
+        warning("Summary of the variable does not exist.")
       }
     }
   }
@@ -343,7 +351,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
       #Save if scores is specified:
       if(save_option == "scores") {
         #Desired names
-        base_filename <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
+        base_filename <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Param_title,".xlsx")
         #Check if the file already exists
         if (file.exists(base_filename)) {
           #Append current date in YYYY-MM-DD format before the extension
@@ -361,7 +369,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
       #Save if figure is specified:
       if(save_option == "figure") {
         # Desired file name and specs
-        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
+        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Param_title,".jpg")
         width_pixels <- 1000
         aspect_ratio <- 3/4
         height_pixels <- round(width_pixels * aspect_ratio)
@@ -383,7 +391,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
       #Save if both is specified:
       if(save_option == "both") {
         #Desired names
-        base_filename_x <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Parameter_name,".xlsx")
+        base_filename_x <- paste0(Site_Code, "_", Version, "/Data/HSI curves/",Param_title,".xlsx")
         #Check if the file already exists
         if (file.exists(base_filename_x)) {
           #Append current date in YYYY-MM-DD format before the extension
@@ -398,7 +406,7 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
         #
         #
         # Desired file name and specs
-        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Parameter_name,".jpg")
+        jpg_filename <- paste0(Site_Code, "_", Version,"/Data/HSI curves/",Param_title,".jpg")
         width_pixels <- 1000
         aspect_ratio <- 3/4
         height_pixels <- round(width_pixels * aspect_ratio)
@@ -426,6 +434,83 @@ save_curve_output <- function(save_option = "both", sheet_names = Model_sheets){
 }
 #
 #
+library(openxlsx)
+library(fs)
+# Copy summary excel info 
+copy_curve_summary <- function(source_site, source_version) {
+  #Model set up file locations:
+  source_file <- paste0(source_site, "_", source_version,"/Data/", source_site, "_", source_version, "_model_setup.xlsx")
+  dest_file <- paste0(Site_Code, "_", Version,"/Data/", Site_Code, "_", Version, "_model_setup.xlsx")
+  #
+  sheet_name <- "Curve_Summary"
+  #Get model set up files
+  wb_source <- loadWorkbook(source_file)
+  #
+  if (file.exists(dest_file)) {
+    wb_dest <- loadWorkbook(dest_file)
+  } else {
+    stop("No model setup found for the current site and model version.")
+  }
+  #Copy source sheet
+  df <- read.xlsx(wb_source, sheet = sheet_name)
+  #Check for model sheet, remove if specified or abort copy
+  if (sheet_name %in% names(wb_dest)) {
+    answer <- readline(prompt = paste0("Sheet '",sheet_name,"' already exists in '", dest_file, "'. Overwrite? (y/n): "))
+    if (tolower(answer) != "y") {
+      message("Copy aborted by user.")
+      return(invisible(FALSE))
+    }  
+  }
+  #Add sheet and save file
+  addWorksheet(wb_dest, sheet_name)
+  writeData(wb_dest, sheet = sheet_name, df)
+  saveWorkbook(wb_dest, dest_file, overwrite = TRUE)
+  message(paste0("Sheet '", sheet_name, "' copied from '", source_file, "' to '", dest_file, "'"))
+}
+# Copy HSI curve data and figures
+copy_curve_files <- function(source_site, source_version) {
+  #folder locations
+  source_folder <- paste0(source_site, "_", source_version, "/Data/HSI curves/")
+  dest_folder <- paste0(Site_Code, "_", Version, "/Data/HSI curves/")
+  #Check for HSI curves folder
+  if (!dir.exists(dest_folder)) {
+    dir.create(dest_folder, recursive = TRUE)
+  }
+  #Possible file types
+  excel_exts <- c("xls", "xlsx", "xlsm", "xlsb")
+  image_exts <- c("png", "jpg", "jpeg", "bmp", "gif", "tiff", "svg")
+  #List of all possible files
+  all_files <- list.files(source_folder, full.names = TRUE)
+  #List of file to copy
+  files_to_copy <- all_files[tolower(tools::file_ext(all_files)) %in% c(excel_exts, image_exts)]
+  curves_to_copy <- sub(".*HSI curves/([^.]*)\\..*", "\\1", files_to_copy) %>% unique()
+  #Date for file naming
+  current_date <- format(Sys.Date(), "%Y%m%d")
+  
+  for (src_path in files_to_copy) {
+    base_name <- basename(src_path)
+    dest_path <- file.path(dest_folder, base_name)
+    
+    # If file exists in destination, append date before extension
+    if (file.exists(dest_path)) {
+      file_ext <- tools::file_ext(base_name)
+      file_name <- tools::file_path_sans_ext(base_name)
+      new_name <- paste0(file_name, "_", current_date, ".", file_ext)
+      dest_path <- file.path(dest_folder, new_name)
+    }
+    
+    file_copy(src_path, dest_path, overwrite = FALSE)
+  }
+  
+  message(paste0(length(files_to_copy), " Excel and curve figures copied from '", source_folder, "' to '", dest_folder,"' \n",
+                 "Curves included:\n", 
+                 paste(curves_to_copy, collapse = "\n")))
+}
+# Example usage:
+#copy_curve_summary("SL", "v1")
+#copy_curve_files("SL", "v1")
+#
+#
 ###SUB-FUNCTIONS
 #
 # Create the line data frame
@@ -440,14 +525,14 @@ line_dataframe <- function(LineType, Parameter_values, step_values, Parameter_li
   else if(LineType == "step"){
     if(length(step_values) == 0){
       stop("Please specify the suitability values for each step range by specifying 'step_values' in the function call.")
-      } else {
-        #Get number of step_scores needed:
-        half_count = length(Parameter_values)/2
-        #Set step_scores as the base_line Values or give message about error.
-        if(length(step_values) > half_count){message("Too many Parameter_values are provided. There should only be two Parameter_values per one step_score.")}
-        if(length(step_values) < half_count){message("Too few Parameter_values are provided. There should be two Parameter_values per one step_score.")}
-        if(length(step_values) == half_count){base_line <- data.frame(Value = rep(step_values, each = 2))}
-        }
+    } else {
+      #Get number of step_scores needed:
+      half_count = length(Parameter_values)/2
+      #Set step_scores as the base_line Values or give message about error.
+      if(length(step_values) > half_count){message("Too many Parameter_values are provided. There should only be two Parameter_values per one step_score.")}
+      if(length(step_values) < half_count){message("Too few Parameter_values are provided. There should be two Parameter_values per one step_score.")}
+      if(length(step_values) == half_count){base_line <- data.frame(Value = rep(step_values, each = 2))}
+    }
     #
   }
   else if(LineType == "categorical"){base_line <- data.frame(Value = Parameter_limits)}
@@ -647,7 +732,7 @@ step_fit <- function(FitType, curve_points, seq_values, step_values){
           nochange_data <- rbind(nochange_data, data.frame(Param = param, Value = current_value))
         }
       }
-      }
+    }
     #Combine predicted values into one dataframe:
     predictions <- rbind(rbind(nochange_data, curve_points),
                          do.call(rbind, preds) %>% filter(!Param %in% curve_points$Param))  %>% 
