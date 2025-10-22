@@ -17,86 +17,86 @@ create_folders <- function(Site_Code, Version) {
               - ",Site_Code, "_", Version,"/Output/Map files
               - ",Site_Code, "_", Version,"/Output/Shapefiles"))
     } else {
-      # Create main folder
-      main_folder <- paste0(Site_Code, "_", Version)
-      if (!dir.exists(main_folder)) {
-        dir.create(main_folder) 
-        print(paste(Site_Code, " version ", Version, " folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " folder already exists."))
-      }
-      # Create Data folder
-      data_folder <- paste0(main_folder, "/Data")
-      if (!dir.exists(data_folder)) {
-        dir.create(data_folder) 
-        print(paste(Site_Code, " version ", Version, " Data folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " Data folder already exists."))
-      }
-      # Create Data/Layers folder
-      layers_folder <- paste0(main_folder, "/Data/Layers")
-      if (!dir.exists(layers_folder)) {
-        dir.create(layers_folder) 
-        print(paste(Site_Code, " version ", Version, " Layers folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " Layers folder already exists."))
-      }
-      # Create KML folder (in Data/Layers)
-      kml_folder <- paste0(main_folder, "/Data/Layers/KML")
-      if (!dir.exists(kml_folder)) {
-        dir.create(kml_folder)  
-        print(paste(Site_Code, " version ", Version, " KML folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " KML folder already exists."))
-      }
-      # Create HSI curves folder (in Data)
-      HSMcurves_folder <- paste0(main_folder, "/Data/HSI curves")
-      if (!dir.exists(HSMcurves_folder)) {
-        dir.create(HSMcurves_folder)  
-        print(paste(Site_Code, " version ", Version, " HSI curves folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " HSI curves folder already exists."))
-      }
-      # Create Output folder
-      output_folder <- paste0(main_folder, "/Output")
-      if (!dir.exists(output_folder)) {
-        dir.create(output_folder) 
-        print(paste(Site_Code, " version ", Version, " Output folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " Output folder already exists."))
-      }
-      # Create Output/Data files folder
-      outputData_folder <- paste0(main_folder, "/Output/Data files")
-      if (!dir.exists(outputData_folder)) {
-        dir.create(outputData_folder) 
-        print(paste(Site_Code, " version ", Version, " Output Data files folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " Output Data files folder already exists."))
-      }
-      # Create Output/Figure files folder
-      outputFigure_folder <- paste0(main_folder, "/Output/Figure files")
-      if (!dir.exists(outputFigure_folder)) {
-        dir.create(outputFigure_folder) 
-        print(paste(Site_Code, " version ", Version, " Output Figure files folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " Output Figure files folder already exists."))
-      }
-      # Create Output/Map files folder
-      outputMap_folder <- paste0(main_folder, "/Output/Map files")
-      if (!dir.exists(outputMap_folder)) {
-        dir.create(outputMap_folder) 
-        print(paste(Site_Code, " version ", Version, " Output Map files folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " Output Map files folder already exists."))
-      }
-      # Create Output/Shapefiles folder
-      outputShape_folder <- paste0(main_folder, "/Output/Shapefiles")
-      if (!dir.exists(outputShape_folder)) {
-        dir.create(outputShape_folder) 
-        print(paste(Site_Code, " version ", Version, " Output Shapefiles folder created."))
-      } else {
-        print(paste(Site_Code, " version ", Version, " Output Shapefiles folder already exists."))
-      }
+  # Create main folder
+  main_folder <- paste0(Site_Code, "_", Version)
+  if (!dir.exists(main_folder)) {
+    dir.create(main_folder) 
+    print(paste(Site_Code, " version ", Version, " folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " folder already exists."))
+  }
+  # Create Data folder
+  data_folder <- paste0(main_folder, "/Data")
+  if (!dir.exists(data_folder)) {
+    dir.create(data_folder) 
+    print(paste(Site_Code, " version ", Version, " Data folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " Data folder already exists."))
+  }
+  # Create Data/Layers folder
+  layers_folder <- paste0(main_folder, "/Data/Layers")
+  if (!dir.exists(layers_folder)) {
+    dir.create(layers_folder) 
+    print(paste(Site_Code, " version ", Version, " Layers folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " Layers folder already exists."))
+  }
+  # Create KML folder (in Data/Layers)
+  kml_folder <- paste0(main_folder, "/Data/Layers/KML")
+  if (!dir.exists(kml_folder)) {
+    dir.create(kml_folder)  
+    print(paste(Site_Code, " version ", Version, " KML folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " KML folder already exists."))
+  }
+  # Create HSI curves folder (in Data)
+  HSMcurves_folder <- paste0(main_folder, "/Data/HSI curves")
+  if (!dir.exists(HSMcurves_folder)) {
+    dir.create(HSMcurves_folder)  
+    print(paste(Site_Code, " version ", Version, " HSI curves folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " HSI curves folder already exists."))
+  }
+  # Create Output folder
+  output_folder <- paste0(main_folder, "/Output")
+  if (!dir.exists(output_folder)) {
+    dir.create(output_folder) 
+    print(paste(Site_Code, " version ", Version, " Output folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " Output folder already exists."))
+  }
+  # Create Output/Data files folder
+  outputData_folder <- paste0(main_folder, "/Output/Data files")
+  if (!dir.exists(outputData_folder)) {
+    dir.create(outputData_folder) 
+    print(paste(Site_Code, " version ", Version, " Output Data files folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " Output Data files folder already exists."))
+  }
+  # Create Output/Figure files folder
+  outputFigure_folder <- paste0(main_folder, "/Output/Figure files")
+  if (!dir.exists(outputFigure_folder)) {
+    dir.create(outputFigure_folder) 
+    print(paste(Site_Code, " version ", Version, " Output Figure files folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " Output Figure files folder already exists."))
+  }
+  # Create Output/Map files folder
+  outputMap_folder <- paste0(main_folder, "/Output/Map files")
+  if (!dir.exists(outputMap_folder)) {
+    dir.create(outputMap_folder) 
+    print(paste(Site_Code, " version ", Version, " Output Map files folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " Output Map files folder already exists."))
+  }
+  # Create Output/Shapefiles folder
+  outputShape_folder <- paste0(main_folder, "/Output/Shapefiles")
+  if (!dir.exists(outputShape_folder)) {
+    dir.create(outputShape_folder) 
+    print(paste(Site_Code, " version ", Version, " Output Shapefiles folder created."))
+  } else {
+    print(paste(Site_Code, " version ", Version, " Output Shapefiles folder already exists."))
+  }
     }
   }
 }
@@ -144,8 +144,8 @@ KML_separation <- function(Status_of_KML, one_file = NA){
         message(paste0("Files copied from [Reference files/KML/] to [", Site_Code, "_", Version, "/Data/Layers/KML]."))
       }
     }
+    }
   }
-}
 #
 #
 #
@@ -243,11 +243,11 @@ curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, 
   } else if(LineType == "step"){
     predictions <- step_fit(FitType, curve_points, seq_values, step_values)
   } else if(FitType == "NA"){
-    predictions <- curve_points %>% mutate(Param = factor(curve_points$Param, levels = (curve_points %>% arrange(desc(Value)))$Param), Value = as.numeric(Value)) 
-  }
-  #
-  predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, ifelse(Value < 0, 0, Value))))
-  #
+  predictions <- curve_points %>% mutate(Param = factor(curve_points$Param, levels = (curve_points %>% arrange(desc(Value)))$Param), Value = as.numeric(Value)) 
+}
+#
+predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, ifelse(Value < 0, 0, Value))))
+#
   #Generate the plot
   p <<- ggplot() +
     {if(LineType != "categorical") geom_line(data = predictions, aes(x = Param, y = Value), linetype = 1, linewidth = 1.5)} +
@@ -277,7 +277,7 @@ curve_point_data <- function(data_table = curve_points){
   if(file.exists(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))){
     print(paste0(Site_Code, " ", Version, " Excel file found."))
     #Get list of sheet names in model setup file 
-    Model_sheets <<- excel_sheets(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
+   Model_sheets <<- excel_sheets(paste0(Site_Code, "_", Version,"/Data/",Site_Code, "_", Version,"_model_setup.xlsx"))
     #
     #Load sheet if exists, message if it doesn't 
     if(Curve_summ_name %in% Model_sheets) {
@@ -503,8 +503,8 @@ copy_curve_files <- function(source_site, source_version) {
   }
   
   message(paste0(length(files_to_copy), " Excel and curve figures copied from '", source_folder, "' to '", dest_folder,"' \n",
-                 "Curves included:\n", 
-                 paste(curves_to_copy, collapse = "\n")))
+  "Curves included:\n", 
+  paste(curves_to_copy, collapse = "\n")))
 }
 # Example usage:
 #copy_curve_summary("SL", "v1")
@@ -525,14 +525,14 @@ line_dataframe <- function(LineType, Parameter_values, step_values, Parameter_li
   else if(LineType == "step"){
     if(length(step_values) == 0){
       stop("Please specify the suitability values for each step range by specifying 'step_values' in the function call.")
-    } else {
-      #Get number of step_scores needed:
-      half_count = length(Parameter_values)/2
-      #Set step_scores as the base_line Values or give message about error.
-      if(length(step_values) > half_count){message("Too many Parameter_values are provided. There should only be two Parameter_values per one step_score.")}
-      if(length(step_values) < half_count){message("Too few Parameter_values are provided. There should be two Parameter_values per one step_score.")}
-      if(length(step_values) == half_count){base_line <- data.frame(Value = rep(step_values, each = 2))}
-    }
+      } else {
+        #Get number of step_scores needed:
+        half_count = length(Parameter_values)/2
+        #Set step_scores as the base_line Values or give message about error.
+        if(length(step_values) > half_count){message("Too many Parameter_values are provided. There should only be two Parameter_values per one step_score.")}
+        if(length(step_values) < half_count){message("Too few Parameter_values are provided. There should be two Parameter_values per one step_score.")}
+        if(length(step_values) == half_count){base_line <- data.frame(Value = rep(step_values, each = 2))}
+        }
     #
   }
   else if(LineType == "categorical"){base_line <- data.frame(Value = Parameter_limits)}
@@ -732,7 +732,7 @@ step_fit <- function(FitType, curve_points, seq_values, step_values){
           nochange_data <- rbind(nochange_data, data.frame(Param = param, Value = current_value))
         }
       }
-    }
+      }
     #Combine predicted values into one dataframe:
     predictions <- rbind(rbind(nochange_data, curve_points),
                          do.call(rbind, preds) %>% filter(!Param %in% curve_points$Param))  %>% 
