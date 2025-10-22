@@ -6,7 +6,7 @@
 ##This code does NOT need to be run if updating an existing site/version. 
 #
 ##Establish the site code and version for this project. (Required for both code chunks.)
-Site_Code <- c("SS") #two-letter site code used throughout for identifying files
+Site_Code <- c("WC") #two-letter site code used throughout for identifying files
 Version <- c("v1") #current version number of the model for the specified site
 source("HSM code/Functions/HSM_Functions.R")
 #
@@ -30,9 +30,10 @@ pacman::p_load(sf, tidyverse, stringr, install = TRUE) #Mapping and figures
 #
 #Does file need to be separated or existing files gathered? 
 #If requiring separation of one file into one per section, status = "separated"; if existing, status = list of names of existing files from Reference files/KML.
-KML_status <- c("SS", "SS-Central", "SS-North", "SS-South")
+#If only using one file and separation is not needed, enter 'one_file = "Y"' in KML_separation function
+KML_status <- c("WC", "WC-WI", "WC-WA", "WC-CI")
 #
-KML_separation(KML_status)
+KML_separation(KML_status, one_file = "Y")
 ##If file was separated, confirm all polygons needed are listed in the output. If any are missing, they are missing from the "all" file. 
 #Confirm names are accurate, updated as needed within the local directory or return to the KML file creation step.
 #

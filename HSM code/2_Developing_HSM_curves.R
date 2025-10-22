@@ -8,13 +8,14 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
                install = TRUE) 
 #
 ##Input the site code and version for this project. (Required)
-Site_Code <- c("SL") #two-letter site code used throughout for identifying files
+Site_Code <- c("WC") #two-letter site code used throughout for identifying files
 Version <- c("v1") #current version number of the model for the specified site
 source("HSM code/Functions/HSM_Functions.R")
 #
 ##Naming convention for parameter - change with each new parameter and version of a parameter to score (i.e. if multiple Salinity curves will be used don't jsut use "Salinity".)
 #Name will be used in Excel file/sheet names and figure title. If redoing curves, name should be the same as the Excel sheet name.
-Parameter_name = c("Temperature_spawning")
+Parameter_name = c("Lease designation")
+Param_title = c("Aquaculture leases")
 #
 ###Function to create habitat suitability parameter score curves.
 ##Inputs required: LineType, FitType, Parameter_values, Parameter_limits, Parameter_step, Parameter_title, Title, show_points, save_option 
@@ -43,14 +44,14 @@ Parameter_name = c("Temperature_spawning")
 #
 #
 #Continuous data example:
-curve_output(LineType = "logistic", FitType = "hard", 
-             Parameter_values = c(0, 19, 19.5, 20, 40), Parameter_limits = c(0, 40), Parameter_step = 0.01, 
-             Parameter_title = "Temperature", show_points = "Y") #, step_values = c(0, 0.25, 1, 0.75, 0)), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
+curve_output(LineType = "Gaussian", FitType = "hard", 
+             Parameter_values = c(15, 20.5, 26, 31, 33, 35), Parameter_limits = c(0, 40), Parameter_step = 0.01, 
+             show_points = "Y") #, step_values = c(0, 0.25, 1, 0.75, 0)), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #Categorical data example:
 curve_output(LineType = "categorical", FitType = "NA", 
-             Parameter_values = c("Unclassified", "Contains 'prohibited'",	"Contains 'restricted'", "Contains 'approved'"), Parameter_limits = c(1, 0.66, 0.33, 0), 
-             Parameter_title = "Designation", show_points = "N")
-#
+             Parameter_values = c("Absent", "Within 20ft of lease", "Present"), Parameter_limits = c(1, 0.1, 0), 
+             show_points = "N")
+#p <- p + labs(subtitle = expression(italic("Buffer distance (ft) = SI Score * 100")))
 #
 ###Function to gather existing curve point data from existing model setup summary data or create new:
 curve_point_data()
@@ -60,4 +61,8 @@ curve_point_data()
 #File_Title will be used as the file name. 
 save_curve_output()
 #
+#
+###Optional: use curves from other project saved locally:
+copy_curve_summary("US", "v1")
+copy_curve_files("US", "v1")
 #

@@ -3,6 +3,356 @@
 #
 #
 ####Set up####
+#
+#Loading raw files
+#library(readxl)
+read_raw_data_files <- function(SiteCode, DataSource, year_ranges) {
+  # year_ranges: a list of vectors, each with two elements: start_year and end_year
+  # Example: list(c(2000, 2007), c(2008, 2014), c(2015, 2019), c(2020, 2023))
+  #
+  # Determine overall start and end year for site file
+  overall_start_year <- as.numeric(Start_year)
+  overall_end_year <- as.numeric(End_year)
+  #
+  ##Read in Excel site file
+  Location_data <- NULL
+  if(DataSource == "Portal"){
+    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
+    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z")))
+  } else if(DataSource == "WA"){
+    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
+    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z"),
+                                              col_types = c("text", "text", "text", "text", "text", "text", "numeric", "numeric", "text", "date", "numeric", "text",
+                                                            "text", "text", "text", "numeric", "text", "text", "text", "numeric", "text")))
+  } else if(DataSource == "FIM"){
+    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_", overall_start_year, "_", overall_end_year,".xlsx")
+    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z", "NULL")))
+  } else {paste0("Code not yet updated for ", DataSource," data.")}
+  #
+  #
+  ##Get Excel Restuls file(s)
+  Results_data <- NULL
+  #
+  if(!(DataSource %in% c("WA", "FIM"))){
+    Results_list <- list()
+    for (i in seq_along(year_ranges)) {
+      start_year <- year_ranges[[i]][1]
+      end_year <- year_ranges[[i]][2]
+      #
+      file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource, "_Results_", start_year, "_", end_year, ".xlsx")
+      #Read the Excel file, handle NA values as specified
+      Results_list[[i]] <- as.data.frame(read_excel(file_path, na = c("NA", " ", "", "Z")))
+    }
+    #Combine all data frames into one
+    Results_data <- do.call(rbind, Results_list)
+    #Save output
+    assign("Results_data", Results_data, envir = .GlobalEnv)
+  } else {
+    message("Skipping Results_data reading for Data_source: ", DataSource)
+  }
+  
+  #
+  ##Save outputs:
+  assign("Location_data", Location_data, envir = .GlobalEnv)
+  message(paste0("Raw data loaded for ", SiteCode))
+}
+#
+#Subset columns of data
+#library(dplyr)
+process_location_data <- function(DataSource = Data_source, LocationData = Location_data, SiteCode = Site_code) {
+  # Define columns to keep based on Data_source
+  if (DataSource == "Portal") {
+    keep_site <- c("MonitoringLocationIdentifier", "OrganizationIdentifier", "OrganizationFormalName", "MonitoringLocationName", 
+                   "MonitoringLocationTypeName", "MonitoringLocationDescriptionText", "LatitudeMeasure", "LongitudeMeasure", 
+                   "HorizontalCoordinateReferenceSystemDatumName", "StateCode", "CountyCode", "ProviderName")
+  } else if (DataSource == "WA") {
+    keep_site <- c("WBodyID", "WaterBodyName", "DataSource", "StationID", "StationName", "Actual_StationID", "Actual_Latitude", "Actual_Longitude", 
+                   "SampleDate", "Parameter", "Characteristic", "Result_Value", "Result_Unit")
+  } else if (DataSource == "FIM") {
+    keep_site <- colnames(LocationData)
+  } else {
+    stop(paste0("Data_source '", DataSource, "' not recognized."))
+  }
+  # Subset columns
+  Location_data_sub <- LocationData[keep_site]
+  # Add Estuary column before specific column depending on Data_source
+  if (DataSource == "Portal") {
+    Location_data_sub <- Location_data_sub %>% add_column(Estuary = SiteCode, .before = "MonitoringLocationIdentifier")
+  } else if (DataSource == "WA") {
+    Location_data_sub <- Location_data_sub %>% add_column(Estuary = SiteCode, .before = "WBodyID")
+  } else if (DataSource == "FIM") {
+    Location_data_sub <- Location_data_sub %>% add_column(Estuary = SiteCode, .before = "TripID")
+  }
+  glimpse(Location_data_sub)
+  return(Location_data_sub)
+}
+#
+#Subset results data
+process_results_data <- function(DataSource, ResultsData){
+  # Check inputs
+  if (missing(DataSource) || missing(ResultsData)) {
+    stop("Please provide both DataSource and ResultsData arguments.")
+  }
+  ##Select Results data - Portal data - not currently setup for using WA or FIM data
+  #Subset df by columns to keep - change list in include more columns as needed 
+  Results <- NULL
+  if(!(DataSource %in% c("WA", "FIM"))){
+    if(DataSource == "Portal"){
+      keep_results_portal <- c("MonitoringLocationIdentifier", "ResultIdentifier", "ActivityStartDate", "ActivityStartTime/Time", 
+                               "ActivityStartTime/TimeZoneCode", "CharacteristicName", "ResultMeasureValue", "ResultMeasure/MeasureUnitCode")
+      cols_to_keep <- intersect(keep_results_portal, colnames(ResultsData))
+      Results <- ResultsData[cols_to_keep]
+    } else {
+      message("Skipping Results_data subsetting for Data_source: ", DataSource)
+    } 
+  }
+  #
+  if(!is.null(Results)) {
+    dplyr::glimpse(Results)
+  }
+  return(Results)
+}
+#
+#Create combine location and results object:
+create_combined <- function(DataSource, LocationData, ResultsData){
+  if(DataSource == "Portal"){
+    Combined_data <- merge(LocationData, ResultsData, by = "MonitoringLocationIdentifier")
+  } else if(DataSource == "WA"){
+    Combined_data <- LocationData
+  } else if(DataSource == "FIM"){
+    Combined_data <- LocationData %>% 
+      gather("Characteristic", "Measurement", -Estuary, -TripID, -Reference, -Sampling_Date, -Longitude, -Latitude, -Zone, -StartTime) %>% 
+      mutate(Result_Unit = case_when(Characteristic == "Depth" ~ "m", Characteristic == "Temperature" ~ "degC", Characteristic == "DissolvedO2" ~ "mg/L", TRUE ~ NA))
+  }
+  return(Combined_data)
+}
+#
+#Station mapping
+library(sf)      # for st_as_sf, st_transform
+transform_crop_wq <- function(DataSource, FilteredData, EstuaryArea) {
+  #Validate inputs
+  if (missing(DataSource) || missing(FilteredData) || missing(EstuaryArea)) {
+    stop("Please provide DataSource, FilteredData, and EstuaryArea.")
+  }
+  #Define source CRS string
+  source_crs_str <- "+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs +type=crs"
+  target_crs_str <- "+proj=longlat +datum=WGS84 +no_defs +type=crs"
+  #Select coordinate columns based on DataSource
+  if (DataSource == "Portal" || DataSource == "WA") {
+    coords <- FilteredData[, c(9, 8)]  # longitude, latitude columns
+  } else if (DataSource == "FIM") {
+    coords <- FilteredData[, c(5, 6)]
+  } else {
+    stop(paste0("DataSource '", DataSource, "' not recognized."))
+  }
+  #Create sf object with source CRS 
+  WQ_sf <- st_as_sf(FilteredData, coords = colnames(coords), crs = source_crs_str, remove = FALSE)  #spdf <- SpatialPointsDataFrame(coords = coords, data = FilteredData, proj4string = CRS(source_crs_str))
+  #Transform CRS to WGS84
+  WQ_sf <- st_transform(WQ_sf, crs = target_crs_str)#spTransform(spdf, CRS(target_crs_str))
+  #Message for WA data (optional)
+  if (DataSource == "WA") {
+    message("Data may need to be checked. Code not finished for WQ data.")
+  }
+  #Check CRS of EstuaryArea and WQ_sp 
+  estuary_crs <- st_crs(EstuaryArea)
+  wq_sf_crs <- st_crs(st_as_sf(WQ_sf))
+  print(paste("Estuary CRS:", estuary_crs))
+  print(paste("Data CRS:", wq_sf_crs))
+  #Convert to sf and transform to EstuaryArea CRS if needed
+  if (!(estuary_crs == wq_sf_crs)) {
+    WQ_sf <- st_transform(WQ_sf, crs = estuary_crs)
+  } 
+  #Add KML classification for points inside EstuaryArea
+  inside_logical <- st_intersects(WQ_sf, EstuaryArea, sparse = FALSE)[,1]
+  Inside_data <- WQ_sf[inside_logical, ] %>% mutate(KML = "In")
+  #Add KML classification for points outside EstuaryArea
+  outside_logical <- st_disjoint(WQ_sf, EstuaryArea, sparse = FALSE)[,1]
+  Outside_data <- WQ_sf[outside_logical, ] %>% mutate(KML = "Out")
+  #Combine inside and outside data
+  EstuaryData <- bind_rows(Inside_data, Outside_data) %>% mutate(KML = as.factor(KML))
+  return(EstuaryData)
+}
+#
+#Color and map stations/estuary
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(tmap)
+
+mapping_wq_data_sf <- function(DataSource, WQ_sf_object, EstuaryArea, FL_outline, SiteCode) {
+  #Validate inputs
+  if (missing(DataSource) || missing(WQ_sf_object) || missing(EstuaryArea) || missing(FL_outline) || missing(SiteCode)) {
+    stop("Please provide all required arguments: DataSource, WQ_sf_object, EstuaryArea, FL_outline, Combined, SiteCode")
+  }
+  #Ensure all inputs are sf objects
+  if (!inherits(WQ_sf_object, "sf")) stop("WQ_sf_object must be an sf object")
+  if (!inherits(EstuaryArea, "sf")) stop("EstuaryArea must be an sf object")
+  if (!inherits(FL_outline, "sf")) stop("FL_outline must be an sf object")
+  #
+  #Summarize counts by unique station/location/date/KML based on DataSource
+  if (DataSource == "Portal") {
+    distinct_df <- WQ_sf_object %>% 
+      distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>%
+      group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("LongitudeMeasure", "LatitudeMeasure"), crs = st_crs(WQ_sf_object), remove = FALSE)
+  } else if (DataSource == "WA") {
+    distinct_df <- WQ_sf_object %>% 
+      distinct(StationID, Actual_Latitude, Actual_Longitude, SampleDate, KML) %>%
+      group_by(StationID, Actual_Latitude, Actual_Longitude, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("Actual_Longitude", "Actual_Latitude"), crs = st_crs(WQ_sf_object), remove = FALSE)
+  } else if (DataSource == "FIM") {
+    distinct_df <- WQ_sf_object %>% 
+      distinct(Reference, Latitude, Longitude, Sampling_Date, KML) %>%
+      group_by(Reference, Latitude, Longitude, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("Longitude", "Latitude"), crs = st_crs(WQ_sf_object), remove = FALSE)
+  } else {
+    stop("DataSource not recognized. Must be one of 'Portal', 'WA', or 'FIM'.")
+  }
+  #Prepare ggplot visualization
+  if (DataSource == "Portal") {
+    static <- ggplot() +
+      geom_sf(data = EstuaryArea, fill = "gray") +
+      geom_sf(data = FL_outline) +
+      geom_point(data = distinct_df, aes(x = LongitudeMeasure, y = LatitudeMeasure, color = KML),
+                 size = 2.5,) +
+      scale_color_manual(values = c(In = "red", Out = "black")) +
+      coord_sf(xlim = c(st_bbox(EstuaryArea)["xmin"], st_bbox(EstuaryArea)["xmax"]),
+               ylim = c(st_bbox(EstuaryArea)["ymin"], st_bbox(EstuaryArea)["ymax"]))
+    
+    map <- tmap_leaflet(
+      tm_shape(EstuaryArea) + tm_polygons() +
+        tm_shape(FL_outline) + tm_borders() +
+        tm_shape(distinct_df) +
+        tm_dots(col = "KML", palette = c("red", "black"), size = 0.8, legend.show = TRUE,
+                popup.vars = c("StationID" = "MonitoringLocationIdentifier",
+                               "Latitude" = "LatitudeMeasure",
+                               "Longitude" = "LongitudeMeasure",
+                               "Samples" = "N")) +
+        tm_layout(main.title = paste(SiteCode, DataSource, "WQ Stations"))
+    )
+  } else if (DataSource == "WA") {
+    static <- ggplot() +
+      geom_sf(data = EstuaryArea, fill = "gray") +
+      geom_sf(data = FL_outline) +
+      geom_point(data = distinct_df, aes(x = Actual_Longitude, y = Actual_Latitude, color = KML),
+                 size = 2.5) +
+      scale_color_manual(values = c("In" = "red", "Out" = "black")) +
+      coord_sf(xlim = c(st_bbox(EstuaryArea)["xmin"], st_bbox(EstuaryArea)["xmax"]),
+               ylim = c(st_bbox(EstuaryArea)["ymin"], st_bbox(EstuaryArea)["ymax"]))
+    
+    map <- tmap_leaflet(
+      tm_shape(EstuaryArea) + tm_polygons() +
+        tm_shape(FL_outline) + tm_borders() +
+        tm_shape(distinct_df) +
+        tm_dots("Stations", col = "KML", palette = c(In = "red", Out = "black"), size = 0.8, legend.show = TRUE,
+                popup.vars = c("StationID" = "StationID",
+                               "Latitude" = "Actual_Latitude",
+                               "Longitude" = "Actual_Longitude",
+                               "Samples" = "N")) +
+        tm_layout(main.title = paste(SiteCode, DataSource, "WQ Stations"))
+    )
+  } else if (DataSource == "FIM") {
+    static <- ggplot() +
+      geom_sf(data = EstuaryArea, fill = "gray") +
+      geom_sf(data = FL_outline) +
+      geom_point(data = distinct_df, aes(x = Longitude, y = Latitude, color = KML),
+                 size = 2.5) +
+      scale_color_manual(values = c("In" = "red", "Out" = "black")) +
+      coord_sf(xlim = c(st_bbox(EstuaryArea)["xmin"], st_bbox(EstuaryArea)["xmax"]),
+               ylim = c(st_bbox(EstuaryArea)["ymin"], st_bbox(EstuaryArea)["ymax"]))
+    
+    map <- tmap_leaflet(
+      tm_shape(EstuaryArea) + tm_polygons() +
+        tm_shape(FL_outline) + tm_borders() +
+        tm_shape(distinct_df) +
+        tm_dots("Stations", col = "KML", palette = c(In = "red", Out = "black"), size = 0.8, legend.show = TRUE,
+                popup.vars = c("StationID" = "Reference",
+                               "Latitude" = "Latitude",
+                               "Longitude" = "Longitude",
+                               "Samples" = "N")) +
+        tm_layout(main.title = paste(SiteCode, DataSource, "WQ Stations"))
+    )
+  }
+  # Return a list with combined data and plots
+  return(list(
+    Stations_list = distinct_df,
+    Static_plot = static,
+    Interactive_map = map
+  ))
+}
+#
+#Save data:
+library(dplyr)
+library(writexl)
+library(fs) # for file_info()
+
+process_and_save_data <- function(CombinedData, DataSource, SiteCode, StartYr, EndYr) {
+  #
+    if (DataSource == "Portal") {
+    Combined_filteredk <- CombinedData %>% 
+      mutate(ResultMeasureValue = as.numeric(ResultMeasureValue)) %>%
+      mutate(ResultMeasureValue = case_when(CharacteristicName == "Specific conductance" & Result_Unit == "mS/cm" ~ ResultMeasureValue * 1000, # mS/cm to uS/cm
+                                            CharacteristicName == "Stream flow, instantaneous" & Result_Unit == "ft3/s" ~ ResultMeasureValue * 0.0283168, # ft3/s to m3/s
+                                            TRUE ~ ResultMeasureValue),
+             Result_Unit = case_when(CharacteristicName == "Salinity" ~ "ppt",
+                                     CharacteristicName == "Conductivity" ~ "uS/cm",
+                                     CharacteristicName == "Specific conductance" ~ "uS/cm",
+                                     CharacteristicName == "pH" ~ NA_character_,
+                                     CharacteristicName == "Stream flow, instantaneous" ~ "m3/s",
+                                     TRUE ~ Result_Unit)) %>%
+      relocate(KML, .after = last_col())
+    } else if (DataSource == "WA") {
+      Combined_filteredk <- CombinedData %>% 
+        mutate(Result_Unit = case_when(Characteristic == "Salinity" ~ "ppt",
+                                       Characteristic == "pH" ~ NA_character_,
+                                       Characteristic == 'Dissolved oxygen saturation' ~ "%",
+                                       Characteristic == 'Secchi disc depth' ~ "m",
+                                       TRUE ~ Result_Unit))
+      } else if (DataSource == "FIM") {
+        # No changes needed
+        Combined_filteredk <- CombinedData
+      } 
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan cleaned water quality data be saved to local folders?")
+    if(result == "No"){
+      message("Data will not be saved.")
+    } else {
+      #Save path base
+      base_path <- paste0("Data/Raw-cleaned/", SiteCode, "_", DataSource, "_combined_filtered_")
+      Combined_filteredk_export <- Combined_filteredk %>% mutate(geometry = sf::st_as_text(geometry))
+      #Save combined filtered data temporarily to check file size
+      temp_file <- tempfile(fileext = ".xlsx")
+      write_xlsx(Combined_filteredk_export, temp_file, format_headers = TRUE)
+      file_size_mb <- file_info(temp_file)$size / (1000^2) # size in MB
+      file.remove(temp_file)
+      
+      if (file_size_mb <= 1000^2) {
+        # Save as one file
+        final_file <- paste0(base_path, StartYr, "_", EndYr, ".xlsx")
+        write_xlsx(Combined_filteredk_export, final_file, format_headers = TRUE)
+        message("Saved combined filtered data as one file: ", final_file)
+        } else {
+          #Estimate rows per chunk to keep file size under max_file_size_mb
+          total_rows <- nrow(Combined_filteredk_export)
+          est_rows_per_file <- floor(total_rows * 1000^2 / file_size_mb)
+          est_rows_per_file <- max(est_rows_per_file, 1) # at least 1 row
+          #Split data into chunks
+          chunks <- split(Combined_filteredk_export, (seq_len(total_rows) - 1) %/% est_rows_per_file)
+          #Save each chunk sequentially
+          for (i in seq_along(chunks)) {
+            chunk_file <- paste0(base_path, StartYr, "_", EndYr, "_part", i, ".xlsx")
+            write_xlsx(chunks[[i]], chunk_file, format_headers = TRUE)
+            message("Saved chunk ", i, " to file: ", chunk_file)
+            message("File too large (", round(file_size_mb, 2), " MB). Data split and saved as ",max(chunks), " files:")
+          }
+        }
+    }
+  }
+}
+  #
 #Combining filtered files
 combine_files <- function(Number_files, Estuarycode, DataSource, Start1, End1, Start2, End2, Start3, End3){
 if(Filtered_files == 1){
@@ -39,32 +389,108 @@ date_window <- function(DateBegin, DateEnd){
 #
 #Spatial transformation of data
 Spatial_data <- function(DataInput){
+  #Define target
+  target_crs <- 4326
+  #
   if(Data_source == "Portal"){
-    WQ_sp <- spTransform(SpatialPointsDataFrame(coords = DataInput[,c(9,8)], data = DataInput,
-                                                proj4string = CRS("+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs +type=crs")),
-                         "+proj=longlat +datum=WGS84 +no_defs +type=crs")
-    Combined_data_counts <- SpatialPointsDataFrame(coords = (WQ_sp@data %>% distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>% group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>% summarise(N = n()) %>% as.data.frame())[,c(3,2)], 
-                                                   data = WQ_sp@data %>% distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>% group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>% summarise(N = n()) %>% as.data.frame(), 
-                                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+    # If geometry column exists as WKT text, convert it
+    if ("geometry" %in% colnames(DataInput)) {
+      WQ_sp <- st_as_sf(DataInput, wkt = "geometry", crs = 4326) %>% 
+                          st_transform(crs = target_crs)
+    } else {
+      Combined_data_counts <- WQ_sf %>% distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>% 
+      group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>% 
+        summarise(N = n(), .groups = "drop") %>% 
+        st_as_sf(coords = c("LongitudeMeasure", "LatitudeMeasure"), crs = target_crs)
+    }
   } else if(Data_source == "WA"){
-    WQ_sp <- spTransform(SpatialPointsDataFrame(coords = DataInput[,c(9,8)], data = DataInput,
-                                                proj4string = CRS("+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs +type=crs")),
-                         "+proj=longlat +datum=WGS84 +no_defs +type=crs")
-    Combined_data_counts <- SpatialPointsDataFrame(coords = (WQ_sp@data %>% distinct(StationID, Actual_Latitude, Actual_Longitude, as.Date(SampleDate), KML) %>% group_by(StationID, Actual_Latitude, Actual_Longitude, KML) %>% summarise(N = n()) %>% as.data.frame())[,c(3,2)], 
-                                                   data = WQ_sp@data %>% distinct(StationID, Actual_Latitude, Actual_Longitude, as.Date(SampleDate), KML) %>% group_by(StationID, Actual_Latitude, Actual_Longitude, KML) %>% summarise(N = n()) %>% as.data.frame(), 
-                                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-  } else if (Data_source == "FIM") {
-    WQ_sp <- spTransform(SpatialPointsDataFrame(coords = DataInput[,c(5,6)], data = DataInput,
-                                                proj4string = CRS("+proj=longlat +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +no_defs +type=crs")),
-                         "+proj=longlat +datum=WGS84 +no_defs +type=crs")
-    Combined_data_counts <- SpatialPointsDataFrame(coords = (WQ_sp@data %>% distinct(Reference, Latitude, Longitude, Sampling_Date, KML) %>% group_by(Reference, Latitude, Longitude, KML) %>% summarise(N = n()) %>% as.data.frame())[,c(3,2)], 
-                                                   data = WQ_sp@data %>% distinct(Reference, Latitude, Longitude, Sampling_Date, KML) %>% group_by(Reference, Latitude, Longitude, KML) %>% summarise(N = n()) %>% as.data.frame(), 
-                                                   proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+    if ("geometry" %in% colnames(DataInput)) {
+      WQ_sf <- st_as_sf(DataInput, wkt = "geometry", crs = 4326) %>% 
+        st_transform(crs = target_crs)
+    } else {
+      WQ_sf <- st_as_sf(DataInput, coords = c(9,8), crs = 4326) %>% 
+        st_transform(crs = target_crs)
+    }
     
+    Combined_data_counts <- WQ_sf %>%
+      distinct(StationID, Actual_Latitude, Actual_Longitude, SampleDate, KML) %>%
+      group_by(StationID, Actual_Latitude, Actual_Longitude, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("Actual_Longitude", "Actual_Latitude"), crs = target_crs)
+    
+  } else if (Data_source == "FIM") {
+    if ("geometry" %in% colnames(DataInput)) {
+      WQ_sf <- st_as_sf(DataInput, wkt = "geometry", crs = 4326) %>% 
+        st_transform(crs = target_crs)
+    } else {
+      WQ_sf <- st_as_sf(DataInput, coords = c(5,6), crs = 4326) %>% 
+        st_transform(crs = target_crs)
+    }
+    
+    Combined_data_counts <- WQ_sf %>%
+      distinct(Reference, Latitude, Longitude, Sampling_Date, KML) %>%
+      group_by(Reference, Latitude, Longitude, KML) %>%
+      summarise(N = n(), .groups = "drop") %>%
+      st_as_sf(coords = c("Longitude", "Latitude"), crs = target_crs)
+  } else {
+    stop("Curretnly unsupported Data_source")
   }
+  
   return(Combined_data_counts)
 }
 #
+#
+#
+#Mapping of stations
+library(tmap)
+library(tmaptools)
+library(sf)
+
+create_station_map <- function(DataSource, EstuaryArea, StateOutline, SelectedStations = NULL, Stations_sf, SiteCode) {
+  #
+  #Base map layers: estuary polygons and shoreline outline
+  base_map <- tm_shape(EstuaryArea) + tm_polygons() + 
+    tm_shape(StateOutline) + tm_borders()
+  #
+  #Add selected stations if more than one
+  if (!is.null(SelectedStations) && nrow(SelectedStations) > 1) {
+    #Convert Stations_selected to sf points (assuming columns 3=Longitude, 4=Latitude)
+    stations_sf <- st_as_sf(SelectedStations, coords = c(3,4), crs = 4326)
+    base_map <- base_map + tm_shape(stations_sf) + tm_dots(col = "darkblue", size = 1)
+  }
+  #
+  #Define popup variables and station ID column based on DataSource
+  if (DataSource == "Portal") {
+    popup_vars <- c("StationID" = "MonitoringLocationIdentifier", 
+                    "Latitude" = "LatitudeMeasure", 
+                    "Longitude" = "LongitudeMeasure", 
+                    "Samples" = "N")
+  } else if (DataSource == "WA") {
+    popup_vars <- c("StationID" = "StationID", 
+                    "Latitude" = "Actual_Latitude", 
+                    "Longitude" = "Actual_Longitude", 
+                    "Samples" = "N")
+  } else if (DataSource == "FIM") {
+    popup_vars <- c("StationID" = "Reference", 
+                    "Latitude" = "Latitude", 
+                    "Longitude" = "Longitude", 
+                    "Samples" = "N")
+  } else {
+    stop("Currently unsupported DataSource")
+  }
+  #
+  #Add Stations_sf points with colored dots by KML
+  map <- base_map + 
+    tm_shape(Stations_sf) + 
+    tm_dots(col = "KML", palette = c(In = "red", Out = "black"), size = 0.5, legend.show = TRUE,
+            popup.vars = popup_vars) +
+    tm_layout(main.title = paste(SiteCode, DataSource, "WQ Stations", sep = " "))
+  #
+  #Convert to leaflet and print
+  map_leaflet <- tmap_leaflet(map)
+  print(map_leaflet)
+  return(map_leaflet)
+}
 #
 #
 #
@@ -446,110 +872,112 @@ location_boundary <- function(SelectionType, SelectedStations, BoundingBox, Proj
 #
 #
 ##Station additions or removals, final output file
-Modified_data <- function(Selection_Method, Adding, Removing, ProjectCode){
+Modified_data <- function(Selection_Method, Adding = NULL, Removing = NULL, ProjectCode){
   ##Code (3-4 letters preferred) to identify project selected data is for:
   Project_code <- ProjectCode
+  # Helper function to check if Adding/Removing is valid (non-null, non-NA, non-empty)
+  is_valid_df <- function(df) {
+    if (missing(df)) return(FALSE)
+    if (is.null(df)) return(FALSE)
+    if (is.na(df)) return(FALSE)
+    if (is.data.frame(df) && nrow(df) == 0) return(FALSE)
+    TRUE
+  }
+  
+  hasAdding <- is_valid_df(Adding)
+  hasRemoving <- is_valid_df(Removing)
+  #
   if(interactive()){
     result <- select.list(c("Yes", "No"), title = "\nCan the modified data be saved locally to the 'Compiled-data' folder?")
     if(result == "No"){
       message("The selected data will not be saved.")
-    } else {
-  #Both NA
-  if(is.na(Adding) == TRUE && is.na(Removing) == TRUE){
+      return(invisible(NULL))
+    }
+  }
+  # Initialize WQ_stations_final
+  WQ_stations_final <- NULL
+  #Both Adding and Removing missing or invalid:
+  if(!hasAdding && !hasRemoving){
     if(Selection_Method == "Station_name"){
       #Selection by station name - no changes
       WQ_stations_final <- WQ_stations_selected
-      write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_name_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+      #write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_name_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
       #
       } else if(Selection_Method == "Bounding_box"){
         #Selection by bounding box - no changes
         WQ_stations_final <- WQ_stations_selected$BoundedStations
-        write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_bounding_box_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+        #write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_bounding_box_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
       } else if(Selection_Method == "Estuary"){
         WQ_stations_final <- WQ_stations_selected$BoundedStations
-        write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-      } else {WQ_stations_final <- (paste0("Code not yet written for using ", Selection_Method, "."))}
+        #write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
+      } else {
+        stop(paste0("Code not yet written for using ", Selection_Method, "."))
+      }
     #END BOTH NA
-  } else if((length(Adding) > 1 || is.na(Adding) != TRUE)  || (length(Removing) > 1 || is.na(Removing) != TRUE)){
-    #If either has station
-    if(Selection_Method == "Station_name"){
-      #Selection by station - with changes
-      if(Data_source == "Portal"){
-        if(is.na(Adding) == TRUE && is.na(Removing) != TRUE){WQ_stations_final <- WQ_stations_selected %>% subset(!MonitoringLocationIdentifier %in% Removing$StationID)
-        } else {WQ_stations_final <- rbind(WQ_stations_selected, WQ_selected %>% subset(MonitoringLocationIdentifier %in% Adding$StationID) %>% left_join(Adding, by = c("MonitoringLocationIdentifier" = "StationID")))}
-        write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_name_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-        #Selection by station with other data sources:
-      } else if(Data_source == "FIM"){
-        if(is.na(Adding) == TRUE && is.na(Removing) != TRUE){WQ_stations_final <- WQ_stations_selected %>% subset(!Reference %in% Removing$StationID)
-        } else {WQ_stations_final <- rbind(WQ_stations_selected, WQ_selected %>% subset(Reference %in% Adding$StationID) %>% left_join(Adding, by = c("Reference" = "StationID")))}
-        write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_name_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-        #Selection by station with other data sources:
-      } else {WQ_stations_final <- (paste0("Adding or removing stations by name for ", Data_source, "is not yet supported."))}
-      } else if(Selection_Method == "Bounding_box"){
-        #Selection by bounding box - with changes
-        WQ_stations_selected_bb <- WQ_stations_selected$BoundedStations
-        if(Data_source == "Portal"){
-          if(is.na(Adding) == TRUE && is.na(Removing) != TRUE){WQ_stations_final <- WQ_stations_selected_bb %>% subset(!MonitoringLocationIdentifier %in% Removing$StationID)
-          } else {WQ_stations_final <- rbind(WQ_stations_selected, WQ_selected %>% subset(MonitoringLocationIdentifier %in% Adding$StationID) %>% left_join(Adding, by = c("MonitoringLocationIdentifier" = "StationID")))}
-          write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_bounding_box_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          #Selection by bounding box with other data sources
-        } else if(Data_source == "FIM"){
-          if(is.na(Adding) == TRUE && is.na(Removing) != TRUE){WQ_stations_final <- WQ_stations_selected_bb %>% subset(!Reference %in% Removing$StationID)
-          } else {WQ_stations_final <- rbind(WQ_stations_selected, WQ_selected %>% subset(Reference %in% Adding$StationID) %>% left_join(Adding, by = c("Reference" = "StationID")))}
-          write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_bounding_box_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          #Selection by bounding box with other data sources
-        } else {WQ_stations_final <- (paste0("Code not yet written for using bounding box to include/exclude ", Data_source, " stations."))}
-        } else if(Selection_Method == "Estuary"){
-          if(Data_source == "Portal"){
-            if(is.na(Adding) == TRUE && is.na(Removing) != TRUE){WQ_stations_final <- WQ_stations_selected$BoundedStations %>% subset(!MonitoringLocationIdentifier %in% Removing$StationID)
-            } else {WQ_stations_final <- rbind(WQ_selected %>% filter(MonitoringLocationIdentifier %in% WQ_stations_selected$BoundedStations$MonitoringLocationIdentifier), WQ_selected %>% subset(MonitoringLocationIdentifier %in% Adding$StationID) %>% left_join(Adding, by = c("MonitoringLocationIdentifier" = "StationID")))}
-            write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-            #Selection by bounding box with other data sources
-          } else if(Data_source == "FIM"){
-            if(is.na(Adding) == TRUE && is.na(Removing) != TRUE){WQ_stations_final <- WQ_stations_selected_bb %>% subset(!Reference %in% Removing$StationID)
-            } else {WQ_stations_final <- rbind(WQ_selected %>% filter(MonitoringLocationIdentifier %in% WQ_stations_selected$BoundedStations$MonitoringLocationIdentifier), WQ_selected %>% subset(Reference %in% Adding$StationID) %>% left_join(Adding, by = c("Reference" = "StationID")))}
-            write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-            #Selection by bounding box with other data sources
-          } else {WQ_stations_final <- (paste0("Code not yet written for using bounding box to include/exclude ", Data_source, " stations."))}
-        }
-    } else if(is.na(Adding) != TRUE && is.na(Removing) != TRUE){
-      if(Selection_Method == "Station_name"){
-        if(Data_source == "Portal"){
-          WQ_stations_final <- rbind(WQ_stations_selected, 
-                                     WQ_selected %>% subset(MonitoringLocationIdentifier %in% Adding$StationID) %>% left_join(Adding, by = c("MonitoringLocationIdentifier" = "StationID")))  %>% subset(!MonitoringLocationIdentifier %in% Removing$StationID)
-          write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_name_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          #Selection by station with other data sources:
-        } else if(Data_source == "FIM"){
-          WQ_stations_final <- rbind(WQ_stations_selected, 
-                                     WQ_selected %>% subset(Reference %in% Adding$StationID) %>% left_join(Adding, by = c("Reference" = "StationID")))  %>% subset(!Reference %in% Removing$StationID)
-          write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_name_selected_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          #Selection by station with other data sources:
-        } else {WQ_stations_final <- (paste0("Adding or removing stations by name for ", Data_source, "is not yet supported."))}
-        } else if(Selection_Method == "Bounding_box"){
-          if(Data_source == "Portal"){
-            WQ_stations_final <- rbind(WQ_stations_selected, 
-                                       WQ_selected %>% subset(MonitoringLocationIdentifier %in% Adding$StationID) %>% left_join(Adding, by = c("MonitoringLocationIdentifier" = "StationID")))  %>% subset(!MonitoringLocationIdentifier %in% Removing$StationID)
-            write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_bounding_box_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          } else if(Data_source == "FIM"){
-            WQ_stations_final <- rbind(WQ_stations_selected, 
-                                       WQ_selected %>% subset(Reference %in% Adding$StationID) %>% left_join(Adding, by = c("Reference" = "StationID")))  %>% subset(!Reference %in% Removing$StationID)
-            write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_bounding_box_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          } else {WQ_stations_final <- (paste0("Adding or removing stations by name for ", Data_source, "is not yet supported."))}
-        } else if(Selection_Method == "Estuary"){
-          if(Data_source == "Portal"){
-            WQ_stations_final <- rbind(WQ_selected %>% filter(MonitoringLocationIdentifier %in% WQ_stations_selected$BoundedStations$MonitoringLocationIdentifier), 
-                                       WQ_selected %>% subset(MonitoringLocationIdentifier %in% Adding$StationID) %>% left_join(Adding, by = c("MonitoringLocationIdentifier" = "StationID")))  %>% subset(!MonitoringLocationIdentifier %in% Removing$StationID)
-            write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          } else if(Data_source == "FIM"){
-            WQ_stations_final <- rbind(WQ_selected %>% filter(MonitoringLocationIdentifier %in% WQ_stations_selected$BoundedStations$MonitoringLocationIdentifier), 
-                                       WQ_selected %>% subset(Reference %in% Adding$StationID) %>% left_join(Adding, by = c("Reference" = "StationID")))  %>% subset(!Reference %in% Removing$StationID)
-            write_xlsx(WQ_stations_final, paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_estuary_area_", Project_code, "_", Begin_data, "_", End_data,".xlsx"), format_headers = TRUE)
-          } else {WQ_stations_final <- (paste0("Adding or removing stations by name for ", Data_source, "is not yet supported."))}
-        }
+  } else {
+    #At least one of Adding or Removing is valid
+    #
+    #Helper: get base stations depending on Selection_Method
+    get_base_stations <- function() {
+      if (Selection_Method == "Station_name") {
+        return(WQ_stations_selected)
+      } else if (Selection_Method %in% c("Bounding_box", "Estuary")) {
+        return(WQ_stations_selected$BoundedStations)
+      } else {
+        stop(paste0("Code not yet written for using ", Selection_Method, "."))
+      }
     }
+    base_stations <- get_base_stations()
+    #
+    #Helper: subset and join for Adding
+    add_stations <- function(base, adding_df) {
+      if (!hasAdding) return(base)
+      if (Data_source == "Portal") {
+        added <- WQ_selected %>% 
+          filter(MonitoringLocationIdentifier %in% adding_df$StationID) %>% 
+          left_join(adding_df, by = c("MonitoringLocationIdentifier" = "StationID"))
+      } else if (Data_source == "FIM") {
+        added <- WQ_selected %>% 
+          filter(Reference %in% adding_df$StationID) %>% 
+          left_join(adding_df, by = c("Reference" = "StationID"))
+      } else {
+        stop(paste0("Adding stations by name for ", Data_source, " is not yet supported."))
+      }
+      return(bind_rows(base, added))
     }
+    #Helper: remove stations
+    remove_stations <- function(df, removing_df) {
+      if (!hasRemoving) return(df)
+      if (Data_source == "Portal") {
+        return(df %>% filter(!MonitoringLocationIdentifier %in% removing_df$StationID))
+      } else if (Data_source == "FIM") {
+        return(df %>% filter(!Reference %in% removing_df$StationID))
+      } else {
+        stop(paste0("Removing stations by name for ", Data_source, " is not yet supported."))
+      }
+    }
+    #
+    # Compose final stations
+    WQ_stations_final <- add_stations(base_stations, Adding)
+    WQ_stations_final <- remove_stations(WQ_stations_final, Removing)
+    #
   }
-  return(print(head(WQ_stations_final)))
+      #Write output file if saving is enabled and WQ_stations_final is valid
+      if (exists("result") && result == "Yes" && !is.null(WQ_stations_final)) {
+        # Compose filename suffix based on Selection_Method
+        suffix <- switch(Selection_Method,
+                         Station_name = "name_selected",
+                         Bounding_box = "bounding_box",
+                         Estuary = "estuary_area",
+                         "unknown_method")
+        WQ_stations_final_export <- WQ_stations_final %>% mutate(geometry = sf::st_as_text(geometry))
+        filename <- paste0("Data/Compiled-data/", Site_code, "_", Data_source, "_", suffix, "_", Project_code, "_", Begin_data, "_", End_data, ".xlsx")
+        #
+        write_xlsx(WQ_stations_final_export, filename, format_headers = TRUE)  
+      } 
+      
+      print(head(WQ_stations_final))
+      return(invisible(WQ_stations_final))
   }
 #
 #
@@ -964,6 +1392,90 @@ summary.autofitVariogram <- function(object, ...) {
 #
 ####Data summarization functions####
 #
+#Load WQ data file
+load_WQ_data <- function(){
+  if(Folder == "compiled" && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the data be saved locally to the project version folder?")
+    files <- list.files(path = "Data/Compiled-data/", 
+                        pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
+    WQ_data <- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+      dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
+                    Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
+    
+    #Check if Latitude and Longitude columns exist and are not all NA
+    lat_exists <- "Latitude" %in% colnames(WQ_data) && any(!is.na(WQ_data$Latitude))
+    long_exists <- "Longitude" %in% colnames(WQ_data) && any(!is.na(WQ_data$Longitude))
+    
+    if(!(lat_exists && long_exists)){
+      #Try to find a geometry column (common names: geometry, geom, Shape, WKT, etc.)
+      geom_col <- grep("geometry|geom|shape|wkt", tolower(colnames(WQ_data)), value = TRUE)
+      if(length(geom_col) > 0){
+        #Use first geometry column found
+        geom_col <- geom_col[1]
+        #Convert to sf object assuming WKT format
+        sf_points <- tryCatch({
+          st_as_sfc(WQ_data[[geom_col]], crs = 4326)
+        }, error = function(e) NULL)
+        if(!is.null(sf_points)){
+          coords <- st_coordinates(sf_points)
+          WQ_data$Longitude <- coords[,1]
+          WQ_data$Latitude <- coords[,2]
+        } else {
+          message("Geometry column found but could not parse coordinates.")
+        }
+      } else {
+        message("No geometry column found and Latitude/Longitude missing.")
+      }
+    }
+    
+    WQ_data <<- WQ_data
+    #
+    if(result == "Yes"){
+      write_xlsx(WQ_data, paste0("../",Site_code, "_", Version,"/Data/", Site_code, "_cleaned_WQ_data.xlsx"), format_headers = TRUE)
+      } else {
+        message("A copy of the data will not be saved to the project folder.")
+        } 
+    } else {
+      paste("Code needs to be updated for 'final' folder location.")
+    }
+}
+
+#
+#
+#Load and clip state grids to estuary area
+#library(sf)
+#library(dplyr)
+load_site_grid <- function(StateGrid, SiteArea, Alt_Grid = NA) {
+  #Load primary PicoGrid
+  PicoGrid <- st_read(
+    paste0("../Reference files/Grids/Florida_PicoGrid_WGS84_", StateGrid, "/Florida_PicoGrid_WGS84_", StateGrid, "_clip.shp"),
+    quiet = TRUE
+  )
+  #Load alternative PicoGrid if provided and not NA
+  if (!is.na(Alt_Grid)) {
+    Alt_PicoGrid <- st_read(
+      paste0("../Reference files/Grids/Florida_PicoGrid_WGS84_", Alt_Grid,"/Florida_PicoGrid_WGS84_", Alt_Grid, "_clip.shp"),
+      quiet = TRUE
+    )
+  }
+  #Filter grids by intersection with Site_area
+  PicoGrid_clipped <- PicoGrid[lengths(st_intersects(PicoGrid, SiteArea)) > 0, ]
+  
+  if (!is.na(Alt_Grid)) {
+    Alt_PicoGrid_clipped <- Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, SiteArea)) > 0, ]
+    #Combine clipped grids
+    Site_Grid <- bind_rows(PicoGrid_clipped, Alt_PicoGrid_clipped) %>%
+      rename(Longitude = Long_DD_X, Latitude = Lat_DD_Y)
+    #Clean up
+    rm(PicoGrid, Alt_PicoGrid, PicoGrid_clipped, Alt_PicoGrid_clipped)
+  } else {
+    Site_Grid <- PicoGrid_clipped %>%
+      rename(Longitude = Long_DD_X, Latitude = Lat_DD_Y)
+    rm(PicoGrid, PicoGrid_clipped)
+  }
+  return(Site_Grid)
+}
+#
 summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
   #
   Time_period <- match.arg(Time_period)
@@ -993,17 +1505,54 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     threshold_value <<- as.numeric(Threshold_parameters[2])
   }
   #
-  ##Clean and group data
-  temp_df <- data_frame %>% 
-    #Filter to desired parameter
-    dplyr::filter(str_detect(Parameter, Parameter_name)) %>%
-    #Add in missing group columns
-    mutate(Year = year(as.Date(ActivityStartDate)),
-           Month = month(as.Date(ActivityStartDate), label = TRUE)) %>%
-    #Assign quarters, starting at month specified or default start of January
-    {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
-    #Filter to specified months if applicable
-    {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . } %>%
+  #Function to filter and prepare temp_df based on Parameter_name
+  get_temp_df <- function(param_name) {
+    data_frame %>% 
+      #Filter to desired parameter
+      dplyr::filter(str_detect(Parameter, param_name)) %>%
+      #Add in missing group columns
+      mutate(Year = year(as.Date(ActivityStartDate)),
+             Month = month(as.Date(ActivityStartDate), label = TRUE)) %>%
+      #Assign quarters, starting at month specified or default start of January
+      {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
+      #Filter to specified months if applicable
+      {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . }
+  }
+  #
+  #Initial filtering
+  temp_df <- get_temp_df(Parameter_name)
+  #List unique Parameter values in temp_df
+  unique_params <- unique(data_frame$Parameter)
+  cat("Current paramter value:\n")
+  print(Parameter_name)
+  cat("\n Unique Parameter values found:\n")
+  print(unique_params)
+  #
+  #Prompt to continue or update Parameter_name:
+  if(interactive()){
+    repeat {
+      user_input <- readline(prompt = "Type 'c' to continue with current Parameter_name, or enter a new Parameter_name to update: \n(Note: Changing the parameter value here will change the 'Param_name' object. \n Enter a new name without quotation marks.)")
+      user_input <- trimws(user_input)
+      if(tolower(user_input) == "c") {
+        # Continue with current Parameter_name
+        cat(paste("Continuing with current parameter:", Parameter_name))
+        break
+      } else if(nchar(user_input) > 0) {
+        # Update Parameter_name and re-filter
+        Parameter_name <- user_input
+        Param_name <<- user_input
+        temp_df <- get_temp_df(Parameter_name)
+        cat("Updated to parameter value:", Parameter_name, "\n")
+        break
+      } else {
+        cat("Invalid input. Please type 'c' or enter a new Parameter_name.\n")
+      }
+    }
+  } else {
+    cat("Non-interactive session detected; continuing with current Parameter_name.\n")
+  }
+  #Continue with grouping and summarizing
+  temp_df <- temp_df %>%
     #Grouping for evals: station, specified time period
     group_by(Estuary, Latitude, Longitude, Parameter, !!sym(Time_period))
   #
@@ -1030,6 +1579,7 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
     dplyr::select(any_of(c("Year", "Month", "Quarter")), Longitude, Latitude, Statistic, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
     rename(Working_Param = any_of(Param_name))
   #
+  message(Param_name," summarized by ", Summ_method)
   return(output_data)
   #
 }
@@ -1116,80 +1666,101 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
   } %>%
     summarise(Count = n()),
   temp_raw %>% summarise(Total = n())) %>%
-    #Proportion of samples realted to threshold
+    #Proportion of samples related to threshold
     mutate(Threshold = Count/Total)
   #
+  temp <- rbind(temp, temp_raw %>% anti_join(temp) %>% summarise(Total = n()) %>% mutate(Count = 0, Threshold = 0/Total))
     return(temp)
 }
 #
 #
 ####Interpolation####
 #
-perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Site_Grid_df, Parameter = Param_name) {
+perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter) {
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
-  #Initiate lists 
-  idw_output <- list()
-  idw_spdf <- list()
-  idw_nn <- list()
-  idw_Site <- list()
-  # Create a progress bar
-  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 4,  
-                         complete = "=", incomplete = "-", current = ">",
-                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #Progress bar setup
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = (length(stats) * 4) + 2,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
   #
   tryCatch({
-    #Loop over each statistic
-    for(i in seq_along(stats)){
-      ##MODELLING:
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+      }
+    #Initialize lists to store results
+    idw_nn <- list()
+    idw_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf and get centroids
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    #
+    for(i in seq_along(stats)) {
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
-      # Filter data for current statistic
+      #Filter data for current statistic
       stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
-      ##IDW: model(Parameter), data to use, grid to apply to 
-      idw_model <- suppressMessages(idw(stat_data$Working_Param~1, stat_data, newdata = grid))
-      #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      idw_output[[i]] <- as.data.frame(idw_model) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>% 
+      #
+      #IDW interpolation (power=2 by default)
+      idw_model <- suppressMessages(idw(formula = Working_Param ~ 1, locations = stat_data, newdata = grid, idp = 2))
+      #
+      #Convert to data.frame and rename columns
+      idw_df <- as.data.frame(idw_model) %>% rename(Longitude = x1, Latitude = x2, Prediction = var1.pred) %>%
         mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
-      #Convert interpolated values to spatial data
-      idw_spdf[[i]] <- SpatialPointsDataFrame(coords = idw_output[[i]][,c("Longitude","Latitude")], data = idw_output[[i]][c("Statistic", "Pred_Value")], 
-                                              proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
       #
-      #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-      idw_nn[[i]] <- dismo::voronoi(idw_spdf[[i]], ext = extent(Site_Grid)) 
+      #Convert to SpatialPointsDataFrame
+      coordinates(idw_df) <- ~Longitude + Latitude
+      proj4string(idw_df) <- proj4string(idw_model)
+      #
+      #Create Voronoi polygons clipped to grid extent
+      idw_nn[[i]] <- dismo::voronoi(idw_df, ext = raster::extent(grid))
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
-      #Determine overlay of data on SiteGrid
-      idw_Site[[i]] <- st_as_sf(intersect(idw_nn[[i]], Site_Grid_spdf))
+      #
+      # Convert voronoi polygons to sf
+      voronoi_sf <- st_as_sf(idw_nn[[i]])
+      #
+      #Spatial join: assign Voronoi polygon values to centroids, join centroids with voronoi polygons by spatial intersection
+      centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      #Rename column based on model type
-      names(idw_Site[[i]])[names(idw_Site[[i]]) == "Pred_Value"] <- "Pred_Value_idw"
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
+      #Rename prediction column
+      centroids_joined <- centroids_joined %>%
+        rename(Pred_Value_idw = Pred_Value)
+      #
+      #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
+      idw_Site[[i]] <- site_sf_temp
+      #
     }
-    close(pb)
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
-  })
+    })
   #
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
+  #
+  pb$terminate()
+  pb_active <- FALSE
   return(idw_Site)
 }
 #
@@ -1198,70 +1769,99 @@ perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_
   WQsumm <- WQ_summ
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
+  # Create a progress bar
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = (length(stats) * 3)+2,  
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
   #Initiate lists 
   nn_model <- list()
   nn_Site <- list()
-  # Create a progress bar
-  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 3,  
-                         complete = "=", incomplete = "-", current = ">",
-                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  #
   #
   tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #
+    #Convert Site_Grid_spdf polygons to sf
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    # 
     #Loop over each statistic
     for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ] 
       WQ_data_stat <- WQsumm %>% filter(Statistic == stats[i])
-      ##NN: model(Parameter), data to use, grid to apply to 
-      nn_model[[i]] <- st_as_sf(voronoi(x = vect(WQ_data_stat, geom=c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs"), bnd = Site_area))
+      ##NN: Convert to terra vect and create Voronoi polygons clipped to Site_area
+      vect_data <- vect(WQ_data_stat, geom = c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs")
+      nn_model[[i]] <- st_as_sf(voronoi(x = vect_data, bnd = Site_area))
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
       #Assign predictions to grid
-      nn_Site[[i]] <- st_intersection(nn_model[[i]], st_as_sf(Site_Grid %>% dplyr::select(Latitude:MGID)))
+      nn_joined <- st_join(centroids_sf, nn_model[[i]][, c("Working_Param")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      #Rename column based on model type
-      names(nn_Site[[i]])[names(nn_Site[[i]]) == "Working_Param"] <- "Pred_Value_nn"
+      nn_joined <- nn_joined %>% dplyr::rename(Pred_Value_nn = Working_Param)
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
-    }
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
+      #Join centroid predictions back to Site_Grid polygons
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(nn_joined)[, c("PGID", "Pred_Value_nn")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
+      nn_Site[[i]] <- site_sf_temp
+      }
   })
   #
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
+  #
+  pb$terminate()
+  pb_active <- FALSE
   return(nn_Site)
 }
 #
-perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_Grid, Parameter = Param_name) {
+perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_Grid_spdf, Parameter = Param_name) {
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
-  #Initiate lists 
-  tps_model <- list()
-  tps_over <- list()
-  tps_Site <- list()
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 3,  
+                         total = (length(stats) * 3)+2,  
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
   #
   tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #Initiate lists 
+    tps_model <- list()
+    tps_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf, get centroids, area as terra for speed
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    centroids_sf <- centroids_sf %>% dplyr::select(PGID:MGID)
+    Site_area_vec <- vect(Site_area)
+    #
     #Loop over each statistic
     for(i in seq_along(stats)){
       ##MODELLING:
@@ -1273,112 +1873,155 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
       Param_vec <- vect(stat_data)
       crs(Param_vec) <- "EPSG:4326"
       Param_ras <- rasterize(Param_vec, raster_t, field = "Working_Param")
+      #Extract valid calles and values for TPS
+      vals <- values(Param_ras)
+      valid_idx <- which(!is.na(vals))
+      coords <- xyFromCell(Param_ras, valid_idx)
+      vals_valid <- vals[valid_idx]
+      #coords_valid <- coords[valid_idx, , drop = FALSE]
       #thin plate spline model
-      tps_model_a <- interpolate(raster_t, Tps(xyFromCell(Param_ras, 1:ncell(Param_ras)),
-                                               values(Param_ras)))
-      #Limit data to area of interest
-      tps_model[[i]] <- crop(mask(tps_model_a, Site_area),Site_area) %>% as.polygons() %>% as("Spatial")
+      tps_fit <- Tps(coords, vals_valid)
+      all_cords <- xyFromCell(raster_t, 1:ncell(raster_t))
+      interp_vals <- predict(tps_fit, all_cords)
+      tps_raster <- raster_t
+      values(tps_raster) <- interp_vals
+      #Crop and mask to site
+      tps_crop <- crop(tps_raster, Site_area_vec)
+      tps_mask <- mask(tps_crop, Site_area_vec)
+      #Extract points, convert to sf
+      pts_mat <- terra::as.points(tps_mask)#rasterToPoints(tps_mask)
+      tps_model[[i]] <- st_as_sf(pts_mat, coords = c("x", "y"), crs = site_crs)
+      tps_model_simp <- st_simplify(tps_model[[i]], dTolerance = 10)
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
-      #Get mean data for each location
-      tps_Site[[i]] <- st_intersection(Site_Grid %>% dplyr::select(Latitude:MGID), st_as_sf(tps_model[[i]])) %>% 
-        mutate(Statistic = stats[i], .before = Latitude)
+      #Get nearest data point for each location
+      nearest_idx <- st_nearest_feature(centroids_sf, tps_model_simp)
+      centroids_joined <- centroids_sf %>%
+        mutate(Statistic = stats[i], Pred_Value_tps = tps_model_simp$lyr.1[nearest_idx])
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
       #Rename column based on model type
-      names(tps_Site[[i]])[names(tps_Site[[i]]) == "lyr.1"] <- "Pred_Value_tps"
+      if ("layer" %in% names(centroids_joined)) {
+        centroids_joined <- centroids_joined %>%
+          rename(Pred_Value_tps = layer)
+      } else if ("lyr.1" %in% names(centroids_joined)) {
+        centroids_joined <- centroids_joined %>%
+          rename(Pred_Value_tps = lyr.1)
+      }
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
-    }
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
-  })
+      #Join centroid predictions back to Site_Grid polygons
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_tps")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
+      tps_Site[[i]] <- site_sf_temp
+      #
+      }
+    })
   #
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
+  #
+  pb$terminate()
+  pb_active <- FALSE
   return(tps_Site)
 }
 #
-perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid, Site_Grid_spdf, Parameter = Param_name) {
+perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter = Param_name) {
   Param_name <- Parameter
   #Determine number of statistics to loop over
   stats <- unique(Site_data_spdf@data$Statistic)
-  #Initiate lists 
-  ok_output <- list()
-  ok_spdf <- list()
-  ok_nn <- list()
-  ok_Site <- list()
   # Create a progress bar
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = length(stats) * 4, 
+                         total = (length(stats) * 4)+2, 
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
   #
   tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #Initiate lists 
+    ok_nn <- list()
+    ok_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf and get centroids
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    site_crs <- st_crs(site_sf)
+    #
     #Loop over each statistic
     for(i in seq_along(stats)){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
-      # Filter data for current statistic
-      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
-      stat_temp <- as.data.frame(stat_data) %>% group_by(Longitude, Latitude, Statistic) %>%
-        summarize(Working_Param = mean(Working_Param, na.rm = TRUE))
-      coordinates(stat_temp) <- ~Longitude + Latitude  # Replace with your actual coordinate columns
-      proj4string(stat_temp) <- CRS(proj4string(stat_data))  # Keep the same projection as the original
-      stat_data <- stat_temp
-      ##IOK: model(Parameter), data to use, grid to apply to 
-      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data, miscFitOptions = list(merge.small.bins = FALSE))
-      ok_model <- gstat(formula = Working_Param~1, locations = stat_data, model = ok_fit$var_model, data = st_as_sf(stat_data))
-      ok_pred <- predict(ok_model, grid)
+      #Filter data for current statistic and aggregate mean Working_Param by location
+      stat_data_df <- {
+        coords <- coordinates(Site_data_spdf)
+        data_df <- Site_data_spdf@data
+        data.frame(Longitude = coords[,1], Latitude = coords[,2], data_df) %>%
+          filter(Statistic == stats[i]) %>%
+          group_by(Longitude, Latitude, Statistic) %>%
+          summarize(Working_Param = mean(Working_Param, na.rm = TRUE), .groups = "drop")
+      }
+      #Convert to sf points with correct CRS
+      stat_data_sf <- st_as_sf(stat_data_df, coords = c("Longitude", "Latitude"), crs = st_crs(Site_data_spdf))
+      #
+      ##OK: model(Parameter), data to use, grid to apply to 
+      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data_sf, miscFitOptions = list(merge.small.bins = FALSE))
+      ok_model <- gstat(formula = Working_Param~1, locations = stat_data_sf, model = ok_fit$var_model)#, data = st_as_sf(stat_data))
+      ok_pred <- predict(ok_model, newdata = grid)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      ok_output[[i]] <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
+      ok_df <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
         mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
+      #Convert to SpatialPointsDataFrame
+      coordinates(ok_df) <- ~Longitude + Latitude
+      proj4string(ok_df) <- proj4string(ok_pred)
+      
       #Convert interpolated values to spatial data
-      ok_spdf[[i]] <- SpatialPointsDataFrame(coords = ok_output[[i]][,c("Longitude","Latitude")], data = ok_output[[i]][c("Statistic", "Pred_Value")], 
-                                             proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-      #Use nearest neighbor to merge values into polygons, limit to bounding box of site area
-      ok_nn[[i]] <- dismo::voronoi(ok_spdf[[i]], ext = extent(Site_Grid))#
+      ok_nn[[i]] <- dismo::voronoi(ok_df, ext = raster::extent(grid))#
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
+      #Convert voronoi polygons to sf
+      voronoi_sf <- st_as_sf(ok_nn[[i]])
       #Determine overlay of data on SiteGrid
-      ok_Site[[i]] <- st_as_sf(intersect(ok_nn[[i]], Site_Grid_spdf))
+      centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      #Rename column based on model type
-      names(ok_Site[[i]])[names(ok_Site[[i]]) == "Pred_Value"] <- "Pred_Value_ok"
+      ##Rename column based on model type
+      centroids_joined <- centroids_joined %>%
+        dplyr::rename(Pred_Value_ok = Pred_Value)
+      #Join centroid predictions back to Site_Grid polygons
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_ok")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
+      ok_Site[[i]] <- site_sf_temp
       #
-      pb$message(paste("Completed:", stats[i], Param_name))
-      
     }
-  }, error = function(e){ 
-    message("The progress bar has ended")
-    pb$terminate()
-  }, finally = {
-    pb$terminate() 
   })
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
   #
-  #Print note if threshold is being used:
-  if(any(stats == "Threshold")){
-    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-  }
+  pb$terminate()
+  pb_active <- FALSE
+  #
   return(ok_Site)
 }
 #
@@ -1476,10 +2119,10 @@ final_interpolation <- function(model = c("ensemble", "single"), selected_models
   if(model == "ensemble"){
     #Determine column names to match and limit to desired columns:
     pred_cols <- paste0("Pred_Value_", selected_models)
-    result_data_final <- results_data %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    result_data_final <- results_data %>% dplyr::select(PGID, Latitude:County, Statistic, all_of(pred_cols))
     #
     #Determine model weights:
-    model_weighting(result_data_final, c(0.75, 0.25))
+    model_weighting(result_data_final, weighting)
     ##Create ensemble values
     ens_model <- result_data_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
       mutate(Pred_Value_ens = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values))))) %>%
@@ -1700,3 +2343,16 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   ##End summary output
 } 
 #
+chunked_intersection <- function(polygons, site, chunk_size = 1000) {
+# Split polygons into chunks
+n <- nrow(polygons)
+chunks <- split(polygons, (seq_len(n) - 1) %/% chunk_size)
+
+# Process each chunk
+result <- map_dfr(chunks, function(chunk) {
+  st_intersection(site, chunk) %>%
+    st_make_valid() %>%  # Ensure valid geometries
+    suppressWarnings()   # Quiet common minor warnings
+})
+return(result)
+}
