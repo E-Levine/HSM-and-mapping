@@ -33,30 +33,115 @@ read_database_data <- function(Site, VersionNumber, dataTypes){
   }
   #
   # Return the list of loaded sheet names for confirmation
-  return(matching_sheets)
+  return(cat("Data objects created:\n", matching_sheets, "\n"))
   #
 }
 
 read_database_data(Site_Code, Version, dataTypes = c("SRVY", "SHBG"))
 #
 ##Clean data
-clean_survey_data <- function(){
-  
+summarize_survey_data <- function(){
+  #
+  # Check for SRVY data
+  objects_to_check <- c("SRVY", "SRVYSH")
+  existing_objects <- objects_to_check[sapply(objects_to_check, exists, envir = .GlobalEnv)]
+  if(length(existing_objects) == 0){
+    stop("No survey data found.")
+  } else {
+    cat("Existing objects to be summarized:", paste(existing_objects, collapse = ", "), "\n")
+    #
+    if ("SRVY" %in% existing_objects) {
+      # Get SRVY lat and long with counts
+      srvy_ll <- full_join(SRVY, 
+                           SampleEvent %>% filter(grepl("SRVY", SampleEventID)),
+                           by = "SampleEventID")
+      #
+      # Summarize live, dead, legals by SampleEventID
+      suppressWarnings(srvy_summ <- srvy_ll %>%
+        mutate(across(c(NumLive, NumDead, NumLegal), as.numeric)) %>%
+        group_by(SampleEventID) %>% 
+        rstatix::get_summary_stats(NumLive, NumDead, NumLegal, type = "mean_sd") %>%
+        pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
+      #
+      assign("SRVY_summary", srvy_summ, envir = globalenv())
+      cat("'SRVY_summary' created\n")
+    } else {
+      cat("SRVY not found; skipping SRVY summary.\n")
+    }
+    
+    #
+    if ("SRVYSH" %in% existing_objects) {
+      # Get SH summary by SampleEventID
+      srvy_sh_summ <- SRVYSH %>% 
+        left_join(SRVY %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID") %>%
+        group_by(SampleEventID) %>% 
+        rstatix::get_summary_stats(type = "mean_sd")
+      #
+      assign("SRVYSH_summary", srvy_sh_summ, envir = globalenv())
+      cat("'SRVYSH_summary' created\n")
+    } else {
+      cat("SRVYSH not found; skipping SRVYSH summary.\n")
+    }
+      #
+  }
+  #
 }
-#Get SRVY lat and long with counts
-srvy_ll <- full_join(SRVY, 
-                     SampleEvent %>% filter(grepl("SRVY", SampleEventID)),
-                     by = "SampleEventID")
-srvy_summ <- srvy_ll %>%
-  mutate(across(c(NumLive, NumDead, NumLegal), as.numeric)) %>%
-  group_by(SampleEventID) %>% 
-  rstatix::get_summary_stats(NumLive, NumDead, NumLegal, type = "mean_sd") %>%
-  pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}")
-
-srvy_sh_summ <- SRVYSH %>% 
-  left_join(SRVY %>% dplyr::select(SampleEventID, QuadratID)) %>%
-  group_by(SampleEventID) %>% 
-  rstatix::get_summary_stats(type = "mean_sd")
-
+#
+summarize_survey_data()
+#
+#
+summarize_shellBudget_data <- function(){
+  #
+  # Check for SRVY data
+  objects_to_check <- c("SHBG", "SHBGSH")
+  existing_objects <- objects_to_check[sapply(objects_to_check, exists, envir = .GlobalEnv)]
+  if(length(existing_objects) == 0){
+    stop("No survey data found.")
+  } else {
+    cat("Existing objects to be summarized:", paste(existing_objects, collapse = ", "), "\n")
+    #
+    if ("SHBG" %in% existing_objects) {
+      # Get SRVY lat and long with counts
+      shbg_ll <- full_join(SHBG, 
+                           SampleEvent %>% filter(grepl("SHBG", SampleEventID)),
+                           by = "SampleEventID")
+      #
+      # Summarize live, dead, legals by SampleEventID
+      suppressWarnings(shbg_summ <- shbg_ll %>%
+        dplyr::rename_with(~ str_remove(.x, "Oyster"), everything()) %>%
+        mutate(across(c(NumLives, NumDeads), as.numeric)) %>%
+        group_by(SampleEventID) %>% 
+        rstatix::get_summary_stats(NumLives, NumDeads, type = "mean_sd") %>%
+        pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
+      #
+      assign("SHBG_summary", shbg_summ, envir = globalenv())
+      cat("'SHBG_summary created\n")
+    } else {
+      cat("SHBG not found; skipping SHBG summary.\n")
+    }
+    browser()
+    
+    #
+    if ("SHBGSH" %in% existing_objects) {
+      # Get SH summary by SampleEventID
+      shbg_sh_summ <- SHBGSH %>% 
+        left_join(SHBG %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID") %>%
+        mutate(across(c(ShellHeight), as.numeric)) %>%
+        group_by(SampleEventID) %>% 
+        rstatix::get_summary_stats(ShellHeight, type = "mean_sd")
+      #
+      assign("SHBGSH_summary", shbg_sh_summ, envir = globalenv())
+      cat("'SHBGSH_summary' created\n")
+    } else {
+      cat("SHBGSH not found; skipping SHBGSH summary.\n")
+    }
+    #
+  }
+  #
+}
+#
+summarize_shellBudget_data()
+#
+##Add counts <25, 25-75, >75 to both SH tables
 #
 ##Save cleaned data 
