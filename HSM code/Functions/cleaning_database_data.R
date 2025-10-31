@@ -36,7 +36,7 @@ read_database_data <- function(Site, VersionNumber, dataTypes){
   return(cat("Data objects created:\n", matching_sheets, "\n"))
   #
 }
-
+#
 read_database_data(Site_Code, Version, dataTypes = c("SRVY", "SHBG"))
 #
 ##Clean data
@@ -58,10 +58,11 @@ summarize_survey_data <- function(){
       #
       # Summarize live, dead, legals by SampleEventID
       suppressWarnings(srvy_summ <- srvy_ll %>%
-        mutate(across(c(NumLive, NumDead, NumLegal), as.numeric)) %>%
-        group_by(SampleEventID) %>% 
-        rstatix::get_summary_stats(NumLive, NumDead, NumLegal, type = "mean_sd") %>%
-        pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
+                         mutate(across(c(NumLive, NumDead, NumLegal), as.numeric)) %>%
+                         mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) %>%
+                         group_by(SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus) %>% 
+                         rstatix::get_summary_stats(NumLive, NumDead, NumLegal, type = "mean_sd") %>%
+                         pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
       assign("SRVY_summary", srvy_summ, envir = globalenv())
       cat("'SRVY_summary' created\n")
@@ -72,10 +73,12 @@ summarize_survey_data <- function(){
     if ("SRVYSH" %in% existing_objects) {
       # Get SH summary by SampleEventID
       srvy_df <- SRVYSH %>% 
-        left_join(SRVY %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID") 
+        left_join(SRVY %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID") %>%
+        left_join(SampleEvent %>% filter(grepl("SRVY", SampleEventID)), by = "SampleEventID") %>%
+        mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec))
       # SHs
       srvy_sh_summ <- srvy_df %>%
-        group_by(SampleEventID) %>% 
+        group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
         rstatix::get_summary_stats(type = "mean_sd")
       # Counts
       Sizes <- srvy_df %>% 
@@ -85,13 +88,14 @@ summarize_survey_data <- function(){
                                                  TRUE ~ "Z")))
       # Combine totals and size counts
       srvy_counts <- left_join(Sizes %>% 
-                                 group_by(SampleEventID, Size) %>%
+                                 group_by(SampleEventID,Size) %>%
                                  summarise(Count = n()) %>%
                                  pivot_wider(names_from = Size, values_from = Count),
                                Sizes %>% 
-                                 group_by(SampleEventID) %>%
+                                 group_by(SampleEventID, LatitudeDec, LongitudeDec) %>%
                                  summarise(Total = n()),
-                               by = "SampleEventID")
+                               by = "SampleEventID") %>%
+        dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything())
       #
       assign("SRVYSH_summary", srvy_sh_summ, envir = globalenv())
       assign("SRVYCounts_summary", srvy_counts, envir = globalenv())
@@ -121,13 +125,14 @@ summarize_shellBudget_data <- function(){
       # Get SRVY lat and long with counts
       shbg_ll <- full_join(SHBG, 
                            SampleEvent %>% filter(grepl("SHBG", SampleEventID)),
-                           by = "SampleEventID")
+                           by = "SampleEventID") %>%
+        mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) 
       #
       # Summarize live, dead, legals by SampleEventID
       suppressWarnings(shbg_summ <- shbg_ll %>%
         dplyr::rename_with(~ str_remove(.x, "Oyster"), everything()) %>%
         mutate(across(c(NumLives, NumDeads), as.numeric)) %>%
-        group_by(SampleEventID) %>% 
+        group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
         rstatix::get_summary_stats(NumLives, NumDeads, type = "mean_sd") %>%
         pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
@@ -141,6 +146,8 @@ summarize_shellBudget_data <- function(){
       # Get SH summary by SampleEventID
       suppressWarnings(shbg_Sizes <- SHBGSH %>% 
                          left_join(SHBG %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID") %>%
+                         left_join(SampleEvent %>% filter(grepl("SHBG", SampleEventID)), by = "SampleEventID") %>%
+                         mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) %>%
                          mutate(across(c(ShellHeight), as.numeric)) %>%
                          dplyr::mutate(Size = as.factor(case_when(ShellHeight < 25 ~ "Spat", 
                                                                   ShellHeight >= 75 ~ "Legal", 
@@ -148,7 +155,7 @@ summarize_shellBudget_data <- function(){
                                                                   TRUE ~ "Z"))))
       # SH means
       shbg_sh_summ <- shbg_Sizes %>%
-        group_by(SampleEventID) %>% 
+        group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
         rstatix::get_summary_stats(ShellHeight, type = "mean_sd")
       # SH counts
       shbg_counts <- left_join(shbg_Sizes %>% 
@@ -156,9 +163,10 @@ summarize_shellBudget_data <- function(){
                                  summarise(Count = n()) %>%
                                  pivot_wider(names_from = Size, values_from = Count),
                                shbg_Sizes %>% 
-                                 group_by(SampleEventID) %>%
+                                 group_by(SampleEventID, LatitudeDec, LongitudeDec) %>%
                                  summarise(Total = n()),
-                               by = "SampleEventID")
+                               by = "SampleEventID") %>%
+        dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything())
       #
       assign("SHBGSH_summary", shbg_sh_summ, envir = globalenv())
       assign("SHBGSHCounts_summary", shbg_counts, envir = globalenv())
