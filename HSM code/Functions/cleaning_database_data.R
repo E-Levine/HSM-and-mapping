@@ -137,7 +137,7 @@ summarize_shellBudget_data <- function(){
         pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
       assign("SHBG_summary", shbg_summ, envir = globalenv())
-      cat("'SHBG_summary created\n")
+      cat("'SHBG_summary' created\n")
     } else {
       cat("SHBG not found; skipping SHBG summary.\n")
     }
@@ -183,6 +183,65 @@ summarize_shellBudget_data <- function(){
 summarize_shellBudget_data()
 #
 #
+compile_data <- function(){
+  #
+  # Check if AllData_summary already exists
+  if (exists("AllData_summary", envir = .GlobalEnv)) {
+    cat("'AllData_summary' already exists. Skipping compilation.\n")
+    return()
+  }
+  #
+  # Define SRVY and SHBG summary groups
+  srvy_summaries <- c("SRVY_summary", "SRVYSH_summary", "SRVYCounts_summary")
+  shbg_summaries <- c("SHBG_summary", "SHBGSH_summary", "SHBGSHCounts_summary")
+  #
+  # Check which groups are fully present
+  srvy_present <- all(sapply(srvy_summaries, exists, envir = .GlobalEnv))
+  shbg_present <- all(sapply(shbg_summaries, exists, envir = .GlobalEnv))
+  #
+  if (!srvy_present && !shbg_present) {
+    stop("Neither SRVY nor SHBG summary sets are fully present. Required: SRVY (", paste(srvy_summaries, collapse = ", "), ") or SHBG (", paste(shbg_summaries, collapse = ", "), ").")
+  }
+  # Initialize empty dataframes for combination
+  srvy_df <- NULL
+  shbg_df <- NULL
+  #
+  if (srvy_present) {
+    # Combine survey data:
+    srvy_df <- full_join(SRVY_summary %>% dplyr::rename("Quads" = n), 
+                         SRVYSH_summary %>% dplyr::select(-variable), 
+                         by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>% 
+      full_join(SRVYCounts_summary,
+                by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>%
+      mutate(DataType = "SRVY")
+    }
+  #
+  if (shbg_present) {
+    # Combine shell budget data
+    shbg_df <- full_join(SHBG_summary %>% dplyr::rename("Quads" = n), 
+                         SHBGSH_summary %>% dplyr::select(-variable), 
+                         by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>% 
+      full_join(SHBGSHCounts_summary, 
+                by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>%
+      mutate(DataType = "SHBG", HarvestStatus = NA) %>%
+      dplyr::rename("NumLive_mean" = NumLives_mean, "NumDead_mean" = NumDeads_mean, 
+                    "NumLive_sd" = NumLives_sd, "NumDead_sd" = NumDeads_sd)
+    }
+  #
+  # Combine available data types
+  data_list <- list(srvy_df, shbg_df)
+  data_list <- data_list[!sapply(data_list, is.null)]
+  all_data <- do.call(rbind, data_list) %>% 
+    dplyr::select(DataType, SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus, Quads, 
+                  contains("NumLive"), contains("NumDead"), 
+                  n, mean, sd, Spat, Adult, everything())
+  #
+  assign("AllData_summary", all_data, envir = globalenv())
+  cat("'AllData_summary' created with available data\n")
+  #
+}
+#
+compile_data()
 ##Save cleaned data 
 output_summary_tables <- function(Site, VersionNumber){
   #
