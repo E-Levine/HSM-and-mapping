@@ -73,7 +73,7 @@ summarize_survey_data <- function(){
     if ("SRVYSH" %in% existing_objects) {
       # Get SH summary by SampleEventID
       srvy_df <- SRVYSH %>% 
-        left_join(SRVY %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID") %>%
+        left_join(SRVY %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID", relationship = "many-to-many") %>%
         left_join(SampleEvent %>% filter(grepl("SRVY", SampleEventID)), by = "SampleEventID") %>%
         mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec))
       # SHs
@@ -145,7 +145,7 @@ summarize_shellBudget_data <- function(){
     if ("SHBGSH" %in% existing_objects) {
       # Get SH summary by SampleEventID
       suppressWarnings(shbg_Sizes <- SHBGSH %>% 
-                         left_join(SHBG %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID") %>%
+                         left_join(SHBG %>% dplyr::select(SampleEventID, QuadratID), by = "QuadratID", relationship = "many-to-many") %>%
                          left_join(SampleEvent %>% filter(grepl("SHBG", SampleEventID)), by = "SampleEventID") %>%
                          mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) %>%
                          mutate(across(c(ShellHeight), as.numeric)) %>%
@@ -187,7 +187,7 @@ compile_data <- function(){
   #
   # Check if AllData_summary already exists
   if (exists("AllData_summary", envir = .GlobalEnv)) {
-    cat("'AllData_summary' already exists. Skipping compilation.\n")
+    cat("'AllData_summary' already exists. Please remove to compile data.\n")
     return()
   }
   #
@@ -213,7 +213,7 @@ compile_data <- function(){
                          by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>% 
       full_join(SRVYCounts_summary,
                 by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>%
-      mutate(DataType = "SRVY")
+      mutate(DataType = "SRVY") 
     }
   #
   if (shbg_present) {
