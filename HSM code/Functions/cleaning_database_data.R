@@ -61,7 +61,8 @@ summarize_survey_data <- function(){
                          mutate(across(c(NumLive, NumDead, NumLegal), as.numeric)) %>%
                          mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) %>%
                          group_by(SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus) %>% 
-                         rstatix::get_summary_stats(NumLive, NumDead, NumLegal, type = "mean_sd") %>%
+                         mutate(DeadRatio = NumLive/(NumLive+NumDead)) %>%
+                         rstatix::get_summary_stats(NumLive, NumDead, NumLegal, DeadRatio, type = "mean_sd") %>%
                          pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
       assign("SRVY_summary", srvy_summ, envir = globalenv())
@@ -130,11 +131,12 @@ summarize_shellBudget_data <- function(){
       #
       # Summarize live, dead, legals by SampleEventID
       suppressWarnings(shbg_summ <- shbg_ll %>%
-        dplyr::rename_with(~ str_remove(.x, "Oyster"), everything()) %>%
-        mutate(across(c(NumLives, NumDeads), as.numeric)) %>%
-        group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
-        rstatix::get_summary_stats(NumLives, NumDeads, type = "mean_sd") %>%
-        pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
+                         dplyr::rename_with(~ str_remove(.x, "Oyster"), everything()) %>%
+                         mutate(across(c(NumLives, NumDeads), as.numeric)) %>%
+                         group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
+                         mutate(DeadRatio = NumLives/(NumLives+NumDeads)) %>%
+                         rstatix::get_summary_stats(NumLives, NumDeads, DeadRatio, type = "mean_sd") %>%
+                         pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
       assign("SHBG_summary", shbg_summ, envir = globalenv())
       cat("'SHBG_summary' created\n")
