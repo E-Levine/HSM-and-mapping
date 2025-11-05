@@ -61,7 +61,7 @@ summarize_survey_data <- function(){
                          mutate(across(c(NumLive, NumDead, NumLegal), as.numeric)) %>%
                          mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) %>%
                          group_by(SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus) %>% 
-                         mutate(DeadRatio = NumLive/(NumLive+NumDead)) %>%
+                         mutate(DeadRatio = NumDead/(NumLive+NumDead)) %>%
                          rstatix::get_summary_stats(NumLive, NumDead, NumLegal, DeadRatio, type = "mean_sd") %>%
                          pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
@@ -137,7 +137,7 @@ summarize_shellBudget_data <- function(){
                          dplyr::rename_with(~ str_remove(.x, "Oyster"), everything()) %>%
                          mutate(across(c(NumLives, NumDeads), as.numeric)) %>%
                          group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
-                         mutate(DeadRatio = NumLives/(NumLives+NumDeads)) %>%
+                         mutate(DeadRatio = NumDeads/(NumLives+NumDeads)) %>%
                          rstatix::get_summary_stats(NumLives, NumDeads, DeadRatio, type = "mean_sd") %>%
                          pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
