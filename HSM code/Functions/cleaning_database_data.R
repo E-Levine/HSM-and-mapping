@@ -96,7 +96,10 @@ summarize_survey_data <- function(){
                                  group_by(SampleEventID, LatitudeDec, LongitudeDec) %>%
                                  summarise(Total = n()),
                                by = "SampleEventID") %>%
-        dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything())
+        dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything()) %>%
+        rowwise() %>%
+        mutate(Presence = ifelse(!is.na(Spat) | !is.na(Adult) | !is.na(Legal), 1, -1)) %>%
+        ungroup()
       #
       assign("SRVYSH_summary", srvy_sh_summ, envir = globalenv())
       assign("SRVYCounts_summary", srvy_counts, envir = globalenv())
@@ -168,7 +171,10 @@ summarize_shellBudget_data <- function(){
                                  group_by(SampleEventID, LatitudeDec, LongitudeDec) %>%
                                  summarise(Total = n()),
                                by = "SampleEventID") %>%
-        dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything())
+        dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything()) %>%
+        rowwise() %>%
+        mutate(Presence = ifelse(!is.na(Spat) | !is.na(Adult) | !is.na(Legal), 1, -1)) %>%
+        ungroup()
       #
       assign("SHBGSH_summary", shbg_sh_summ, envir = globalenv())
       assign("SHBGSHCounts_summary", shbg_counts, envir = globalenv())
@@ -267,7 +273,7 @@ output_summary_tables <- function(Site, VersionNumber){
   # Check if file exists and append date if it does
   if (file.exists(paste0(file_path,base_filename))) {
     date_suffix <- format(Sys.Date(), "%Y-%m-%d")
-    filename <- paste0(Site,"_", VersionNumber,"database_summary_", date_suffix, ".xlsx")
+    filename <- paste0(Site,"_", VersionNumber,"_database_summary_", date_suffix, ".xlsx")
   } else {
     filename <- base_filename
   }
