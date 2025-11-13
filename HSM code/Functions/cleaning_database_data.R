@@ -33,7 +33,8 @@ read_database_data <- function(Site, VersionNumber, dataTypes){
   }
   #
   # Return the list of loaded sheet names for confirmation
-  return(cat("Data objects created:\n", matching_sheets, "\n"))
+  return(cat("Data read from: ", file_path,"\n",
+             "Data objects created:\n", matching_sheets, "\n"))
   #
 }
 #
@@ -61,8 +62,10 @@ summarize_survey_data <- function(){
                          mutate(across(c(NumLive, NumDead, NumLegal), as.numeric)) %>%
                          mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) %>%
                          group_by(SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus) %>% 
-                         mutate(DeadRatio = NumDead/(NumLive+NumDead)) %>%
+                         mutate(DeadRatio = case_when(NumLive == 0 & NumDead == 0 ~ 0,
+                                                      TRUE ~ NumDead/(NumLive+NumDead))) %>%
                          rstatix::get_summary_stats(NumLive, NumDead, NumLegal, DeadRatio, type = "mean_sd") %>%
+                         dplyr::select(-n) %>%
                          pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
       assign("SRVY_summary", srvy_summ, envir = globalenv())
@@ -80,7 +83,8 @@ summarize_survey_data <- function(){
       # SHs
       srvy_sh_summ <- srvy_df %>%
         group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
-        rstatix::get_summary_stats(type = "mean_sd")
+        rstatix::get_summary_stats(type = "mean_sd") %>%
+        rename("SH_n" = n)
       # Counts
       Sizes <- srvy_df %>% 
         dplyr::mutate(Size = as.factor(case_when(ShellHeight < 25 ~ "Spat", 
@@ -99,7 +103,10 @@ summarize_survey_data <- function(){
         dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything()) %>%
         rowwise() %>%
         mutate(Presence = ifelse(!is.na(Spat) | !is.na(Adult) | !is.na(Legal), 1, -1)) %>%
-        ungroup()
+        ungroup() %>%
+        mutate(Spat = case_when(Presence == 1 & is.na(Spat) ~ 0, TRUE ~ Spat),
+               Adult = case_when(Presence == 1 & is.na(Adult) ~ 0, TRUE ~ Adult),
+               Legal = case_when(Presence == 1 & is.na(Legal) ~ 0, TRUE ~ Legal))
       #
       assign("SRVYSH_summary", srvy_sh_summ, envir = globalenv())
       assign("SRVYCounts_summary", srvy_counts, envir = globalenv())
@@ -133,12 +140,13 @@ summarize_shellBudget_data <- function(){
         mutate(LongitudeDec = case_when(LongitudeDec > 0 ~ LongitudeDec*-1, TRUE ~ LongitudeDec)) 
       #
       # Summarize live, dead, legals by SampleEventID
-      suppressWarnings(shbg_summ <- shbg_ll %>%
+      suppressWarnings(shbg_summ <- shbg_ll %>% dplyr::select(-HarvestStatus) %>%
                          dplyr::rename_with(~ str_remove(.x, "Oyster"), everything()) %>%
                          mutate(across(c(NumLives, NumDeads), as.numeric)) %>%
                          group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
                          mutate(DeadRatio = NumDeads/(NumLives+NumDeads)) %>%
                          rstatix::get_summary_stats(NumLives, NumDeads, DeadRatio, type = "mean_sd") %>%
+                         dplyr::select(-n) %>%
                          pivot_wider(names_from = variable, values_from = c(mean, sd), names_glue = "{variable}_{.value}"))
       #
       assign("SHBG_summary", shbg_summ, envir = globalenv())
@@ -161,7 +169,8 @@ summarize_shellBudget_data <- function(){
       # SH means
       shbg_sh_summ <- shbg_Sizes %>%
         group_by(SampleEventID, LatitudeDec, LongitudeDec) %>% 
-        rstatix::get_summary_stats(ShellHeight, type = "mean_sd")
+        rstatix::get_summary_stats(ShellHeight, type = "mean_sd") %>%
+        rename("SH_n" = n)
       # SH counts
       shbg_counts <- left_join(shbg_Sizes %>% 
                                  group_by(SampleEventID, Size) %>%
@@ -174,7 +183,10 @@ summarize_shellBudget_data <- function(){
         dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, everything()) %>%
         rowwise() %>%
         mutate(Presence = ifelse(!is.na(Spat) | !is.na(Adult) | !is.na(Legal), 1, -1)) %>%
-        ungroup()
+        ungroup() %>%
+        mutate(Spat = case_when(Presence == 1 & is.na(Spat) ~ 0, TRUE ~ Spat),
+               Adult = case_when(Presence == 1 & is.na(Adult) ~ 0, TRUE ~ Adult),
+               Legal = case_when(Presence == 1 & is.na(Legal) ~ 0, TRUE ~ Legal))
       #
       assign("SHBGSH_summary", shbg_sh_summ, envir = globalenv())
       assign("SHBGSHCounts_summary", shbg_counts, envir = globalenv())
@@ -216,33 +228,34 @@ compile_data <- function(){
   #
   if (srvy_present) {
     # Combine survey data:
-    srvy_df <- full_join(SRVY_summary %>% dplyr::rename("Quads" = n), 
+    srvy_df <- full_join(SRVY_summary, 
                          SRVYSH_summary %>% dplyr::select(-variable), 
                          by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>% 
       full_join(SRVYCounts_summary,
                 by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>%
       mutate(DataType = "SRVY") 
-    }
+  }
   #
   if (shbg_present) {
     # Combine shell budget data
-    shbg_df <- full_join(SHBG_summary %>% dplyr::rename("Quads" = n), 
+    shbg_df <- full_join(SHBG_summary, 
                          SHBGSH_summary %>% dplyr::select(-variable), 
                          by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>% 
       full_join(SHBGSHCounts_summary, 
                 by = c("SampleEventID", "LatitudeDec", "LongitudeDec")) %>%
       mutate(DataType = "SHBG", HarvestStatus = NA) %>%
       dplyr::rename("NumLive_mean" = NumLives_mean, "NumDead_mean" = NumDeads_mean, 
-                    "NumLive_sd" = NumLives_sd, "NumDead_sd" = NumDeads_sd)
+                    "NumLive_sd" = NumLives_sd, "NumDead_sd" = NumDeads_sd) %>%
+      dplyr::select(SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus, everything())
     }
   #
   # Combine available data types
   data_list <- list(srvy_df, shbg_df)
   data_list <- data_list[!sapply(data_list, is.null)]
   all_data <- do.call(rbind, data_list) %>% 
-    dplyr::select(DataType, SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus, Quads, 
+    dplyr::select(DataType, SampleEventID, LatitudeDec, LongitudeDec, HarvestStatus, 
                   contains("NumLive"), contains("NumDead"), 
-                  n, mean, sd, Spat, Adult, everything())
+                  SH_n, mean, sd, Spat, Adult, everything())
   #
   assign("AllData_summary", all_data, envir = globalenv())
   cat("'AllData_summary' created with available data\n")
