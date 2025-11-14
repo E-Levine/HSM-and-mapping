@@ -10,7 +10,8 @@ Version <- c("v1") #Model version
 SurveyYYMM <- c("2312")
 #
 #
-#Load validation data from matching sahpefiles in Output/Shapefiles folder: SiteCode_Version_validation_data
+#Load validation data from matching shape files in Output/Shapefiles folder: SiteCode_Version_validation_data
+#Currently loads as sfc for potential mapping, can change to df if not mapping later
 load_survey_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "model_srvys"){
   data_dir <- paste0(SiteCode, "_", VersionNumber, "/Output/Shapefiles/")
   output_name <- paste0(SiteCode, "_", VersionNumber, "_validation_data")  
@@ -78,17 +79,99 @@ str(SS_v1_validation_data)
 #
 #
 ### Summarize NumLive, DeadRatio, SpatAdult, Presence by HSMgrp score
-validation_data <- SS_v1_validation_data %>% as.data.frame() %>%
-  rename("NumLive" = contains("NumLive"),
-         "DeadRatio" = contains("DeadRatio")) %>%
-  mutate(DeadRatio = case_when(Spat == 0 & Adult == 0 & Legal == 0 ~ NA, TRUE ~ DeadRatio),
-         SpatAdult = case_when(Spat == 0 & Adult == 0 & Legal == 0 ~ NA, TRUE ~ SpatAdult))
-validation_summary <- validation_data %>%
-  group_by(HSMgrp) %>%
-  rstatix::get_summary_stats(values = c(NumLive, DeadRatio, SpatAdult, Presence), show = c("mean", "sd", "min", "max")) %>%
-  mutate(HSMgrp = factor(HSMgrp, levels = c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")))
-  #pivot_wider(names_from = variable, values_from = c(mean, sd, min, max), names_glue = "{variable}_{.value}"))
+clean_survey_data <- function(surveyData){
+  # checks
+  if (!is.data.frame(surveyData) && !is_tibble(surveyData)) {
+    stop("Input 'surveyData' must be a data frame or tibble.")
+  }
+  #
+  if (!any(grepl("NumLive", names(surveyData)))) {
+    stop("No column containing 'NumLive' found in surveyData.")
+  }
+  if (!any(grepl("DeadRatio", names(surveyData)))) {
+    stop("No column containing 'DeadRatio' found in surveyData.")
+  }
+  required_cols <- c("Spat", "Adult", "Legal", "SpatAdult")
+  missing_cols <- setdiff(required_cols, names(surveyData))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
+  }
+  #
+  # Define na replacement case:
+  na_condition <- (surveyData$Spat %in% c(0, NA) & surveyData$Adult %in% c(0, NA) & surveyData$Legal %in% c(0, NA))
+  #
+  cleaned_data <- surveyData %>% 
+    as.data.frame() %>%
+    # Rename columns for consistency 
+    rename_with(~ sub(".*NumLive.*", "NumLive", .x), matches("NumLive")) %>%
+    rename_with(~ sub(".*DeadRatio.*", "DeadRatio", .x), matches("DeadRatio")) %>%
+    # Replace 0 with NA when proper
+    mutate(DeadRatio = as.numeric(DeadRatio),
+           SpatAdult = as.numeric(SpatAdult),
+           DeadRatio = if_else(na_condition, NA_real_, DeadRatio),
+           SpatAdult = if_else(na_condition, NA_real_, SpatAdult))
+  #
+  return(cleaned_data)
+  #
+}
+#
+validation_data <- clean_survey_data(SS_v1_validation_data)
 head(validation_data)
+#
+summarize_data <- function(cleanedData){
+  # 
+  # checks
+  if (!is.data.frame(cleanedData) && !is_tibble(cleanedData)) {
+    stop("Input 'cleanedData' must be a data frame or tibble.")
+  }
+  if (!any(grepl("HSMgrp", names(cleanedData)))) {
+    stop("No column containing 'HSMgrp' found in cleanedData")
+  }
+  required_cols <- c("NumLive", "DeadRatio", "SpatAdult", "Presence")
+  missing_cols <- setdiff(required_cols, names(cleanedData))
+  if (length(missing_cols) > 0) {
+    stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
+  }
+  for (col in required_cols) {
+    if (!is.numeric(cleanedData[[col]])) {
+      stop(paste("Column", col, "must be numeric for summarization."))
+    }
+  }
+  # Define HSM grps, warn unrepresented grps:
+  expected_levels <- c("0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
+  # Check if all expected levels are present (warn if not)
+  actual_levels <- unique(na.omit(cleanedData$HSMgrp))
+  missing_levels <- setdiff(expected_levels, actual_levels)
+  if (length(missing_levels) > 0) {
+    warning(paste("Expected HSMgrp levels missing:", paste(missing_levels, collapse = ", "), ". Proceeding with available levels."))
+  }
+  #
+  summarized_data <- suppressWarnings(cleanedData %>%
+    mutate(HSMgrp = factor(HSMgrp, levels = expected_levels, ordered = TRUE)) %>%
+    group_by(HSMgrp) %>%
+    summarise(across(
+      all_of(required_cols),
+      list(
+        n = ~ sum(!is.na(.x)),  # Count non-NA values
+        mean = ~ mean(.x, na.rm = TRUE),
+        sd = ~ sd(.x, na.rm = TRUE),
+        min = ~ min(.x, na.rm = TRUE),
+        max = ~ max(.x, na.rm = TRUE)
+      ),
+      .names = "{.col}_{fn}"
+      ),
+      .groups = "drop") %>%
+    # Reorganize output
+    pivot_longer(cols = -HSMgrp, names_to = c("variable", "stat"), names_sep = "_", values_to = "value") %>%
+    pivot_wider(names_from = stat, values_from = value) %>%
+    mutate(min = ifelse(is.infinite(min), NA_real_, min),
+           max = ifelse(is.infinite(max), NA_real_, max))) 
+  #
+  return(summarized_data)
+  #
+}
+#
+validation_summary <- summarize_data(validation_data)
 #
 #
 ## Plot summaries x = score, y = mean values
