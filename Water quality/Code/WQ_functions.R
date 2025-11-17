@@ -1765,6 +1765,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
     clear = FALSE, width = 100, show_after = 0, force = TRUE)
   pb_active <- TRUE
   #
+  StartTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
   cat("Starting time:", format(Sys.time()), "\n")
   #
   tryCatch({
@@ -1857,12 +1858,18 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
     for (i in 2:length(idw_results)) {
       combined_sf <- left_join(combined_sf, st_drop_geometry(idw_results[[i]])[, c("PGID", names(idw_results[[i]])[grep("Pred_Value_", names(idw_results[[i]]))])], by = "PGID")
     }
-    
     # Add combined column if Individual == "Month"
     if (Individual == "Month") {
       monthly_cols <- grep("Pred_Value_", names(combined_sf), value = TRUE)
       combined_sf <- combined_sf %>%
-        mutate(Pred_Value_Combined = rowMeans(dplyr::select(., all_of(monthly_cols)), na.rm = TRUE))
+        mutate(Pred_Value_Combined = {
+          temp_df <- st_drop_geometry(dplyr::select(., all_of(monthly_cols)))  # Drop geometry for rowMeans
+          ifelse(
+          rowSums(!is.na(temp_df)) == 0,
+          NA_real_,
+          rowMeans(temp_df, na.rm = TRUE))
+          }
+          )
     }
     
     # Join back to original site polygons (assuming PGID matches)
@@ -1872,11 +1879,13 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
   #
   pb$tick(tokens = list(step = "Completed processing"))
   Sys.sleep(1/1000)
+  EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
   cat("Ending time:", format(Sys.time()), "\n")
+  print(EndTime - StartTime)
   #
   pb$terminate()
   pb_active <- FALSE
-  return(idw_Site)
+  return(final_sf)
 }
 #
 perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_Grid_df, Parameter = Param_name, WQ_summ) {
