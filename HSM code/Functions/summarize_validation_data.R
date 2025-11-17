@@ -117,6 +117,10 @@ clean_survey_data <- function(surveyData){
 #
 validation_data <- clean_survey_data(SS_v1_validation_data)
 head(validation_data)
+val_df <- validation_data %>%
+  group_by(HSMgrp) %>%
+  mutate(Live_scale = scale(sqrt(NumLive+0.5))[,1]) %>%
+  ungroup()
 #
 summarize_data <- function(cleanedData){
   # 
@@ -208,3 +212,13 @@ FacetTheme <- theme(strip.text.y = element_text(face = "bold", size = 12),
                     strip.background = element_rect(fill = "#CCCCCC"),
                     panel.spacing = unit(0.75, "lines"),
                     strip.text.x = element_text(face = "bold", size = 12))
+#
+val_df %>% group_by(HSMgrp) %>%
+  rstatix::get_summary_stats(Live_scale, show = c("mean", "min", "max")) %>% 
+  mutate(range = max-min)  %>%
+  ggplot(aes(HSMgrp, range))+
+  geom_bar(stat = "identity")+
+  lemon::facet_rep_grid(variable~., scales = "free_y")+
+  scale_y_continuous(expand = c(0,0))+
+  theme_classic() + 
+  basetheme + FacetTheme
