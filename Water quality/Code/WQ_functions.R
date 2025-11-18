@@ -1734,33 +1734,48 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
 #
 #
 ####Interpolation####
-#
+#Updated for Month and Year
 perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter, Individual) {
   Param_name <- Parameter
   # Validate Individual parameter
-  if (!Individual %in% c("Month", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
-    stop("Individual must be 'Month' or 'Statistic'.")
+  if (!Individual %in% c("Month", "Year")) {  # Assuming "Statistic" for original behavior; adjust as needed
+    stop("Individual must be 'Month' or 'Year'.")
   }
-  # Check for Month column if Individual == "Month"
+  # Check for Month column if Individual == "Month"| "Year"
   if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
     stop("Site_data_spdf must have a 'Month' column when Individual = 'Month'.")
   }
+  if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
   # Determine what to loop over
+    # Month
   if (Individual == "Month") {
-    loop_vars <- unique(Site_data_spdf@data$Month)
-    if (length(loop_vars) == 0) {
-      warning("No months found in data; falling back to no interpolation.")
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Month, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No months found in data; falling back to just Statistic interpolation.")
       return(NULL)
     }
-    loop_name <- "Month"
+    loop_name <- "Month-Statistic"
+     # Year
+  } else if (Individual == "Year") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Year, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No years found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Year-Statistic"
   } else {
     loop_vars <- unique(Site_data_spdf@data$Statistic)
     loop_name <- "Statistic"
   }
   #Progress bar setup
+  total_steps <- if (Individual == "Month" | Individual == "Year") nrow(loop_vars) * 4 + 2 else length(loop_vars) * 4 + 2
   pb <- progress_bar$new(
     format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-    total = (length(loop_vars) * 4) + 2,
+    total = total_steps,
     complete = "=", incomplete = "-", current = ">",
     clear = FALSE, width = 100, show_after = 0, force = TRUE)
   pb_active <- TRUE
@@ -1783,18 +1798,22 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
     site_sf <- st_as_sf(Site_Grid_spdf)
     centroids_sf <- st_centroid(site_sf)
     #
-    for(i in seq_along(loop_vars)) {
+    for(i in seq_along(1:nrow(loop_vars))) {
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
       # Filter data for current loop variable (month or statistic)
       if (Individual == "Month") {
-        filtered_data <- Site_data_spdf[Site_data_spdf@data$Month == loop_vars[i], ]
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$Month == loop_vars$Month[i] & 
+                                          Site_data_spdf@data$Statistic == loop_vars$Statistic[i],]
+      } else if (Individual == "Year") {
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$Year == loop_vars$Year[i] & 
+                                          Site_data_spdf@data$Statistic == loop_vars$Statistic[i],]
       } else {
         filtered_data <- Site_data_spdf[Site_data_spdf@data$Statistic == loop_vars[i], ]
       }
-      # Skip if no data for this month/statistic
+      # Skip if no data for this combination/statistic
       if (nrow(filtered_data@data) == 0) {
-        warning(paste("No data for", loop_name, loop_vars[i], "; skipping."))
+        warning(paste("No data for", loop_name, paste(loop_vars$Month[i], loop_vars$Statistic[i], sep = "_"), "; skipping."))
         next
       }
       #
@@ -1833,12 +1852,19 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
       Sys.sleep(1/1000)
       #
       # Rename prediction column to be month-specific
-      col_name <- paste0("Pred_Value_", loop_vars[i])
+      if (Individual == "Month") {
+        col_name <- paste0("Pred_Value_", loop_vars$Month[i], "_", loop_vars$Statistic[i])
+      } else if (Individual == "Year") {
+        col_name <- paste0("Pred_Value_", loop_vars$Year[i], "_", loop_vars$Statistic[i])
+      } else {
+        col_name <- paste0("Pred_Value_", loop_vars[i])
+      }
       centroids_joined <- centroids_joined %>%
         rename(!!col_name := Pred_Value)#rename(Pred_Value_idw = Pred_Value)
       #
       # Store the result
-      idw_results[[as.character(loop_vars[i])]] <- centroids_joined
+      key <- if (Individual == "Month") paste(loop_vars$Month[i], loop_vars$Statistic[i], sep = "_") else if (Individual == "Year") paste(loop_vars$Year[i], loop_vars$Statistic[i], sep = "_") else as.character(loop_vars[i])
+      idw_results[[key]] <- centroids_joined
       #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
       #site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID") %>%
       #  mutate(Statistic = stats[i])
@@ -1860,18 +1886,51 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
     }
     # Add combined column if Individual == "Month"
     if (Individual == "Month") {
-      monthly_cols <- grep("Pred_Value_", names(combined_sf), value = TRUE)
-      combined_sf <- combined_sf %>%
-        mutate(Pred_Value_Combined = {
-          temp_df <- st_drop_geometry(dplyr::select(., all_of(monthly_cols)))  # Drop geometry for rowMeans
-          ifelse(
-          rowSums(!is.na(temp_df)) == 0,
-          NA_real_,
-          rowMeans(temp_df, na.rm = TRUE))
+      # Group monthly columns by statistic and compute mean per statistic
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        monthly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(monthly_cols) > 0) {
+          # Ensure monthly columns are numeric
+          data_only <- st_drop_geometry(combined_sf)[monthly_cols]
+          if (!all(sapply(data_only, is.numeric))) {
+            stop("Monthly prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(!!paste0("Pred_Value_Combined_",stat) := {
+              temp_df <- st_drop_geometry(dplyr::select(., all_of(monthly_cols)))  # Drop geometry for rowMeans
+              ifelse(
+                rowSums(!is.na(temp_df)) == 0,
+                NA_real_,
+                rowMeans(temp_df, na.rm = TRUE))
           }
           )
+        }
+      }
     }
-    
+    #
+    if (Individual == "Year") {
+      # Group monthly columns by statistic and compute mean per statistic
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        yearly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(yearly_cols) > 0) {
+          # Ensure monthly columns are numeric
+          if (!all(sapply(combined_sf[yearly_cols], is.numeric))) {
+            stop("Yearly prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(!!paste0("Pred_Value_Combined_",stat) := {
+              temp_df <- st_drop_geometry(dplyr::select(., all_of(yearly_cols)))  # Drop geometry for rowMeans
+              ifelse(
+                rowSums(!is.na(temp_df)) == 0,
+                NA_real_,
+                rowMeans(temp_df, na.rm = TRUE))
+            }
+            )
+        }
+      }
+    }
     # Join back to original site polygons (assuming PGID matches)
     final_sf <- site_sf %>% 
       left_join(st_drop_geometry(combined_sf), by = "PGID")
