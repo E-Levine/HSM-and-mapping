@@ -2498,8 +2498,9 @@ join_interpolation <- function(Site_Grid_df){
   }
 }
 #
-plot_interpolations <- function(results_data, Site_Grid, Threshold = "N"){
-  #
+#simplify_tolerance - optional parameter to speed up plotting by simplifying   
+#library(sf, ggplot2, dplyr, stringr, data.table)
+plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simplify_tolerance = 0){
   #Results is src. not needed Add interpolated data back to Site_grid sf object (Site_Grid_interp <- st_join(Site_Grid, results_data))
   # Identify columns based on prefix and suffix  interp_cols <- grep("Pred_Value_*", names(results_data), value = TRUE)
   split_parts <- str_split(colnames(results_data), "_", simplify = FALSE)
@@ -2508,7 +2509,6 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N"){
   # Define filters
   prefix_match <- prefix %in% c("idw", "nn", "tps", "ok")
   special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
-  # Subset dataframe to include prefix-matched + special columns
   df_filtered <- results_data[, prefix_match | special_cols, drop = FALSE]
   # Build groups list only for prefix-matched columns
   if (any(prefix_match)) {
@@ -2526,9 +2526,21 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N"){
   } else {
     groups <- list()  # Empty if no matches
   }
+  # Define base theme for reuse (avoids redundancy)
+  base_theme <- theme_classic() +
+    theme(panel.border = element_rect(color = "black", fill = NA), 
+          axis.text = element_text(size = 16),
+          plot.margin = unit(c(0,0,0,0), "cm"), 
+          plot.title = element_text(margin = margin(b = 5)), 
+          plot.caption = element_text(face = "italic", size = 9))
   #
   #Initiate list to store plots:
   plot_list <- list()
+  #
+  df_filtered <- st_as_sf(df_filtered)
+  if (simplify_tolerance > 0) {
+    df_filtered <- st_simplify(df_filtered, dTolerance = simplify_tolerance, preserveTopology = TRUE)
+  }
   #Create plots
   # Loop over each prefix in groups
   for (p in names(groups)) {
@@ -2548,49 +2560,49 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N"){
         col <- cols[1]
         p_plot <- ggplot() +
           geom_sf(data = df_filtered, aes(color = !!sym(col))) +
-          theme_classic() +
-          theme(panel.border = element_rect(color = "black", fill = NA), axis.text = element_text(size = 16)) +
+          base_theme +
           scale_color_viridis_b(direction = -1) +
           {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
-          theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9)) +
           labs(title = paste(p, s, sep = "_"))
         plot_list[[paste(p, s, sep = "_")]] <- p_plot
       } else {
         # Faceted plot (multiple columns with middle parts)
         # Reshape data for faceting
-        df_long <- df_filtered %>%
-          dplyr::select(all_of(c("Latitude", "Longitude", "geometry", cols))) %>%  # Include spatial cols
-          tidyr::pivot_longer(cols = all_of(cols), names_to = "facet_var", values_to = "value") %>%
+        df_subset <- df_filtered %>% dplyr::select(all_of(cols))
+        df_long <- as.data.table(df_subset) %>%
+          melt(measure.vars = cols, variable.name = "facet_var", value.name = "value") %>%
           mutate(facet_var = str_extract(facet_var, paste0("^", p, "_([^_]+)_", s, "$"), group = 1)) %>% # Extract middle for facet labels
           st_as_sf()
-        
+        # Determine ordering for facets
+        unique_middle <- unique(df_long$facet_var)
+        if (all(unique_middle %in% month.abb)) {
+          # Order as months (Jan to Dec)
+          levels_order <- month.abb[month.abb %in% unique_middle]
+        } else if (all(grepl("^\\d{4}$", unique_middle))) {
+          # Order as years (numeric ascending)
+          levels_order <- sort(as.numeric(unique_middle))
+        } else {
+          # Default: alphabetical
+          levels_order <- sort(unique_middle)
+        }
+        df_long <- df_long %>% mutate(facet_var = factor(facet_var, levels = levels_order))
+        #
         p_plot <- ggplot() +
           geom_sf(data = df_long, aes(color = value)) +
           facet_wrap(~facet_var) +  # One facet per middle part (e.g., Jan, Feb)
-          theme_classic() +
-          theme(panel.border = element_rect(color = "black", fill = NA), axis.text = element_text(size = 16)) +
+          base_theme +
           scale_color_viridis_b(direction = -1) +
-          {if(any(df_long$Statistic == "Threshold")) labs(caption = "Values = Threshold sample proportions")} +
-          theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9)) +
+          {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
           labs(title = paste(p, s, sep = "_"))
         plot_list[[paste(p, s, sep = "_")]] <- p_plot
+        #
+        # Memory cleanup
+        gc()
       }
+      print(p_plot)
     }
   }
-  browser()
-  #for(col in interp_cols){
-    #Plot of binned interpolate values for rough comparison  p <- ggplot()+ geom_sf(data = Site_Grid_interp, aes(color = !!sym(col)))+ theme_classic()+ theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+ scale_color_viridis_b(direction = -1)+ {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")}+ theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9))
-  #  plot_list[[col]] <- p
-  #}
-  #
-  n <- length(plot_list)
-  ncols <- ceiling(sqrt(n))  # Number of columns
-  nrows <- ceiling(n / ncols)  # Number of rows
-  #Arrange the plots in a grid:
-  grid_obj <- grid.arrange(grobs = plot_list, nrow = nrows, ncol = ncols, padding = unit(0, "cm"), 
-                           widths = unit(rep(1, ncols), "null"), heights = unit(rep(1, nrows), "null")) #Equal height and widths
-  #
-  return(list(plots = plot_list, grid = grid_obj))
+  return(plot_list)
 }
 #
 final_interpolation <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
