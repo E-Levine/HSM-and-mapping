@@ -19,17 +19,17 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
 #
 source("Code/WQ_functions.R")
 #
-Site_code <- c("WC")       #Two letter estuary code
+Site_code <- c("SL")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
-State_Grid <- c("F2")      #Two-letter StateGrid ID
-Alt_Grid <- c("F3")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("WCHSM") #Project code given to data, found in file name
+State_Grid <- c("H4")      #Two-letter StateGrid ID
+Alt_Grid <- c("NA")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("SLHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
 Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
-Param_name_2 <- c("Annual")#Additional identify for parameter: i.e. Annual, Quarterly, etc.
+Param_name_2 <- c("Monthly")#Additional identify for parameter: i.e. Annual, Quarterly, etc.
 #
 color_temp <- c("cool")    #"warm" or "cool"
 #
@@ -43,7 +43,7 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area  
-Site_Grid <- load_site_grid(State_Grid, Site_area, Alt_Grid)
+Site_Grid <- load_site_grid(State_Grid, Site_area)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
 #Df of grid data
@@ -90,21 +90,21 @@ if(color_temp == "warm") {
 ####Summarize data based on parameter of interest - all methods####
 #
 ##Summarize data based on method specified:
-#Time_period - Period of time to group by: Year, Month, Quarter
+#Time_period - Period of time to group by: Year, Month, Quarter, YearMonth, YearQuarter
 #Year_range - Range of years of data to include. Blank/enter "NA" for all years, 4-digit year for one year, or enter a character string of 4-digit start year followed by 4-digit end year, separated by a dash "-"
 #Quarter_start - Starting month of quarter 1, entered as an integer corresponding to month. NA if January (1) start. Not needed if not wokring with quarters.
 #Month_range - Start and end month to include in final data, specified by month's integer value c(#, #)
 #Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values, Threshold
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
-WQ_summ <- summarize_data(WQ_data, Time_period = "Year", Summ_method = "Means")
+WQ_summ <- summarize_data(WQ_data, Time_period = "Month", Summ_method = "Means")
 head(WQ_summ)
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,".xlsx"), format_headers = TRUE)
 #
 #
 #Data as spatial df:
 data_cols <- if(ncol(WQ_summ) >= 3) {
-  WQ_summ[, c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+  WQ_summ[, !names(WQ_summ) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
   } else {
     stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
     }
@@ -117,17 +117,17 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitu
 ####Interpolation models####
 #
 #
-##Inverse distance weighted
-idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name)
+##Inverse distance weighted - updated for Month, Year
+idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
 #
-##Nearest neighbor
-nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ)
+##Nearest neighbor - not updated
+nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ, "Month")
 #
-##Thin plate spline
+##Thin plate spline - not updated
 tps_data <- perform_tps_interpolation(Site_data_spdf, raster_t, Site_area, Site_Grid, Param_name)
 #
 ####Ordinary Kriging
-ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name)
+ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
 #
 #
 #
