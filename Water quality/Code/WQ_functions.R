@@ -1735,11 +1735,15 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
 #
 ####Interpolation####
 #Updated for Month and Year
-perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter, Individual) {
+perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter, Individual = NULL) {
   Param_name <- Parameter
+  #
+  if (is.null(Individual)) {
+    Individual <- "Statistic"
+  }
   # Validate Individual parameter
-  if (!Individual %in% c("Month", "Year")) {  # Assuming "Statistic" for original behavior; adjust as needed
-    stop("Individual must be 'Month' or 'Year'.")
+  if (!Individual %in% c("Month", "Year", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
+    stop("Individual must be 'Month', 'Year', or 'Statistic'.")
   }
   # Check for Month column if Individual == "Month"| "Year"
   if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
@@ -1947,72 +1951,165 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
   return(final_sf)
 }
 #
-perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_Grid_df, Parameter = Param_name, WQ_summ) {
+perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_Grid_df, Parameter, WQ_summ, Individual = NULL) {
   Param_name <- Parameter
   WQsumm <- WQ_summ
-  #Determine number of statistics to loop over
-  stats <- unique(Site_data_spdf@data$Statistic)
+  # Validate Individual parameter (allow NULL, default to "Statistic")
+  if (is.null(Individual)) {
+    Individual <- "Statistic"
+  }
+  if (!Individual %in% c("Month", "Year", "Statistic")) {
+    stop("Individual must be 'Month', 'Year', 'Statistic', or NULL (defaults to 'Statistic').")
+  }
+  # Check for Month column if Individual == "Month"| "Year"
+  if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Month' column when Individual = 'Month'.")
+  }
+  if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
+  # Determine what to loop over
+  # Month
+  if (Individual == "Month") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Month, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No months found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Month-Statistic"
+    # Year
+  } else if (Individual == "Year") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Year, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No years found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Year-Statistic"
+  } else {
+    loop_vars <- unique(Site_data_spdf@data$Statistic)
+    loop_name <- "Statistic"
+  }
   # Create a progress bar
+  total_steps <- if (Individual == "Month" | Individual == "Year") nrow(loop_vars) * 3 + 2 else length(loop_vars) * 3 + 2
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = (length(stats) * 3)+2,  
+                         total = total_steps,  
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
   pb_active <- TRUE
   #
+  StartTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
   cat("Starting time:", format(Sys.time()), "\n")
-  #Initiate lists 
-  nn_model <- list()
-  nn_Site <- list()
   #
   #
   tryCatch({
     pb$tick(tokens = list(step = "Set up"))
     Sys.sleep(1/1000)
     #Notify if Threshold statistic is present
-    if(any(stats == "Threshold")){
+    if(Individual == "Statistic" && any(loop_vars == "Threshold")){
       cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
     }
     #
+    # Initiate list
+    nn_results <- list()
     #Convert Site_Grid_spdf polygons to sf
     site_sf <- st_as_sf(Site_Grid_spdf)
     centroids_sf <- st_centroid(site_sf)
     # 
-    #Loop over each statistic
-    for(i in seq_along(stats)){
-      ##MODELLING:
+    # Loop over each statistic
+    for(i in 1:nrow(loop_vars)){
+      ## MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
-      # Filter data for current statistic
-      WQ_data_stat <- WQsumm %>% filter(Statistic == stats[i])
-      ##NN: Convert to terra vect and create Voronoi polygons clipped to Site_area
+      # Filter data for current combination/statistic
+      if (Individual %in% c("Month", "Year")) {
+        time_col <- if (Individual == "Month") "Month" else "Year"
+        WQ_data_stat <- WQsumm %>%
+          filter(.data[[time_col]] == loop_vars[[time_col]][i] & Statistic == loop_vars$Statistic[i])
+      } else {
+        WQ_data_stat <- WQsumm %>% filter(Statistic == loop_vars[i])
+      }
+      
+      # Skip if no data
+      if (nrow(WQ_data_stat) == 0) {
+        warning(paste("No data for", loop_name, paste(loop_vars[[if (Individual %in% c("Month", "Year")) time_col else "Statistic"]][i], loop_vars$Statistic[i], sep = "_"), "; skipping."))
+        next
+      }
+      ## NN: Convert to terra vect and create Voronoi polygons clipped to Site_area
       vect_data <- vect(WQ_data_stat, geom = c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs")
-      nn_model[[i]] <- st_as_sf(voronoi(x = vect_data, bnd = Site_area))
+      voroni_sf <- st_as_sf(voronoi(x = vect_data, bnd = Site_area))
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
       #Assign predictions to grid
-      nn_joined <- st_join(centroids_sf, nn_model[[i]][, c("Working_Param")], left = TRUE)
+      nn_joined <- st_join(centroids_sf, voroni_sf[, c("Working_Param")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      nn_joined <- nn_joined %>% dplyr::rename(Pred_Value_nn = Working_Param)
-      #
-      #Join centroid predictions back to Site_Grid polygons
-      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(nn_joined)[, c("PGID", "Pred_Value_nn")], by = "PGID") %>%
-        mutate(Statistic = stats[i])
-      nn_Site[[i]] <- site_sf_temp
+      # Rename column
+      if (Individual %in% c("Month", "Year")) {
+        col_name <- paste0("Pred_Value_", loop_vars[[time_col]][i], "_", loop_vars$Statistic[i])
+      } else {
+        col_name <- paste0("Pred_Value_", loop_vars[i])
       }
+      nn_joined <- nn_joined %>% rename(!!col_name := Working_Param)
+      
+      # Store result
+      key <- if (Individual %in% c("Month", "Year")) paste(loop_vars[[time_col]][i], loop_vars$Statistic[i], sep = "_") else as.character(loop_vars[i])
+      nn_results[[key]] <- nn_joined
+    }
+    
+    # Combine results
+    if (length(nn_results) == 0) {
+      warning("No valid interpolations performed.")
+      return(NULL)
+    }
+    
+    combined_sf <- nn_results[[1]]
+    for (i in 2:length(nn_results)) {
+      combined_sf <- left_join(combined_sf, st_drop_geometry(nn_results[[i]])[, c("PGID", names(nn_results[[i]])[grep("Pred_Value_", names(nn_results[[i]]))])], by = "PGID")
+    }
+    
+    # Add combined column if Individual == "Month" or "Year"
+    if (Individual %in% c("Month", "Year")) {
+      time_dim <- if (Individual == "Month") "Month" else "Year"
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        time_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(time_cols) > 0) {
+          data_only <- st_drop_geometry(combined_sf)[time_cols]
+          if (!all(sapply(data_only, is.numeric))) {
+            stop("Prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(
+              !!paste0("Pred_Value_Combined_", stat) := {
+                temp_df <- st_drop_geometry(dplyr::select(., all_of(time_cols)))
+                ifelse(
+                  rowSums(!is.na(temp_df)) == 0,
+                  NA_real_,
+                  rowMeans(temp_df, na.rm = TRUE))
+              }
+            )
+        }
+      }
+    }
+    # Final join
+    final_sf <- site_sf %>% left_join(st_drop_geometry(combined_sf), by = "PGID")
   })
   #
   pb$tick(tokens = list(step = "Completed processing"))
   Sys.sleep(1/1000)
+  EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
   cat("Ending time:", format(Sys.time()), "\n")
+  print(EndTime - StartTime)
   #
   pb$terminate()
   pb_active <- FALSE
-  return(nn_Site)
+  return(final_sf)
 }
 #
 perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_Grid_spdf, Parameter = Param_name) {
@@ -2113,29 +2210,63 @@ perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_
   return(tps_Site)
 }
 #
-perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter = Param_name) {
+perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter, Individual = NULL) {
   Param_name <- Parameter
-  #Determine number of statistics to loop over
-  stats <- unique(Site_data_spdf@data$Statistic)
+  # Validate Individual parameter
+  if (!Individual %in% c("Month", "Year", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
+    stop("Individual must be 'Month', 'Year', 'Statistic'.")
+  }
+  # Check for Month column if Individual == "Month"| "Year"
+  if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Month' column when Individual = 'Month'.")
+  }
+  if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
+  # Determine what to loop over
+  # Month
+  if (Individual == "Month") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Month, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No months found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Month-Statistic"
+    # Year
+  } else if (Individual == "Year") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Year, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No years found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Year-Statistic"
+  } else {
+    loop_vars <- unique(Site_data_spdf@data$Statistic)
+    loop_name <- "Statistic"
+  }
   # Create a progress bar
+  total_steps <- if (Individual == "Month" | Individual == "Year") nrow(loop_vars) * 4 + 2 else length(loop_vars) * 4 + 2
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
-                         total = (length(stats) * 4)+2, 
+                         total = total_steps, 
                          complete = "=", incomplete = "-", current = ">",
                          clear = FALSE, width = 100, show_after = 0, force = TRUE)
   pb_active <- TRUE
   #
+  StartTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
   cat("Starting time:", format(Sys.time()), "\n")
   #
   tryCatch({
     pb$tick(tokens = list(step = "Set up"))
     Sys.sleep(1/1000)
     #Notify if Threshold statistic is present
-    if(any(stats == "Threshold")){
+    if(Individual != "Month"  && any(stats == "Threshold")){
       cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
     }
     #Initiate lists 
-    ok_nn <- list()
-    ok_Site <- list()
+    ok_results <- list()
+    #ok_nn <- list()    ok_Site <- list()
     #
     #Convert Site_Grid_spdf polygons to sf and get centroids
     site_sf <- st_as_sf(Site_Grid_spdf)
@@ -2143,21 +2274,34 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
     site_crs <- st_crs(site_sf)
     #
     #Loop over each statistic
-    for(i in seq_along(stats)){
+    for(i in seq_along(1:nrow(loop_vars))){
       ##MODELLING:
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
-      #Filter data for current statistic and aggregate mean Working_Param by location
+      # Filter data for current combination/statistic
+      if (Individual %in% c("Month", "Year")) {
+        time_col <- if (Individual == "Month") "Month" else "Year"
+        filtered_data <- Site_data_spdf[
+          Site_data_spdf@data[[time_col]] == loop_vars[[time_col]][i] & 
+            Site_data_spdf@data$Statistic == loop_vars$Statistic[i], 
+        ]
+      } else {
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$Statistic == loop_vars[i], ]
+      }
+      # Skip if no data
+      if (nrow(filtered_data@data) == 0) {
+        warning(paste("No data for", loop_name, paste(loop_vars[[if (Individual %in% c("Month", "Year")) time_col else "Statistic"]][i], loop_vars$Statistic[i], sep = "_"), "; skipping."))
+        next
+      }
       stat_data_df <- {
-        coords <- coordinates(Site_data_spdf)
-        data_df <- Site_data_spdf@data
+        coords <- coordinates(filtered_data)
+        data_df <- filtered_data@data
         data.frame(Longitude = coords[,1], Latitude = coords[,2], data_df) %>%
-          filter(Statistic == stats[i]) %>%
           group_by(Longitude, Latitude, Statistic) %>%
           summarize(Working_Param = mean(Working_Param, na.rm = TRUE), .groups = "drop")
       }
       #Convert to sf points with correct CRS
-      stat_data_sf <- st_as_sf(stat_data_df, coords = c("Longitude", "Latitude"), crs = st_crs(Site_data_spdf))
+      stat_data_sf <- st_as_sf(stat_data_df, coords = c("Longitude", "Latitude"), crs = st_crs(filtered_data))
       #
       ##OK: model(Parameter), data to use, grid to apply to 
       ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data_sf, miscFitOptions = list(merge.small.bins = FALSE))
@@ -2165,7 +2309,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       ok_pred <- predict(ok_model, newdata = grid)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
       ok_df <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
-        mutate(Pred_Value = round(Prediction, 2), Statistic = stats[i]) %>% dplyr::select(-var1.var)
+        mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
@@ -2175,85 +2319,179 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       proj4string(ok_df) <- proj4string(ok_pred)
       
       #Convert interpolated values to spatial data
-      ok_nn[[i]] <- dismo::voronoi(ok_df, ext = raster::extent(grid))#
+      voroni_poly <- dismo::voronoi(ok_df, ext = raster::extent(grid))#
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
       #Convert voronoi polygons to sf
-      voronoi_sf <- st_as_sf(ok_nn[[i]])
+      voronoi_sf <- st_as_sf(voroni_poly)
       #Determine overlay of data on SiteGrid
       centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
       #
       ##WRAP UP:
       pb$tick(tokens = list(step = "Finishing up"))
       Sys.sleep(1/1000)
-      ##Rename column based on model type
-      centroids_joined <- centroids_joined %>%
-        dplyr::rename(Pred_Value_ok = Pred_Value)
-      #Join centroid predictions back to Site_Grid polygons
-      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_ok")], by = "PGID") %>%
-        mutate(Statistic = stats[i])
-      ok_Site[[i]] <- site_sf_temp
-      #
+      # Rename column
+      if (Individual %in% c("Month", "Year")) {
+        col_name <- paste0("Pred_Value_", loop_vars[[time_col]][i], "_", loop_vars$Statistic[i])
+      } else {
+        col_name <- paste0("Pred_Value_", loop_vars[i])
+      }
+      centroids_joined <- centroids_joined %>% rename(!!col_name := Pred_Value)
+      
+      # Store result
+      key <- if (Individual %in% c("Month", "Year")) paste(loop_vars[[time_col]][i], loop_vars$Statistic[i], sep = "_") else as.character(loop_vars[i])
+      ok_results[[key]] <- centroids_joined
     }
+    # Combine results
+    if (length(ok_results) == 0) {
+      warning("No valid interpolations performed.")
+      return(NULL)
+    }
+    
+    combined_sf <- ok_results[[1]]
+    for (i in 2:length(ok_results)) {
+      combined_sf <- left_join(combined_sf, st_drop_geometry(ok_results[[i]])[, c("PGID", names(ok_results[[i]])[grep("Pred_Value_", names(ok_results[[i]]))])], by = "PGID")
+    }
+    # Add combined column if Individual == "Month" or "Year"
+    if (Individual %in% c("Month", "Year")) {
+      time_dim <- if (Individual == "Month") "Month" else "Year"
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        time_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(time_cols) > 0) {
+          data_only <- st_drop_geometry(combined_sf)[time_cols]
+          if (!all(sapply(data_only, is.numeric))) {
+            stop("Prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(
+              !!paste0("Pred_Value_Combined_", stat) := {
+                temp_df <- st_drop_geometry(dplyr::select(., all_of(time_cols)))
+                ifelse(
+                  rowSums(!is.na(temp_df)) == 0,
+                  NA_real_,
+                  rowMeans(temp_df, na.rm = TRUE))
+              }
+            )
+        }
+      }
+    }
+  # Join back to original site polygons (assuming PGID matches)
+  final_sf <- site_sf %>% 
+    left_join(st_drop_geometry(combined_sf), by = "PGID")
   })
   pb$tick(tokens = list(step = "Completed processing"))
   Sys.sleep(1/1000)
+  EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
   cat("Ending time:", format(Sys.time()), "\n")
+  print(EndTime - StartTime)
   #
   pb$terminate()
   pb_active <- FALSE
   #
-  return(ok_Site)
+  return(final_sf)
+}
+#
+extract_time_stat <- function(df) {
+  # Get column names
+  col_names <- colnames(df)
+  
+  # Find columns matching the pattern "Pred_Value_{Month}_{Statistic}"
+  pred_cols <- grep("^Pred_Value_[^_]+(?:_[^_]+)?$", col_names, value = TRUE)
+  
+  if (length(pred_cols) == 0) {
+    warning("No columns matching 'Pred_Value_{...}' pattern in dataframe.")
+    return(list(Months = character(0), Statistics = character(0)))
+  }
+  # Extract Month and Statistic using regex
+  # Pattern: Pred_Value_(Month)_(Statistic)
+  extracted <- str_match(pred_cols, "^Pred_Value_([^_]+)(?:_([^_]+))?$")[, 2:3, drop = FALSE]
+  
+  # Process: If second column is NA, it's Statistic-only; else Month and Statistic
+  times <- ifelse(is.na(extracted[, 2]), NA, extracted[, 1])
+  stats <- ifelse(is.na(extracted[, 2]), extracted[, 1], extracted[, 2])
+  
+  # Get unique Months (excluding NA) and Statistics
+  unique_times <- unique(times[!is.na(times) & times != "Combined"])
+  unique_stats <- unique(stats)
+  return(list(Times = unique_times, Statistics = unique_stats))
 }
 #
 join_interpolation <- function(Site_Grid_df){
-  #Starting data:
+  # Starting data:
   output <- Site_Grid_df
-  #List of potential input SF objects to check for:
+  #
+  # List of potential input SF objects to check for:
   sf_objects <- c("idw_data", "nn_data", "tps_data", "ok_data")
-  #Determine number of models to combine:
-  existing_object <- NULL
+  # Determine number of models to combine:
+  existing_objects <- character(0)
   existing_count <- 0
-  #Check which spatial objects exist
+  # Check which spatial objects exist
   for (sf_obj in sf_objects) {
     if (exists(sf_obj, envir = .GlobalEnv)) {
       existing_count <- existing_count + 1
-      existing_object <- sf_obj  # Store the last existing object
+      existing_objects <- c(existing_objects, sf_obj)
     }
   }
-  #Check the number of existing objects
+  # Check the number of existing objects
   if (existing_count == 0) {
     stop("Error: None of the model outputs exist in the global environment.")
   } else if (existing_count == 1) {
-    stop(paste("Error: Only one model output exists: ", existing_object," Creation of ensemble model not applicable"))
+    stop(paste("Error: Only one model output exists: ", existing_objects[1]," Creation of ensemble model not applicable"))
   }
-  #Get the list of statistics/list names:
-  params <- unique(unlist(lapply(get(existing_object), function(df) unique(df$Statistic))))
   #
-  #Iterate over each parameter
+  # Get the list of statistics/list names:
+  all_extracted <- lapply(existing_objects, function(obj) extract_time_stat(get(obj)))
+  # Combine across all data frames: unique Months and Statistics overall
+  unique_time_all <- unique(unlist(lapply(all_extracted, `[[`, "Times")))
+  unique_stats_all <- unique(unlist(lapply(all_extracted, `[[`, "Statistics")))
+  result <- list(Unique_Times = unique_time_all, Unique_Statistics = unique_stats_all)
+  #
+  # Determine params: combined Month_Statistic if months exist, else just Statistics
+  if (length(result$Unique_Times) > 0) {
+    # Create all combinations of Month and Statistic
+    combo_df <- expand.grid(Times = result$Unique_Times, Statistic = result$Unique_Statistics, stringsAsFactors = FALSE)
+    params <- paste(combo_df$Times, combo_df$Statistic, sep = "_")
+  } else {
+    # Fall back to just Statistics
+    params <- result$Unique_Statistics
+  }
+  # 
+  all_combined <- list()
+  # Iterate over each parameter/combination
   for (i in seq_along(params)){
     temp_results <- list()
-    #Iterate through each possible SF object
-    for (sf_obj in sf_objects) {
+    # Iterate through each possible SF object
+    for (sf_obj in existing_objects) {
       if (exists(sf_obj, envir = .GlobalEnv)) {
+        model_name <- strsplit(sf_obj, "_")[[1]][1]
         cat("Joining ", sf_obj, " with existing data...\n")
-        temp_data <- get(sf_obj)[[i]] %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
-          dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
-          group_by(PGID) %>% arrange(desc(across(contains("Pred_Value")))) %>% slice(1)
-        temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data))
+        temp_data <- get(sf_obj) %>% #[[i]] %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
+          dplyr::select(PGID, any_of(paste0("Pred_Value_", params[i]))) %>% #dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
+          as.data.frame() %>%
+          rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>%
+          group_by(PGID) %>% arrange(desc(across(contains("Pred_Value")))) %>% slice(1) %>%
+          rename(!!paste0(model_name, "_", params[i]) := !!paste0("Pred_Value_", params[i]))
+        temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data, by = "PGID"))
       } else {
         cat("Warning: ", sf_obj, " does not exist in the global environment.\n")
       }
     }
+    #
     #Combine results for the current parameter
     combined_result <- Reduce(function(x, y) merge(x, y, by = intersect(names(x), names(y)), all = TRUE), temp_results)
-    #Create a dynamic variable name for the result
-    result_name <- paste0("result_", params[i])
-    # Assign the combined result to a new variable
-    assign(result_name, combined_result, envir = .GlobalEnv)
+    all_combined[[params[i]]] <- combined_result 
   }
+  #
+  # Merge all combined results into one final object
+  final_result <- Reduce(function(x, y) merge(x, y, by = intersect(names(x), names(y)), all = TRUE), all_combined)
+  # Create a dynamic variable name for the result
+  statistic <- strsplit(params[i], "_")[[1]][length(strsplit(params[i], "_")[[1]])]
+  result_name <- paste0("result_", statistic)
+  # Assign the combined result to a new variable
+  assign(result_name, final_result, envir = .GlobalEnv)
   #Print note if threshold is being used:
   if(any(params == "Threshold")){
     cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
