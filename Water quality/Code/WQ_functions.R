@@ -2498,26 +2498,90 @@ join_interpolation <- function(Site_Grid_df){
   }
 }
 #
-plot_interpolations <- function(results_data, Site_Grid){
+plot_interpolations <- function(results_data, Site_Grid, Threshold = "N"){
   #
-  #Add interpolated data back to Site_grid sf object 
-  (Site_Grid_interp <- left_join(Site_Grid, results_data))
-  #Identify columns
-  interp_cols <- grep("Pred_Value_*", names(Site_Grid_interp), value = TRUE)
+  #Results is src. not needed Add interpolated data back to Site_grid sf object (Site_Grid_interp <- st_join(Site_Grid, results_data))
+  # Identify columns based on prefix and suffix  interp_cols <- grep("Pred_Value_*", names(results_data), value = TRUE)
+  split_parts <- str_split(colnames(results_data), "_", simplify = FALSE)
+  prefix <- sapply(split_parts, function(x) if (length(x) > 0) x[1] else "")
+  suffix <- sapply(split_parts, function(x) if (length(x) > 0) x[length(x)] else "")
+  # Define filters
+  prefix_match <- prefix %in% c("idw", "nn", "tps", "ok")
+  special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
+  # Subset dataframe to include prefix-matched + special columns
+  df_filtered <- results_data[, prefix_match | special_cols, drop = FALSE]
+  # Build groups list only for prefix-matched columns
+  if (any(prefix_match)) {
+    cols_groups <- colnames(results_data)[prefix_match]
+    prefix_groups <- prefix[prefix_match]
+    suffix_groups <- suffix[prefix_match]
+    groups <- lapply(unique(prefix_groups), function(p) {
+      sub_cols <- cols_groups[prefix_groups == p]
+      sub_suffix <- suffix_groups[prefix_groups == p]
+      inner <- lapply(unique(sub_suffix), function(s) sub_cols[sub_suffix == s])
+      names(inner) <- unique(sub_suffix)
+      inner
+    })
+    names(groups) <- unique(prefix_groups)
+  } else {
+    groups <- list()  # Empty if no matches
+  }
+  #
   #Initiate list to store plots:
   plot_list <- list()
   #Create plots
-  for(col in interp_cols){
-    #Plot of binned interpolate values for rough comparison
-    p <- ggplot()+
-      geom_sf(data = Site_Grid_interp, aes(color = !!sym(col)))+
-      theme_classic()+
-      theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+
-      scale_color_viridis_b(direction = -1)+
-      {if(any(Site_Grid_interp$Statistic == "Threshold")) labs(caption = "Values = Threshold sample proportions")}+
-      theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9))
-    plot_list[[col]] <- p
+  # Loop over each prefix in groups
+  for (p in names(groups)) {
+    # Loop over each suffix for this prefix
+    for (s in names(groups[[p]])) {
+      cols <- groups[[p]][[s]]  # Vector of column names for this p-s combo
+      
+      if (length(cols) == 0) next  # Skip if no columns
+      
+      # Extract middle parts (e.g., "Jan" from "idw_Jan_Mean")
+      middle_parts <- str_extract(cols, paste0("^", p, "_([^_]+)_", s, "$"), group = 1)
+      middle_parts <- ifelse(is.na(middle_parts), "", middle_parts)  # Empty if no middle
+      
+      # Determine plot type
+      if (length(cols) == 1 || all(middle_parts == "")) {
+        # Single plot (no middle parts or only one column)
+        col <- cols[1]
+        p_plot <- ggplot() +
+          geom_sf(data = df_filtered, aes(color = !!sym(col))) +
+          theme_classic() +
+          theme(panel.border = element_rect(color = "black", fill = NA), axis.text = element_text(size = 16)) +
+          scale_color_viridis_b(direction = -1) +
+          {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
+          theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9)) +
+          labs(title = paste(p, s, sep = "_"))
+        plot_list[[paste(p, s, sep = "_")]] <- p_plot
+      } else {
+        # Faceted plot (multiple columns with middle parts)
+        # Reshape data for faceting
+        df_long <- df_filtered %>%
+          dplyr::select(all_of(c("Latitude", "Longitude", "geometry", cols))) %>%  # Include spatial cols
+          tidyr::pivot_longer(cols = all_of(cols), names_to = "facet_var", values_to = "value") %>%
+          mutate(facet_var = str_extract(facet_var, paste0("^", p, "_([^_]+)_", s, "$"), group = 1)) %>% # Extract middle for facet labels
+          st_as_sf()
+        
+        p_plot <- ggplot() +
+          geom_sf(data = df_long, aes(color = value)) +
+          facet_wrap(~facet_var) +  # One facet per middle part (e.g., Jan, Feb)
+          theme_classic() +
+          theme(panel.border = element_rect(color = "black", fill = NA), axis.text = element_text(size = 16)) +
+          scale_color_viridis_b(direction = -1) +
+          {if(any(df_long$Statistic == "Threshold")) labs(caption = "Values = Threshold sample proportions")} +
+          theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9)) +
+          labs(title = paste(p, s, sep = "_"))
+        plot_list[[paste(p, s, sep = "_")]] <- p_plot
+      }
+    }
   }
+  browser()
+  #for(col in interp_cols){
+    #Plot of binned interpolate values for rough comparison  p <- ggplot()+ geom_sf(data = Site_Grid_interp, aes(color = !!sym(col)))+ theme_classic()+ theme(panel.border = element_rect(color = "black", fill = NA), axis.text =  element_text(size = 16))+ scale_color_viridis_b(direction = -1)+ {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")}+ theme(plot.margin = unit(c(0,0,0,0), "cm"), plot.title = element_text(margin = margin(b = 5)), plot.caption = element_text(face = "italic", size = 9))
+  #  plot_list[[col]] <- p
+  #}
   #
   n <- length(plot_list)
   ncols <- ceiling(sqrt(n))  # Number of columns
