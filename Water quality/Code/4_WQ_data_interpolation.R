@@ -8,10 +8,10 @@
 #
 #Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
+pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                readxl, openxlsx, progress, writexl,
                sf, sp, terra, furrr, future,
-               tmap, tmaptools, gridExtra, #Mapping and figures
+               tmap, tmaptools, gridExtra, cowplot, #Mapping and figures
                mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
                RColorBrewer, magicfor, ecorest, #HSV scoring
                marmap, gstat, dismo, #Depth, interpolation
@@ -137,15 +137,16 @@ ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_
 join_interpolation(Site_Grid_df)
 #
 #Generates plots for each model and output of all models together - run for each parameter
-plotting <- plot_interpolations(result_Mean, Site_Grid)
+plotting <- plot_interpolations(result_Mean, Site_Grid, simplify_tolerance = 0.01)
 #
+combined_plot <- grouped_plot_interpolations(plotting) #needs work. Having issues plotting. 
 #
 #
 ####Ensemble or model selection####
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- final_interpolation("ensemble", c("idw", "ok"), result_Mean, c(0.75, 0.25), Site_Grid)
+final_data <- ensemble_weighting("ensemble", c("idw", "nn"), result_Mean, c(0.75, 0.25), Site_Grid)
 #
 #
 ####Save model####

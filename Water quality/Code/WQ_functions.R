@@ -2542,6 +2542,16 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simpli
     df_filtered <- st_simplify(df_filtered, dTolerance = simplify_tolerance, preserveTopology = TRUE)
   }
   #Create plots
+  # Pre-calculate color limits for each prefix (for consistent scales)
+  color_limits <- list()
+  for (p in names(groups)) {
+    all_cols <- unlist(groups[[p]])  # All columns for this prefix
+    if (length(all_cols) > 0) {
+      # Get min/max across all relevant columns for this prefix
+      temp_data <- df_filtered %>% dplyr::select(all_of(all_cols)) %>% st_drop_geometry()
+      color_limits[[p]] <- c(min(temp_data, na.rm = TRUE), max(temp_data, na.rm = TRUE))
+    }
+  }
   # Loop over each prefix in groups
   for (p in names(groups)) {
     # Loop over each suffix for this prefix
@@ -2561,52 +2571,103 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simpli
         p_plot <- ggplot() +
           geom_sf(data = df_filtered, aes(color = !!sym(col))) +
           base_theme +
-          scale_color_viridis_b(direction = -1) +
+          scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
           {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
           labs(title = paste(p, s, sep = "_"))
         plot_list[[paste(p, s, sep = "_")]] <- p_plot
       } else {
-        # Faceted plot (multiple columns with middle parts)
-        # Reshape data for faceting
-        df_subset <- df_filtered %>% dplyr::select(all_of(cols))
-        df_long <- as.data.table(df_subset) %>%
-          melt(measure.vars = cols, variable.name = "facet_var", value.name = "value") %>%
-          mutate(facet_var = str_extract(facet_var, paste0("^", p, "_([^_]+)_", s, "$"), group = 1)) %>% # Extract middle for facet labels
-          st_as_sf()
-        # Determine ordering for facets
-        unique_middle <- unique(df_long$facet_var)
+        # Create one plot per combination (instead of faceting, for speed)
+        unique_middle <- unique(middle_parts[middle_parts != ""])
+        #
+        # Determine ordering
         if (all(unique_middle %in% month.abb)) {
-          # Order as months (Jan to Dec)
           levels_order <- month.abb[month.abb %in% unique_middle]
         } else if (all(grepl("^\\d{4}$", unique_middle))) {
-          # Order as years (numeric ascending)
           levels_order <- sort(as.numeric(unique_middle))
         } else {
-          # Default: alphabetical
           levels_order <- sort(unique_middle)
         }
-        df_long <- df_long %>% mutate(facet_var = factor(facet_var, levels = levels_order))
-        #
-        p_plot <- ggplot() +
-          geom_sf(data = df_long, aes(color = value)) +
-          facet_wrap(~facet_var) +  # One facet per middle part (e.g., Jan, Feb)
-          base_theme +
-          scale_color_viridis_b(direction = -1) +
-          {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
-          labs(title = paste(p, s, sep = "_"))
-        plot_list[[paste(p, s, sep = "_")]] <- p_plot
-        #
+        
+        # Reshape once for all middle parts
+        df_subset <- df_filtered %>% dplyr::select(geometry, all_of(cols))
+        df_long <- as.data.table(df_subset) %>%
+          melt(measure.vars = cols, variable.name = "facet_var", value.name = "value") %>%
+          mutate(facet_var = str_extract(facet_var, paste0("^", p, "_([^_]+)_", s, "$"), group = 1)) %>%
+          st_as_sf()
+        
+        # Loop over each middle part for separate plots
+        for (mid in levels_order) {
+          df_mid <- df_long %>% filter(facet_var == mid)
+          
+          p_plot <- ggplot() +
+            geom_sf(data = df_mid, aes(color = value)) +
+            base_theme +
+            scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
+            {if (Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
+            labs(title = paste(p, mid, s, sep = "_"))
+          
+          plot_list[[paste(p, mid, s, sep = "_")]] <- p_plot
         # Memory cleanup
         gc()
       }
-      print(p_plot)
     }
+      }
   }
   return(plot_list)
 }
+#library(cowplot, gridExtra)
+grouped_plot_interpolations <- function(plot_list){
+  #
+  prefixes2 <- sapply(names(plot_list), function(name) str_split(name, "_", simplify = TRUE)[1])
+  grouped_plots <- split(plot_list, prefixes2)
+  grid_list <- list()
+  
+  # For each group, calculate length and arrange in a grid
+  for (prefix in names(grouped_plots)) {
+    group <- grouped_plots[[prefix]]
+    n <- length(group)  # Length of the group
+    if (n == 0) next  # Skip empty groups
+    
+    # Dynamic axis text size (adjust formula as needed)
+    dynamic_size <- max(6, 16 - (n / 2))  # Larger n -> smaller size
+    
+    # Calculate grid dimensions 
+    ncols <- ceiling(sqrt(n))
+    nrows <- ceiling(n / ncols)
+    #
+    # Create plots without legends (modify base_theme or add here)
+    group_no_legend <- lapply(group, function(p) {
+      plot_data <- p$data
+      if (!is.null(plot_data) && inherits(plot_data, "sf")) {
+        plot_data <- st_simplify(plot_data, dTolerance = 1)  # Adjust tolerance
+        p$data <- plot_data
+      }
+      p + theme(legend.position = "none", axis.text = element_text(size = dynamic_size))
+    })
+    
+    # Extract legend from the first plot (assuming all have the same legend)
+    legend <- suppressWarnings(get_legend(group[[1]]))
+    
+    # Arrange the plots in a grid
+    grid_obj <- grid.arrange(grobs = group_no_legend, nrow = nrows, ncol = ncols, 
+                             padding = unit(0, "cm"), 
+                             widths = unit(rep(1, ncols), "null"), 
+                             heights = unit(rep(1, nrows), "null"))
+    
+    # Combine plots grid and legend into one grid_obj
+    grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(3, 1))  # Adjust rel_widths as needed
+    
+    # Print the grid (displays it)
+    grid_list[[prefix]] <- grid_obj
+    print(grid_obj)
+  }
+  #
+  return(grid_list)
+}
 #
-final_interpolation <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
+ensemble_weighting <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
   model <- match.arg(model)
+  browser()
   matched_models <- selected_models[selected_models %in% c("idw", "nn", "tps", "ok")]
   if (length(matched_models) > 0) {
     cat("Matched models:", matched_models, "\n")
@@ -2615,10 +2676,11 @@ final_interpolation <- function(model = c("ensemble", "single"), selected_models
   }
   if(model == "ensemble"){
     #Determine column names to match and limit to desired columns:
-    pred_cols <- paste0("Pred_Value_", selected_models)
-    result_data_final <- results_data %>% dplyr::select(PGID, Latitude:County, Statistic, all_of(pred_cols))
+    #pred_cols <- paste0("Pred_Value_", selected_models)
+    result_data_final <- results_data %>% 
+      dplyr::select(PGID, Latitude, Longitude, MGID, State_Ref, County, matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
     #
-    #Determine model weights:
+    #### WORKING POINT #Determine model weights:
     model_weighting(result_data_final, weighting)
     ##Create ensemble values
     ens_model <- result_data_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
