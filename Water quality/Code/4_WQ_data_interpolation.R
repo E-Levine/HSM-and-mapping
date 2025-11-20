@@ -151,7 +151,7 @@ final_data <- ensemble_weighting("ensemble", c("idw", "nn"), result_Mean, c(0.75
 #
 ####Save model####
 #
-save_model_output(final_data)
+save_model_output(final_data, threshold_val = NA)
 #
 #
 #If continuing to work, good practice to remove objects to make sure correct data is used:

@@ -2507,7 +2507,7 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simpli
   prefix <- sapply(split_parts, function(x) if (length(x) > 0) x[1] else "")
   suffix <- sapply(split_parts, function(x) if (length(x) > 0) x[length(x)] else "")
   # Define filters
-  prefix_match <- prefix %in% c("idw", "nn", "tps", "ok")
+  prefix_match <- prefix %in% c("idw", "nn", "tps", "ok", "ens")
   special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
   df_filtered <- results_data[, prefix_match | special_cols, drop = FALSE]
   # Build groups list only for prefix-matched columns
@@ -2667,7 +2667,6 @@ grouped_plot_interpolations <- function(plot_list){
 #
 ensemble_weighting <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
   model <- match.arg(model)
-  browser()
   matched_models <- selected_models[selected_models %in% c("idw", "nn", "tps", "ok")]
   if (length(matched_models) > 0) {
     cat("Matched models:", matched_models, "\n")
@@ -2680,43 +2679,82 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
     result_data_final <- results_data %>% 
       dplyr::select(PGID, Latitude, Longitude, MGID, State_Ref, County, matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
     #
-    #### WORKING POINT #Determine model weights:
     model_weighting(result_data_final, weighting)
+
     ##Create ensemble values
-    ens_model <- result_data_final %>% dplyr::select(PGID, Statistic, matches("_(idw|nn|tps|ok)$")) %>%
-      mutate(Pred_Value_ens = rowSums(across(matches("_(idw|nn|tps|ok)$")) * setNames(as.list(weight_values), sub("weight_", "", names(weight_values))))) %>%
-      group_by(PGID) %>% arrange(desc(Pred_Value_ens)) %>% slice(1)
+    # Define matching columns and groups
+    matching_cols <- names(result_data_final)[grepl("(idw|nn|tps|ok)_*", names(result_data_final))]
+    groups <- sapply(matching_cols, function(col) {
+      split <- strsplit(col, "_")[[1]]
+      if (length(split) > 2) split[2] else split[1]  # Middle if exists, else first
+    })
+    unique_groups <- unique(groups)
+    #
+    # Pre-select all matching columns into a matrix for fast access 
+    matching_matrix <- as.matrix(result_data_final[, matching_cols, drop = FALSE])
+    
+    # Precompute weighted sums for each group
+    ens_values <- lapply(unique_groups, function(g) {
+      cols_g <- matching_cols[groups == g]
+      if (length(cols_g) > 0) {
+        weights_g <- weight_values[cols_g]
+        selected <-  matching_matrix[, cols_g, drop = FALSE]
+        ens <- apply(selected, 1, function(row_vals) {
+          non_na_count <- sum(!is.na(row_vals))
+          if (non_na_count == 0) {
+            NA  # If all NA, return NA
+          } else if (non_na_count == 1) {
+            sum(row_vals, na.rm = TRUE)  # Weight 1 for single non-NA
+          } else {
+            sum(row_vals * weights_g, na.rm = TRUE)  # Weighted sum for multiple non-NA
+          }
+        })
+        ens
+      } else {
+        rep(NA, nrow(result_data_final))  # Use NA instead of 0 for consistency with your NA logic
+      }
+    })
+    names(ens_values) <- paste0("ens_", unique_groups) #Column anme using group
+    ens_values <- as.data.frame(ens_values) #Data frame to add to PGIDs
+    #
+    ens_model <- result_data_final %>% dplyr::select(PGID, all_of(matching_cols)) %>%
+     bind_cols(ens_values) %>%
+      group_by(PGID) %>% 
+      arrange(desc(rowSums(across(starts_with("ens_")), na.rm = TRUE))) %>% 
+      slice(1)
     #Spatial data:
     (Site_Grid_interp <- left_join(Site_Grid, ens_model))
     #plotting
-    temp <- plot_interpolations(ens_model, Site_Grid)
+    temp <- plot_interpolations(Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), Site_Grid) #filter to plot ens_*
+    grp_temp <- grouped_plot_interpolations(temp)
     #
     if(any(Site_Grid_interp$Statistic == "Threshold")){
       cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
     }
     ##Return plots, grid, and shapefile
-    return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
+    return(list(plots = temp, grid = grp_temp, spatialData = Site_Grid_interp))
   } else if(model == "single"){
     #Determine column names to match and limit to desired columns:
-    pred_cols <- paste0("Pred_Value_", selected_models)
-    result_data_final <- results_data %>% dplyr::select(Latitude:County, Statistic, all_of(pred_cols))
+    result_data_final <- results_data %>% 
+      dplyr::select(PGID, Latitude, Longitude, MGID, State_Ref, County, matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
     #Spatial data:
     (Site_Grid_interp <- left_join(Site_Grid, result_data_final))
     #plotting
-    temp <- plot_interpolations(result_data_final, Site_Grid)
+    temp <- plot_interpolations(Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), Site_Grid) #change like L2727
+    grp_temp <- grouped_plot_interpolations(temp)
     #
     if(any(Site_Grid_interp$Statistic == "Threshold")){
       cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
     }
     ##Return plots, grid, and shapefile
-    return(list(plots = temp$plots, grid = temp$grid, spatialData = Site_Grid_interp))
+    return(list(plots = temp, grid = grp_temp, spatialData = Site_Grid_interp))
     #
   }
 }
-#
+#Updated 25/11/20
 model_weighting <- function(final_data, weighting) {
   #Patterns to search for:
-  patterns <- "_(idw|nn|tps|ok)$"
+  patterns <- "(idw|nn|tps|ok)_*"
   #Function for equal weighting
   if (length(weighting) == 1 && weighting == "equal") {
     weights_from_columns <- function(dataframe) {
@@ -2745,10 +2783,29 @@ model_weighting <- function(final_data, weighting) {
         # Create names for the weights
         names(weighting) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
         return(weighting)
-      } else {
-        stop("The number of weights must match the number of model columns.")
+        #
+        } else if (length(weighting) < num_divisions) {
+          # Extract suffixes after the first underscore (e.g., "Jan_Mean")
+          suffixes <- sub("^[^_]+_", "", matched_columns)
+          unique_suffixes <- unique(suffixes)
+          num_groups <- length(unique_suffixes)  # e.g., 12 for months Jan-Dec
+          
+          # Create weights: repeat for each group (total length = 2 * num_groups)
+          weights <- rep(c(0.75, 0.25), times = num_groups)
+          
+          # Sort matched_columns by suffix (month), then by prefix to match weight order
+          prefixes <- sub("_.*", "", matched_columns)
+          matching_cols_sorted <- matched_columns[order(suffixes, prefixes)]
+          
+          # Assign weights as a named vector (0.75 for idw, 0.25 for nn, per group)
+          names(weights) <- matching_cols_sorted
+          
+          # Print or use the weights vector (e.g., for further analysis)
+          return(weights)
+          } else {
+            stop("The number of weights must match the number of models")
+          }
       }
-    }
     return(weight_values <<- weights_for_columns(final_data, weighting))
     print(weight_values)
   } else {
@@ -2773,11 +2830,21 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   }
   threshold_val <- threshold_val
   final_output_data <- output_data
-  Stat_type <- unique(final_output_data$spatialData$Statistic)
+  matching_cols <- colnames(final_output_data$spatialData)[grepl("^(idw|nn|ok|tps)_", colnames(final_output_data$spatialData))]
+  extracted_stats <- sapply(matching_cols, function(col) {
+    parts <- strsplit(col, "_")[[1]]
+    if (length(parts) > 1) {
+      return(tail(parts, 1))  # Get the last part after the last underscore
+    } else {
+      return(NA)  # In case of unexpected format, though unlikely with the pattern
+    }
+  })
+  Stat_type <- unique(extracted_stats[!is.na(extracted_stats)])
+  #
 
   #Save plots:
   if(interactive()){
-    result <- select.list(c("Yes", "No"), title = paste0("\nShould the plots the chosen interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the plots of the chosen interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
     if(result == "No"){
       message("Interpolation plots will not be saved.")
     } else {
@@ -2874,18 +2941,18 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
       summ_info <- data.frame(Parameter = Param_name,
                               Type = Param_name_2,
                               Statistic = Stat_type,
-                              Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("_(idw|nn|tps|ok)$")) %>% colnames(), collapse = ", "),
-                              Weights = paste(as.vector(weight_values), collapse = ", "),
+                              Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("(idw|nn|tps|ok|ens)_*")) %>% colnames() %>% sub("_.*", "", .) %>% unique(), collapse = ", "),
+                              Weights = paste(as.vector(unique(weight_values)), collapse = ", "),
                               Date_range = paste0(Start_year, "-", End_year),
                               Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")},
                               Threshold_value = threshold_val,
-                              Date_update = Sys.Date())
+                              Date_updated = Sys.Date())
       #Load the workbook
       wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
       #Check if the sheet exists
       if (sheet_name %in% sheet_names) {
         #If it exists, append data to the existing sheet
-        existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name)
+        existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name, detectDates = TRUE)
         new_data <- rbind(existing_data, summ_info)
         writeData(wb, sheet = sheet_name, new_data)
       } else {
