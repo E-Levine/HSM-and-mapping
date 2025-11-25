@@ -18,7 +18,10 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
 #
 Site_code <- c("SL")       #Two letter estuary code
 Version <- c("v1")         #For saving plots
+Start_year <- c("2020")
+End_year <- c("2024")
 #
+### Data gather and cleaning####
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
 #Make sure only desired logger data files are in the main folder
 load_WQ_data <- function(){
@@ -97,6 +100,9 @@ calculate_monthly_value <- function(df, value_col = "Salinity") {
 (sal_monthly <- calculate_monthly_value(salinity_ave, "Salinity"))
 (flow_monthly <- calculate_monthly_value(flow_sum, "Flow"))
 #
+#
+#
+### Model fit and plot ####
 ## Combined data frame - not currently helpful
 #monthly_data <- left_join(sal_monthly, flow_monthly)
 #head(monthly_data)
@@ -171,21 +177,6 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
   assign("Model_data", results_data, envir = .GlobalEnv)
   return(results)
 }
-#
-# moved to formula ####
-# SigmaPlot formula
-# Fit line
-fit_sp <- nlsLM(
-  Mean_Salinity ~ y0 + (a * b) / (b + Mean_Flow),
-  data = monthly_data,
-  start = list(
-    y0 = min(monthly_data$Mean_Salinity, na.rm = T),
-    a  = max(monthly_data$Mean_Salinity, na.rm = T) - min(monthly_data$Mean_Salinity, na.rm = T),
-    b  = median(monthly_data$Mean_Flow, na.rm = T)  # good stable guess
-  )
-)
-summary(fit_sp)
-#####
 #
 models <- fit_salinity_flow_models(flow_monthly, sal_monthly)
 #
@@ -306,6 +297,9 @@ ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
 #
 #
 #
+#
+### Paramater values and saving ####
+#
 ## Determine mean number of days in year within range 
 #min and max Dates to include
 optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFlow){
@@ -373,7 +367,6 @@ count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
 outlier_flow <- count_outlier_flow_days(flow_sum, "2020-01-01", "2024-12-31", "Flow")
 #
 #
-### NEED TO OUTPUT: adult, larvae - Flow_at_salinity sheet; A/L_optimal - Flow_optimal_days sheet oultier_flow sheet
 #
 # Save data and/or figure created
 save_flow_output <- function(adultFlow, larvaeFlow, adultOptimal, larvaeOptimal, outlierFlow){
@@ -446,6 +439,286 @@ save_flow_output <- function(adultFlow, larvaeFlow, adultOptimal, larvaeOptimal,
 save_flow_output(adult, larvae, Adult_optimal, Larvae_optimal, outlier_flow)
 #
 ##
+### Interpolation ####
+#
+## Get values into dataframe relating values to coordinates: 
+#Adult meanOptimal, Larvae meanOptimal, meanOutlier
+(A_optimal <- left_join(
+  # Get into same format
+  Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
+  # add values
+  Adult_optimal) %>%
+  # add flow logger data
+  mutate(meanDays = case_when(is.na(meanDays) ~ 0, TRUE ~ meanDays)))
+#
+(L_optimal <- left_join(
+  # Get into same format
+  Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
+  # add values
+  Larvae_optimal) %>%
+  # add flow logger data
+  mutate(meanDays = case_when(is.na(meanDays) ~ 0, TRUE ~ meanDays)))
+#
+(Outliers <- left_join(
+  # Get into same format
+  Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
+  # add values
+  data.frame(Station = c("S49", "S80", "S97"), 
+             outlier_flow %>% rename(meanOutlier = mean_outlier_days) %>% dplyr::select(meanOutlier))) %>%
+  # add flow logger data
+  mutate(meanOutlier = case_when(is.na(meanOutlier) ~ 0, TRUE ~ meanOutlier)))
+#
+#
+source("Code/WQ_functions.R")
+Site_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
+plot(Site_area[2])
+###State Outline
+FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
+plot(FL_outline)
+##Get Site area
+State_Grid <- c("H4") 
+Site_Grid <- load_site_grid(State_Grid, Site_area)
+Site_grid_sf <- st_as_sf(Site_Grid)
+#
+#Map of stations
+ggplot()+
+  geom_sf(data = Site_area, fill = "#6699CC")+
+  #geom_sf(data = Site_Grid, fill = NA)+
+  geom_sf(data = FL_outline)+
+  geom_point(data = Loggers, aes(Longitude, Latitude), size = 3.5)+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.05, st_bbox(Site_area)["xmax"]+0.05),
+           ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.05))
+#
+Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID), "Spatial")
+#
+## Get logger as spatial:
+Logger_coords <- Loggers %>% dplyr::select(Longitude, Latitude)
+coordinates(Logger_coords) <- ~Longitude + Latitude  # Longitude as x, Latitude as y
+proj4string(Logger_coords) <- CRS("+proj=longlat +datum=WGS84")
+# Get extents of both spatial objects
+ext1 <- extent(Site_Grid_spdf)
+ext2 <- extent(Logger_coords)
+# Create combined extent (bounding box covering both)
+combined_ext <- extent(
+  min(ext1@xmin, ext2@xmin), 
+  max(ext1@xmax, ext2@xmax), 
+  min(ext1@ymin, ext2@ymin), 
+  max(ext1@ymax, ext2@ymax)
+)
+# Convert the combined extent to a SpatialPolygons object
+# (This assumes the CRS is the same for both; if not, set it explicitly)
+combined_poly <- as(combined_ext, "SpatialPolygons")
+proj4string(combined_poly) <- proj4string(Site_Grid_spdf)  # Inherit CRS from Site_Grid_spdf
+#
+# Sample a regular grid of 10000 points from the combined polygon
+grid <- spsample(combined_poly, type = 'regular', n = 10000)
+plot(grid) 
+#
+##Inverse distance weighted:
+library(sf)       # For sf operations
+library(gstat)    # For idw()
+library(dismo)    # For voronoi()
+library(raster)   # For extent()
+library(sp)       # For SpatialPointsDataFrame
+library(dplyr)    # For data manipulation
+library(lubridate) # For parse_date_time() and time calculations
+flow_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, colName) {
+  #
+  StartTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
+  cat("Starting time:", format(Sys.time()), "\n")
+  #
+  tryCatch({
+   #Convert Site_Grid_spdf polygons to sf and get centroids
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    #
+    # Create formula dynamically from colName string
+    idw_formula <- reformulate("1", response = colName)
+    # IDW interpolation (power=2 by default)
+    idw_model <- suppressMessages(idw(formula = idw_formula, locations = Site_data_spdf, newdata = grid, idp = 2))
+    #
+    
+    # Convert to data.frame and rename columns
+    idw_df <- as.data.frame(idw_model) %>% 
+      rename(Longitude = x1, Latitude = x2, Prediction = var1.pred) %>%
+      mutate(Pred_Value = round(Prediction, 2)) %>% #, Statistic = stats[i]) %>% 
+      dplyr::select(-var1.var)
+      #
+      ##PROCESSING:
+      #Convert to SpatialPointsDataFrame
+      coordinates(idw_df) <- ~Longitude + Latitude
+      proj4string(idw_df) <- proj4string(idw_model)
+      #
+      #Create Voronoi polygons clipped to grid extent
+      voroni_poly <- dismo::voronoi(idw_df, ext = raster::extent(grid))
+      #
+      ##GRID App:
+      # Convert voronoi polygons to sf
+      voronoi_sf <- st_as_sf(voroni_poly)
+      #
+      #Spatial join: assign Voronoi polygon values to centroids, join centroids with voronoi polygons by spatial intersection
+      centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
+      #
+      ##WRAP UP:
+      centroids_joined <- centroids_joined %>%
+        rename(!!colName := Pred_Value)
+      #
+      # Join back to original site polygons (assuming PGID matches)
+      final_sf <- site_sf %>% 
+        left_join(st_drop_geometry(centroids_joined), by = "PGID")
+  })
+  EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
+  cat("Ending time:", format(Sys.time()), "\n")
+  print(EndTime - StartTime)
+  #
+  return(final_sf)
+}
+#
+#
+## Repeat for each data frame:
+data_cols <- if(ncol(A_optimal) >= 3) {
+  A_optimal[, !names(A_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = A_optimal[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+AOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanDays")
+plot_interpolations(AOP_idw_data, Site_Grid, Threshold = "N", simplify_tolerance = 0)
+#
+#
+#
+data_cols <- if(ncol(L_optimal) >= 3) {
+  L_optimal[, !names(L_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = L_optimal[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+LOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanDays")
+#
+#
+#
+data_cols <- if(ncol(Outliers) >= 3) {
+  Outliers[, !names(Outliers) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = Outliers[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+Outlier_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOutlier")#
+#
+#
+#
+#
+plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_tolerance = 0){
+  special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
+  
+  if (simplify_tolerance > 0) {
+    df_filtered <- st_simplify(results_data, dTolerance = simplify_tolerance, preserveTopology = TRUE)
+  } else {
+    df_filtered <- results_data
+  }
+  # Define base theme for reuse (avoids redundancy)
+  base_theme <- theme_classic() +
+    theme(panel.border = element_rect(color = "black", fill = NA), 
+          axis.text = element_text(size = 16),
+          plot.margin = unit(c(0,0,0,0), "cm"), 
+          plot.title = element_text(margin = margin(b = 5)), 
+          plot.caption = element_text(face = "italic", size = 9))
+  #
+  #Create plots
+  ggplot() +
+    geom_sf(data = df_filtered, aes(color = !!sym(colName))) +
+    base_theme +
+    scale_color_viridis_b(direction = -1)   # Use shared limits
+}
+#
+plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOutlier")
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "Outlier_days",".tiff", sep = ""), dpi = 1000)
+#
+#
+#
+## Save output
+save_flow_output <- function(output_data, fileName){
+  final_output_data <- output_data
+  #Save shapefile:
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the shapefile and a summary of the chosen interpolation values be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Shapefile and summary will not be saved.")
+    } else {
+      #Shape file
+      shape_file <- final_output_data
+      shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
+                               #File name
+                               paste0(Site_code, "_", paste(fileName)), 
+                               ".shp")
+      #Save the sf dataframe as a shapefile
+      suppressMessages(st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
+      #Print a message to confirm saving
+      cat("Shapefile saved at:", shapefile_path, "\n",
+          "- ", nrow(final_output_data), " features saved with ", ncol(final_output_data)-1, "fields")
+      #
+      #
+      # Excel data
+      model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
+      data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                          #File name
+                          paste0(Site_code, "_", paste(fileName)), 
+                          ".xlsx")
+      #Create wb with data:
+      new_wb <- createWorkbook()
+      addWorksheet(new_wb, "Model_data")  # Add fresh sheet
+      writeData(new_wb, sheet = "Model_data", x = model_data) 
+      #Save wb
+      saveWorkbook(new_wb, data_path, overwrite = TRUE)
+      cat("Model data successfully saved to:\n",
+          "- Sheet 'Model_data' (", nrow(model_data), " rows)\n",
+          "File: ", data_path, "\n")
+      #
+      #
+      # Summary info
+      sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      sheet_name <- "Interpolation_Summary"
+      summ_info <- data.frame(Parameter = fileName,
+                              Type = "Flow",
+                              Statistic = "Mean",
+                              Models = if(grepl("optimal", fileName, ignore.case = TRUE)) {paste("Mean optimal days per year")} else if(grepl("outlier", fileName, ignore.case = TRUE)){paste("Mean outlier days per month")} else {paste("")},
+                              Weights = NA,
+                              Date_range = paste0(Start_year, "-", End_year),
+                              Months = "All",
+                              Threshold_value = NA,
+                              Date_updated = Sys.Date())
+      #Load the workbook
+      wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      #Check if the sheet exists
+      if (sheet_name %in% sheet_names) {
+        #If it exists, append data to the existing sheet
+        existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name, detectDates = TRUE)
+        new_data <- rbind(existing_data, summ_info)
+        writeData(wb, sheet = sheet_name, new_data)
+      } else {
+        #If it does not exist, create a new sheet
+        addWorksheet(wb, sheet_name)
+        writeData(wb, sheet = sheet_name, summ_info)
+      }
+      #Save the workbook
+      saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+      #Print a message to confirm saving
+      cat("Summary information was saved within:", sheet_name, "\n")
+    }
+  }
+}
+save_flow_output(Outlier_idw_data, "outlier")
+#
 ### Other possible data ####
 # 
 ## Metrics
