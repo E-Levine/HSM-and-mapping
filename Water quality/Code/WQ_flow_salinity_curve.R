@@ -375,6 +375,76 @@ outlier_flow <- count_outlier_flow_days(flow_sum, "2020-01-01", "2024-12-31", "F
 #
 ### NEED TO OUTPUT: adult, larvae - Flow_at_salinity sheet; A/L_optimal - Flow_optimal_days sheet oultier_flow sheet
 #
+# Save data and/or figure created
+save_flow_output <- function(adultFlow, larvaeFlow, adultOptimal, larvaeOptimal, outlierFlow){
+  #
+  Logger_stations <- "Flow_stations"
+  FlowSalinity <- "Flow_at_salinity"
+  Optimal <- "Flow_optimal_days"
+  Outlier <- "Flow_outlier_days"
+  #
+  if(interactive()){
+    result<- select.list(c("Yes", "No"), title = paste0("\nCan a summary of the flow curve results be saved locally to the version tracking file?"))
+    if(result == "No"){
+      message("Flow curve output will NOT be saved to the model version tracking file.")
+    } else {
+      # Define workbook path
+      wb_path <- paste0("../",Site_code, "_", Version, "/Data/", Site_code, "_", Version, "_model_setup.xlsx")
+      
+      # Load the workbook (or create if it doesn't exist)
+      if (file.exists(wb_path)) {
+        wb <- loadWorkbook(wb_path)
+      } else {
+        stop("Setup file does not exist or cannot be found.")
+      }
+      
+      # Get existing sheet names
+      existing_sheets <- sheets(wb)
+
+      # Save logger location output
+      temp_logger <- get("Loggers", envir = .GlobalEnv)
+      if (Logger_stations %in% existing_sheets) {
+        writeData(wb, sheet = Logger_stations, temp_logger)
+      } else {
+        addWorksheet(wb, Logger_stations)
+        writeData(wb, sheet = Logger_stations, temp_logger)
+      }
+      # Save flow at salinity output
+      temp_data_flow <- rbind(adultFlow, larvaeFlow)
+      if (FlowSalinity %in% existing_sheets) {
+        writeData(wb, sheet = FlowSalinity, temp_data_flow)
+      } else {
+        addWorksheet(wb, FlowSalinity)
+        writeData(wb, sheet = FlowSalinity, temp_data_flow)
+      }
+      
+      # Save optimal flow output
+      temp_data_optimal <- rbind(adultOptimal, larvaeOptimal)
+      if (Optimal %in% existing_sheets) {
+        writeData(wb, sheet = Optimal, temp_data_optimal)
+      } else {
+        addWorksheet(wb, Optimal)
+        writeData(wb, sheet = Optimal, temp_data_optimal)
+      }
+      
+      # Save outlier flow output
+      temp_data_outlier <- outlierFlow
+      if (Outlier %in% existing_sheets) {
+        writeData(wb, sheet = Outlier, temp_data_outlier)
+      } else {
+        addWorksheet(wb, Outlier)
+        writeData(wb, sheet = Outlier, temp_data_outlier)
+      }
+      
+      # Save the workbook
+      saveWorkbook(wb, wb_path, overwrite = TRUE)
+      message("Flow curve outputs saved successfully to the model version tracking file.")
+    }
+  }
+}
+#
+save_flow_output(adult, larvae, Adult_optimal, Larvae_optimal, outlier_flow)
+#
 ##
 ### Other possible data ####
 # 
