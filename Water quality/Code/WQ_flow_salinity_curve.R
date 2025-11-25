@@ -17,6 +17,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
 #
 #
 Site_code <- c("SL")       #Two letter estuary code
+Version <- c("v1")         #For saving plots
 #
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
 #Make sure only desired logger data files are in the main folder
@@ -45,7 +46,7 @@ load_WQ_data()
 flow_sum <- flow_raw %>% 
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
-  mutate(Site = Site_code) %>% 
+  mutate(Site = Site_code, Station = "ALL") %>% 
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Flow = sum(Value, na.rm = T)) %>% 
   ungroup()
@@ -101,7 +102,7 @@ calculate_monthly_value <- function(df, value_col = "Salinity") {
 #head(monthly_data)
 #
 ## Fit curve
-#
+#library(stringr, minpack.lm, dplyr)
 fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_Flow", salinity_col = "Mean_Salinity"){
   # Assumptions:
   # - flow_data: data frame with columns for Date, Station, and Mean_Flow
@@ -116,6 +117,7 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
   flow_stations <- unique(flow_data[[station_col]])
   # Initialize a list to store results
   results <- list()
+  results_data <- list()
   
   # Loop over each combination
   for (sal_station in salinity_stations) {
@@ -131,7 +133,7 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
         dplyr::select(.data[[time_col]], !!flow_col := .data[[flow_col]])
       
       # Merge on time (inner join to get matching time points)
-      combined <- inner_join(sal_sub, flow_sub, by = time_col)
+      combined <- inner_join(sal_sub, flow_sub, by = time_col) %>% drop_na()
       
       # Check if there are enough data points (at least 4 for NLS)
       if (nrow(combined) >= 4) {
@@ -151,7 +153,7 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
           ),
           silent = TRUE
         )
-        
+        results_data[[paste(str_replace_all(sal_station, "_", ""), str_replace_all(flow_station, "_", ""), sep = "_")]] <- combined
         # Store the summary if fit succeeded, otherwise store an error message
         if (!inherits(fit, "try-error")) {
           results[[paste(str_replace_all(sal_station, "_", ""), str_replace_all(flow_station, "_", ""), sep = "_")]] <- summary(fit)
@@ -166,6 +168,7 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
   # Print the list of all model names (combinations) that were attempted
   print("Models attempted (salinityStation_flowStation):")
   print(names(results))
+  assign("Model_data", results_data, envir = .GlobalEnv)
   return(results)
 }
 #
@@ -187,39 +190,86 @@ summary(fit_sp)
 models <- fit_salinity_flow_models(flow_monthly, sal_monthly)
 #
 # Calculate flow at specified salinity
-flow_at_salinity_hyp2 <- function(fit, target_sal) {
+flow_at_salinity_hyp2 <- function(results, target_sal) {
+  # results: output from fit_salinity_flow_models (list of summaries or error messages)
+  # target_sal: target salinity value
   
-  p <- coef(fit)
-  y0 <- p["y0"]
-  a  <- p["a"]
-  b  <- p["b"]
-  
-  if (target_sal <= y0) {
-    stop("Target salinity is <= y0. Flow cannot be solved.")
+  # Initialize a data frame to store results
+  flow_results <- data.frame(
+    salinity_station = character(),
+    flow_station = character(),
+    flow_at_target = numeric(),
+    status = character(),
+    stringsAsFactors = FALSE
+  )
+  # Loop through each result
+  for (model_name in names(results)) {
+    result <- results[[model_name]]
+    
+    # Split the model name to get salinity and flow stations (assuming format: sal_station_flow_station)
+    parts <- str_split(model_name, "_", n = 2)[[1]]
+    sal_station_clean <- parts[1]
+    flow_station_clean <- parts[2]
+    if (inherits(result, "summary.nls")) {
+      # Successful fit: extract coefficients and compute flow
+      p <- coef(result)
+      y0 <- p[1]
+      a  <- p[2]
+      b  <- p[3]
+      
+      if (target_sal <= y0) {
+        flow_val <- NA
+        status <- "Target salinity <= y0; flow cannot be solved"
+      } else {
+        flow_val <- (a * b) / (target_sal - y0) - b
+        status <- "Success"
+      }
+    } else {
+      # Failed fit or insufficient data
+      flow_val <- NA
+      status <- result  # Use the error message as status
+    }
+    # Append to results data frame
+    flow_results <- rbind(flow_results, data.frame(
+      salinity_station = sal_station_clean,
+      flow_station = flow_station_clean,
+      flow_at_target = flow_val,
+      status = status,
+      stringsAsFactors = FALSE
+    ))
   }
-  
-  flow <- (a * b) / (target_sal - y0) - b
-  return(flow)
+  return(flow_results)
 }
+#
+adult <- rbind(
+  flow_at_salinity_hyp2(models, 11.98) %>% mutate(Sal = "min"), 
+  flow_at_salinity_hyp2(models, 35.98) %>% mutate(Sal = "max"))
+larvae <- rbind(
+  flow_at_salinity_hyp2(models, 10.01) %>% mutate(Sal = "min"), 
+  flow_at_salinity_hyp2(models, 31.49) %>% mutate(Sal = "max"))
+#
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
-ggplot_hyperbolic_fit <- function(df, fit, flow_col = "Flow", value_col = "Salinity", 
+ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Flow", value_col = "Salinity", 
                                   Salinity_min = NULL, Salinity_max = NULL, Flow_min = NULL, Flow_max = NULL) {
+  df <- resultsdf[[model_name]]
+  # Check if the model exists and is successful
+  if (!(model_name %in% names(resultsdf))) {
+    stop("Model name not found in results.")
+  }
+  fit <- results[[model_name]]
   # Input validation
   if (!all(c(flow_col, value_col) %in% names(df))) {
     stop("Data frame must contain the specified flow and value columns.")
   }
   coefs <- coef(fit)
-  if (!all(c("y0", "a", "b") %in% names(coefs))) {
-    stop("Fit must have coefficients named 'y0', 'a', 'b'.")
-  }
   if (!is.numeric(df[[flow_col]]) || !is.numeric(df[[value_col]])) {
     stop("Specified columns must be numeric.")
   }
   # Extract parameters
   p <- coef(fit)
-  y0 <- p["y0"]
-  a  <- p["a"]
-  b  <- p["b"]
+  y0 <- p[1]
+  a  <- p[2]
+  b  <- p[3]
   
   # Build prediction grid
   xseq <- seq(min(df[[flow_col]]), max(df[[flow_col]]), length.out = 300)
@@ -229,7 +279,7 @@ ggplot_hyperbolic_fit <- function(df, fit, flow_col = "Flow", value_col = "Salin
     flow = xseq,
     fitted = pred
   ) %>% rename(!!flow_col := flow)
-
+  
   ggplot(df, aes(x = .data[[flow_col]], y = .data[[value_col]])) +
     {if(!is.null(Salinity_min) && !is.null(Salinity_max)) annotate("rect", xmin=-Inf, xmax=Inf, ymin=Salinity_min, ymax=Salinity_max, alpha=0.6, fill="#B8FFB8")}+
     {if(!is.null(Flow_min) && !is.null(Flow_max)) annotate("rect", xmin=Flow_min, xmax=Flow_max, ymin=-Inf, ymax=Inf, alpha=0.6, fill="#97FFFF")}+
@@ -241,17 +291,15 @@ ggplot_hyperbolic_fit <- function(df, fit, flow_col = "Flow", value_col = "Salin
     labs(
       x = flow_col,
       y = value_col,
-      title = paste0("Hyperbolic Fit: y =",round(y0,2), " + (", round(a,2), "*", round(b,2), ")/(",round(b,2)," + x)", collapse = "")
+      title = paste(model_name),
+      subtitle = paste0("Hyperbolic Fit: y =",round(y0,2), " + (", round(a,2), "*", round(b,2), ")/(",round(b,2)," + x)", collapse = "")
     ) +
     theme_classic()
 }
-#
-ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity")
-flow_at_salinity_hyp2(fit_sp, 11.98)
-flow_at_salinity_hyp2(fit_sp, 35.98)
-flow_at_salinity_hyp2(fit_sp, 10.01)
-flow_at_salinity_hyp2(fit_sp, 31.49)
-#
+
+ggplot_hyperbolic_fit(Model_data, models, "STLSTPT_ALL", "Mean_Flow", "Mean_Salinity")
+#ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+#       filename = paste("Flow_salinity_curve_", "STLSTPT",".tiff", sep = ""), dpi = 1000)
 ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
                       Salinity_min = 11.98, Salinity_max = 35.98,
                       Flow_min = 0, Flow_max = 907.26)
@@ -260,24 +308,40 @@ ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
 #
 ## Determine mean number of days in year within range 
 #min and max Dates to include
-optimal_flow_days <- function(df, minDate, maxDate, minFlow, maxFlow){
+optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFlow){
   df %>% 
     # Filter data to date range
     filter(Date >= as.Date(minDate) & Date <= as.Date(maxDate)) %>%
     # Count if within ideal range
     mutate(Year = year(Date), 
+           Station = Station_name, 
            Conditions = case_when(Flow < maxFlow & Flow > minFlow ~ 1,  
                                   TRUE ~ 0)) %>%
     # Group by year and count number of good days
-    group_by(Year) %>%
+    group_by(Year, Station) %>%
     summarise(Days = sum(Conditions)) %>% 
-    ungroup() %>%
+    ungroup() %>% group_by(Station) %>%
     # Mean number of annual days within ideal flow at logger point
     summarise(meanDays = mean(Days)) 
 }
 #
-Adult_optimal <- optimal_flow_days(flow_sum, "2020-01-01", "2024-12-31", -225, 907.257)
-Larval_optimal <- optimal_flow_days(flow_sum, "2020-01-01", "2024-12-31", -140, 1216.267)
+(Adult_optimal <- rbind(
+  #HR1
+  optimal_flow_days(flow_sum, "HR1","2020-01-01", "2024-12-31", -265, 552.8134),
+  #STLRIVER 
+  optimal_flow_days(flow_sum, "STLRIVER","2020-01-01", "2024-12-31", -294, 794.0674),
+  #STLSTPT
+  optimal_flow_days(flow_sum, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.745)
+  ))
+(Larvae_optimal <- rbind(
+  #HR1
+  optimal_flow_days(flow_sum, "HR1","2020-01-01", "2024-12-31", -202, 770.6214),
+  #STLRIVER 
+  optimal_flow_days(flow_sum, "STLRIVER","2020-01-01", "2024-12-31", -210, 1064.4825),
+  #STLSTPT
+  optimal_flow_days(flow_sum, "STLSTPT","2020-01-01", "2024-12-31", -79, 14472.53761)
+))
+#
 #
 # Count number of days in month more than 1.5 SD from monthly mean
 count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
@@ -309,60 +373,9 @@ count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
 outlier_flow <- count_outlier_flow_days(flow_sum, "2020-01-01", "2024-12-31", "Flow")
 #
 #
-## Get compiled data of logger and river point
-# Set central point based on river/flow input:
-
+### NEED TO OUTPUT: adult, larvae - Flow_at_salinity sheet; A/L_optimal - Flow_optimal_days sheet oultier_flow sheet
 #
-#
-#
-####Example idea####
-interpolate_flow_grid <- function(salinity_grid, flow_value,
-                                  mode = c("proportional", "inverse"),
-                                  rescale_mean = TRUE) {
-  mode <- match.arg(mode)
-  
-  # Normalize salinity to 0-1
-  sal_norm <- (salinity_grid - min(salinity_grid, na.rm = TRUE)) /
-    (max(salinity_grid, na.rm = TRUE) - min(salinity_grid, na.rm = TRUE))
-  
-  # Apply transformation
-  flow_grid <- switch(mode,
-                      proportional = flow_value * sal_norm,
-                      inverse      = flow_value * (1 - sal_norm))
-  
-  # Optional: rescale so mean matches the measured flow
-  if(rescale_mean) {
-    flow_grid <- flow_grid / mean(flow_grid, na.rm = TRUE) * flow_value
-  }
-  
-  return(flow_grid)
-}
-
-# Simulate 100x100 salinity grid
-set.seed(123)
-salinity_grid <- matrix(runif(10000, 5, 35), nrow = 100, ncol = 100)
-
-# Single Flow measurement
-flow_value <- 50
-
-# Interpolate Flow over grid, proportional to Salinity
-flow_grid <- interpolate_flow_grid(salinity_grid, flow_value,
-                                   mode = "proportional",
-                                   rescale_mean = TRUE)
-library(ggplot2)
-library(reshape2)
-
-flow_df <- melt(flow_grid)  # convert matrix to long format
-
-ggplot(flow_df, aes(x = Var2, y = Var1, fill = value)) +
-  geom_raster() +
-  scale_fill_viridis_c(option = "C") +
-  labs(title = "Interpolated Flow Grid",
-       x = "X", y = "Y", fill = "Flow") +
-  theme_minimal()
-
-#
-#
+##
 ### Other possible data ####
 # 
 ## Metrics
