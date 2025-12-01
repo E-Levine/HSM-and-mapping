@@ -16,10 +16,105 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                install = TRUE) 
 #
 #
-Site_code <- c("SL")       #Two letter estuary code
+Site_code <- c("SS")       #Two letter estuary code
 Version <- c("v1")         #For saving plots
 Start_year <- c("2020")
 End_year <- c("2024")
+#
+### USGS data collection ####
+#
+library(dataRetrieval)
+#
+#Parameter code: 00060 = mean daily discharge, 00061 = instantaneous discharge, 00480 = Salinity
+#Statistic_id: 00003 = Mean
+(temp_data <- read_waterdata_daily(monitoring_location_id = c("USGS-02323592", "USGS-02313700", "USGS-02324170", "USGS-02313272"), 
+                                  parameter_code = c("00060", "00061"),
+                                  properties = c("value", "statistic_id", "monitoring_location_id", "parameter_code", "time", "unit_of_measure"),
+                                  skipGeometry = TRUE))
+#
+clean_save_usgs_data <- function(rawDF, startDate, endDate, dataType){
+  # Date range (use lubridate for robustness)
+  start <- lubridate::ymd(startDate)
+  end <- lubridate::ymd(endDate)
+  Type <- dataType
+  if (is.na(start) | is.na(end)) stop("Invalid date format; use YYYY-MM-DD")
+  #
+  # Data filtering
+  data <- rawDF %>% 
+    rename(TIMESTAMP = time, VALUE = value, STATION = monitoring_location_id) %>%
+    dplyr::filter(TIMESTAMP >= start & TIMESTAMP <= end) %>%
+    mutate(PARAMETER = case_when(
+      parameter_code == "00060" ~ "FLOW_d", 
+      parameter_code == "00061" ~ "FLOW_i", 
+      parameter_code == "00480" ~ "Salinity",
+      TRUE ~ NA_character_))
+  #
+  # Check for data
+  if (nrow(data) == 0) stop("No data found in the specified date range")
+  #
+  start_ym <- format(start, "%Y%m")  # e.g., "202301"
+  end_ym <- format(end, "%Y%m")      # e.g., "202312"
+  data_path <- paste0("Data/Raw-data/", Site_code, "_logger_", Type, "_", start_ym, "_", end_ym,".xlsx")
+  #Create wb with data:
+  sheetName = paste0("logger_", Type)
+  new_wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(new_wb, sheetName)  # Add fresh sheet
+  openxlsx::writeData(new_wb, sheet = sheetName, x = data) 
+  #Save wb
+  openxlsx::saveWorkbook(new_wb, data_path, overwrite = TRUE)
+  cat("Logger data successfully saved to:\n",
+      "- Sheet '",sheetName,"' (", nrow(data), " rows)\n",
+      "File: ", data_path, "\n")
+  #
+}
+#
+clean_save_usgs_flow(temp_data, "2020-01-01", "2024-12-31", "flow")
+#
+#
+#
+### Data from cleaned Storet files ####
+# Name of file to use
+
+clean_save_existing_data <- function(fileName, dataType){
+  # Data type/parameter
+  Type <- dataType
+  #
+  filePath <- paste0("Data/Raw-cleaned/", fileName, ".xlsx")
+  loaded <- read.xlsx(filePath, sheet = "Sheet1")
+  #
+  # Data filtering
+  data <- loaded %>% 
+    filter(CharacteristicName == "Salinity") %>% 
+    dplyr::select("STATION" = MonitoringLocationName, 
+                  "Latitude" = LatitudeMeasure, 
+                  "Longitude" = LongitudeMeasure, 
+                  "TIMESTAMP" = ActivityStartDate, 
+                  "PARAMETER" = CharacteristicName, 
+                  "VALUE" = ResultMeasureValue)
+  #
+  # Check for data
+  if (nrow(data) == 0) stop("No data found in the specified date range")
+  #
+  start_ym <- format(as.Date(min(data$TIMESTAMP)), "%Y%m")  # e.g., "202301"
+  end_ym <- format(as.Date(max(data$TIMESTAMP)), "%Y%m")      # e.g., "202312"
+  data_path <- paste0("Data/Raw-data/", Site_code, "_logger_", Type, "_", start_ym, "_", end_ym,".xlsx")
+  #Create wb with data:
+  sheetName = paste0("logger_", Type)
+  new_wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(new_wb, sheetName)  # Add fresh sheet
+  openxlsx::writeData(new_wb, sheet = sheetName, x = data) 
+  #Save wb
+  openxlsx::saveWorkbook(new_wb, data_path, overwrite = TRUE)
+  cat("Logger data successfully saved to:\n",
+      "- Sheet '",sheetName,"' (", nrow(data), " rows)\n",
+      "File: ", data_path, "\n")
+  #
+}
+#
+clean_save_existing_data("SS_Portal_combined_filtered_2020_2024", "Salinity")
+#
+#
+#
 #
 ### Data gather and cleaning####
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
@@ -32,7 +127,7 @@ load_WQ_data <- function(){
     flow_raw <- openxlsx::read.xlsx(file.path("Data/Raw-data/", flow_file[1]), na.strings = c("NA", " ", "", "Z"), detectDates = TRUE)
     #
     salinity_file <- list.files(path = "Data/Raw-data/", 
-                                 pattern = paste0(Site_code, "_logger_salinity_.*.xlsx"))
+                                 pattern = paste0(Site_code, "_logger_[Ss]alinity_.*.xlsx"))
     if(length(salinity_file) == 0) stop("No salinity file found for Site_code: ", Site_code)
     #
     salinity_raw <- openxlsx::read.xlsx(file.path("Data/Raw-data/", salinity_file[1]), na.strings = c("NA", " ", "", "Z"), detectDates = TRUE)
@@ -46,12 +141,12 @@ load_WQ_data()
 #
 ## Clean data
 # Total daily flow for each logger
-flow_sum <- flow_raw %>% 
+flow_ave <- flow_raw %>% 
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
   mutate(Site = Site_code, Station = "ALL") %>% 
   group_by(Site, Date, Station, Parameter) %>% 
-  summarise(Flow = sum(Value, na.rm = T)) %>% 
+  summarise(Flow = mean(Value, na.rm = T)) %>% 
   ungroup()
 # Mean daily salinity for each logger
 salinity_ave <- salinity_raw %>% 
@@ -68,6 +163,7 @@ salinity_ave <- salinity_raw %>%
 # Function to calculate mean monthly salinity library(dplyr, lubridate)
 # Input: df (data frame with 'Date' as Date class and 'Salinity' as numeric)
 # Output: A summary data frame with Year, Month, and Mean_Salinity
+# Calculates pre salinity logger or total all flow
 calculate_monthly_value <- function(df, value_col = "Salinity") {
   # Check for required columns and formats
   if (!"Date" %in% colnames(df)) {
@@ -180,7 +276,7 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
 #
 models <- fit_salinity_flow_models(flow_monthly, sal_monthly)
 #
-# Calculate flow at specified salinity
+# Calculate flow at specified salinity (from HSM curves)
 flow_at_salinity_hyp2 <- function(results, target_sal) {
   # results: output from fit_salinity_flow_models (list of summaries or error messages)
   # target_sal: target salinity value
@@ -234,10 +330,10 @@ flow_at_salinity_hyp2 <- function(results, target_sal) {
 #
 adult <- rbind(
   flow_at_salinity_hyp2(models, 11.98) %>% mutate(Sal = "min"), 
-  flow_at_salinity_hyp2(models, 35.98) %>% mutate(Sal = "max"))
+  flow_at_salinity_hyp2(models, 35.98) %>% mutate(Sal = "max")) %>% mutate(Type = "Adult")
 larvae <- rbind(
   flow_at_salinity_hyp2(models, 10.01) %>% mutate(Sal = "min"), 
-  flow_at_salinity_hyp2(models, 31.49) %>% mutate(Sal = "max"))
+  flow_at_salinity_hyp2(models, 31.49) %>% mutate(Sal = "max")) %>% mutate(Type = "Larave")
 #
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
 ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Flow", value_col = "Salinity", 
@@ -291,14 +387,15 @@ ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Fl
 ggplot_hyperbolic_fit(Model_data, models, "STLSTPT_ALL", "Mean_Flow", "Mean_Salinity")
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
 #       filename = paste("Flow_salinity_curve_", "STLSTPT",".tiff", sep = ""), dpi = 1000)
-ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
-                      Salinity_min = 11.98, Salinity_max = 35.98,
-                      Flow_min = 0, Flow_max = 907.26)
+#
+#ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
+ #                     Salinity_min = 11.98, Salinity_max = 35.98,
+  #                    Flow_min = 0, Flow_max = 907.26)
 #
 #
 #
 #
-### Paramater values and saving ####
+### Parameter values and saving ####
 #
 ## Determine mean number of days in year within range 
 #min and max Dates to include
@@ -323,10 +420,10 @@ optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFl
   #HR1
   optimal_flow_days(flow_sum, "HR1","2020-01-01", "2024-12-31", -265, 552.8134),
   #STLRIVER 
-  optimal_flow_days(flow_sum, "STLRIVER","2020-01-01", "2024-12-31", -294, 794.0674),
+  optimal_flow_days(flow_sum, "STLRIVER","2020-01-01", "2024-12-31", -294, 784.0671),
   #STLSTPT
-  optimal_flow_days(flow_sum, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.745)
-  ))
+  optimal_flow_days(flow_sum, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.8245)
+  ) %>% mutate(Type = "Adult"))
 (Larvae_optimal <- rbind(
   #HR1
   optimal_flow_days(flow_sum, "HR1","2020-01-01", "2024-12-31", -202, 770.6214),
@@ -334,7 +431,7 @@ optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFl
   optimal_flow_days(flow_sum, "STLRIVER","2020-01-01", "2024-12-31", -210, 1064.4825),
   #STLSTPT
   optimal_flow_days(flow_sum, "STLSTPT","2020-01-01", "2024-12-31", -79, 14472.53761)
-))
+) %>% mutate(Type = "Larvae"))
 #
 #
 # Count number of days in month more than 1.5 SD from monthly mean
@@ -364,7 +461,7 @@ count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
     summarise(mean_outlier_days = mean(days_outlier_flow),
               mean_flow = mean(mean_flow))
     }
-outlier_flow <- count_outlier_flow_days(flow_sum, "2020-01-01", "2024-12-31", "Flow")
+outlier_flow <- count_outlier_flow_days(flow_sum, "2020-01-01", "2024-12-31", "Flow") %>% mutate(Type = "All")
 #
 #
 #
@@ -482,11 +579,12 @@ Site_grid_sf <- st_as_sf(Site_Grid)
 #
 #Map of stations
 ggplot()+
-  geom_sf(data = Site_area, fill = "#6699CC")+
+  geom_sf(data = Site_area, fill = "#99CCFF")+
   #geom_sf(data = Site_Grid, fill = NA)+
   geom_sf(data = FL_outline)+
-  geom_point(data = Loggers, aes(Longitude, Latitude), size = 3.5)+
+  geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType), size = 3.5)+
   theme_classic()+
+  scale_color_manual(values = c("#009E73", "#D55E00"))+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.05, st_bbox(Site_area)["xmax"]+0.05),
@@ -568,7 +666,7 @@ flow_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, colName
       #
       # Join back to original site polygons (assuming PGID matches)
       final_sf <- site_sf %>% 
-        left_join(st_drop_geometry(centroids_joined), by = "PGID")
+        left_join(st_drop_geometry(centroids_joined %>% dplyr::select(-Latitude, -Longitude)), by = "PGID")
   })
   EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
   cat("Ending time:", format(Sys.time()), "\n")
@@ -588,7 +686,7 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = A_optimal[,c("Longitude","Lati
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
 AOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanDays")
-plot_interpolations(AOP_idw_data, Site_Grid, Threshold = "N", simplify_tolerance = 0)
+#plot_interpolations(AOP_idw_data, Site_Grid, Threshold = "N", simplify_tolerance = 0)
 #
 #
 #
@@ -640,9 +738,9 @@ plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_toleranc
     scale_color_viridis_b(direction = -1)   # Use shared limits
 }
 #
-plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOutlier")
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "Outlier_days",".tiff", sep = ""), dpi = 1000)
+plot_flow_interp(LOP_idw_data, Site_Grid, "meanDays")
+#ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+#       filename = paste("Flow_salinity_curve_", "Outlier_days",".tiff", sep = ""), dpi = 1000)
 #
 #
 #
