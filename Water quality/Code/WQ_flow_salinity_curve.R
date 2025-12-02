@@ -120,7 +120,8 @@ clean_save_existing_data("SS_Portal_combined_filtered_2020_2024", "Salinity")
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
 #Make sure only desired logger data files are in the main folder
 load_WQ_data <- function(){
-  Stations <- openxlsx::read.xlsx(file.path("Data/Raw-data/Flow_logger_locations.xlsx"), na.strings = c("NA", " ", "", "Z"), detectDates = TRUE)
+  Stations <- openxlsx::read.xlsx(file.path("Data/Raw-data/Flow_logger_locations.xlsx"), na.strings = c("NA", " ", "", "Z"), detectDates = TRUE) %>%
+    dplyr::filter(Site == Site_code)
     flow_file <- list.files(path = "Data/Raw-data/", 
                             pattern = paste0(Site_code, "_logger_flow_.*.xlsx"))
     if(length(flow_file) == 0) stop("No flow file found for Site_code: ", Site_code)
@@ -140,19 +141,160 @@ load_WQ_data <- function(){
 load_WQ_data()
 #
 ## Clean data
+#
+# If many points, can simplify into groups with averaged values
+# library(geosphere, igraph, dplyr, leaflet)
+# df should have columns: ID, Latitude, Longitude, Value
+# distance_threshold in meters (e.g., 2000)
+cluster_points <- function(df, distance_threshold, Site = Site_code) {
+  SiteCode <- Site
+  # Extract coordinates
+  coords <- df[, c("Longitude", "Latitude")]
+  
+  # Compute pairwise distances using Haversine formula (in meters)
+  dist_mat <- distm(coords, fun = distHaversine)
+  
+  # Ability to check number of groups based on distance and change distance if desired:
+  repeat{
+    # Create adjacency matrix: TRUE if distance < threshold
+    adj_mat <- dist_mat < distance_threshold
+    diag(adj_mat) <- FALSE  # No self-connections
+    
+    # Build undirected graph
+    g <- graph_from_adjacency_matrix(adj_mat, mode = "undirected")
+    
+    # Find connected components (groups)
+    comp <- components(g)
+    
+    # Inform user about number of groups
+    num_groups <- comp$no
+    cat("Number of groups created with distance threshold", distance_threshold, "meters:", num_groups, "\n")
+    
+    # Ask user to continue or change threshold
+    response <- readline(prompt = "Do you want to continue with this grouping? (y/n): ")
+    if (tolower(response) == "y") {
+      break  # Exit the loop and proceed
+    } else {
+      new_threshold <- as.numeric(readline(prompt = "Enter new distance threshold in meters: "))
+      distance_threshold <- as.numeric(new_threshold)
+      # Loop again with new threshold
+    }
+  }
+  
+  # Assign group IDs to original dataframe
+  df$groupID <- comp$membership
+  
+  # Compute group summaries: centroid (mean lat/lon) and mean value
+  group_summary <- df %>%
+    mutate(groupID = paste0(SiteCode, "Sal", groupID),
+           PARAMETER = "Salinity") %>%
+    group_by(groupID, TIMESTAMP, PARAMETER) %>%
+    summarise(
+      grpLat = mean(Latitude, na.rm = T),
+      grpLong = mean(Longitude, na.rm = T),
+      VALUE = mean(VALUE, na.rm = T),
+      .groups = "drop"
+    ) %>%
+    dplyr::rename("STATION" = groupID)
+  
+  # Lat Long to add to Loggers
+  group_locations <- group_summary %>%
+    group_by(STATION) %>%
+    summarise(
+      Latitude = mean(grpLat, na.rm = T),
+      Longitude = mean(grpLong, na.rm = T),
+      .groups = "drop"
+    ) %>%
+    mutate(Site = SiteCode,
+           DataType = "Salinity") %>%
+    dplyr::rename("StationID" = STATION)
+  
+  
+  # Create interactive map
+  # Color palette for group IDs
+  pal <- colorFactor(palette = "Set1", domain = df$groupID)
+  
+  m <- leaflet() %>%
+    addTiles() %>%
+    # Original points, colored by groupID
+    addCircleMarkers(
+      data = df,
+      lng = ~Longitude,
+      lat = ~Latitude,
+      color = ~pal(groupID),
+      popup = ~paste("ID:", STATION, "<br>Group:", groupID, "<br>Value:", VALUE)
+    ) %>%
+    # Group centroids
+    addMarkers(
+      data = group_locations,
+      lng = ~Longitude,
+      lat = ~Latitude,
+      popup = ~paste("Group:", StationID, "<br>Latitude:", Latitude, "<br>Longitude:", Longitude)
+    ) %>%
+    addLegend("bottomright", pal = pal, values = df$groupID, title = "Group ID")
+  
+  print(m)
+  # Return a list containing the modified dataframe, group summaries, and map
+  return(list(data = group_summary, locations = group_locations, map = m))
+}
+# Example usage:
+sali_grps <- cluster_points(salinity_raw, 7500)
+# View the map: sali_grps$map
+# Access modified data: sali_grps$data
+# Access group summaries: sali_grps$groups#
+#
+# Add station locations to Loggers data frame in R and Excel data file
+update_logger_locations <- function(new_locations){
+  # Columns and file path
+  key_columns = c("Site", "StationID", "Latitude", "Longitude", "DataType")
+  file_path <- "Data/Raw-data/Flow_logger_locations.xlsx"
+  #
+  
+  All_loggers <- read.xlsx(file_path, na.strings = c("NA", " ", "", "Z"), detectDates = TRUE)
+  # Check for duplicates: Identify new rows that don't already exist in Loggers
+  existing_keys <- All_loggers %>% dplyr::select(all_of(key_columns)) %>% mutate(across(c(Latitude, Longitude), ~round(.x, 5)))
+  new_keys <- new_locations %>% dplyr::select(all_of(key_columns)) %>% mutate(across(c(Latitude, Longitude), ~round(.x, 5)))
+  new_unique <- anti_join(new_keys, existing_keys, by = key_columns)
+  
+  #
+  if (nrow(new_unique) == 0) {
+    cat("No new locations to add (all are duplicates).\n")
+  } else {
+    cat("Adding", nrow(new_unique), "new locations.\n")
+  }
+  #
+  # Combine existing Loggers with new unique locations
+  updated_All_loggers <- rbind(All_loggers, new_unique)
+  updated_Loggers <- rbind(Loggers, new_unique)
+  #
+  # Save the updated dataframe back to the Excel file (overwrites the original)
+  write.xlsx(updated_All_loggers, file_path, overwrite = TRUE)
+  cat("Updated file saved to:", file_path, "\n")
+  #
+  # Return the updated dataframe for further use
+  return(updated_Loggers)
+  #
+}
+#
+updated_Loggers <- update_logger_locations(sali_grps$locations)
+Loggers <- updated_Loggers
+#
+#
 # Total daily flow for each logger
 flow_ave <- flow_raw %>% 
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
-  mutate(Site = Site_code, Station = "ALL") %>% 
+  mutate(Site = Site_code, Date = as.Date(Date)) %>% 
+  # If using all stations as 1 run next line, if stations should be separate, remove line
+  #mutate(Station = "ALL") %>%
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Flow = mean(Value, na.rm = T)) %>% 
   ungroup()
-# Mean daily salinity for each logger
-salinity_ave <- salinity_raw %>% 
+# Mean daily salinity for each logger: either salinity_rae if no grouping, sali_grps$data if grouped
+salinity_ave <- sali_grps$data %>% 
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
-  mutate(Site = Site_code) %>% 
+  mutate(Site = Site_code, Date = as.Date(Date)) %>% 
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Salinity = mean(Value, na.rm = T)) %>% 
   ungroup()
@@ -194,7 +336,7 @@ calculate_monthly_value <- function(df, value_col = "Salinity") {
 }
 #
 (sal_monthly <- calculate_monthly_value(salinity_ave, "Salinity"))
-(flow_monthly <- calculate_monthly_value(flow_sum, "Flow"))
+(flow_monthly <- calculate_monthly_value(flow_ave, "Flow"))
 #
 #
 #
@@ -384,9 +526,9 @@ ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Fl
     theme_classic()
 }
 
-ggplot_hyperbolic_fit(Model_data, models, "STLSTPT_ALL", "Mean_Flow", "Mean_Salinity")
+ggplot_hyperbolic_fit(Model_data, models, "SSSal1_ALL", "Mean_Flow", "Mean_Salinity")
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-#       filename = paste("Flow_salinity_curve_", "STLSTPT",".tiff", sep = ""), dpi = 1000)
+#       filename = paste("Flow_salinity_curve_", "HR1",".tiff", sep = ""), dpi = 1000)
 #
 #ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
  #                     Salinity_min = 11.98, Salinity_max = 35.98,
@@ -418,19 +560,19 @@ optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFl
 #
 (Adult_optimal <- rbind(
   #HR1
-  optimal_flow_days(flow_sum, "HR1","2020-01-01", "2024-12-31", -265, 552.8134),
+  optimal_flow_days(flow_ave, "HR1","2020-01-01", "2024-12-31", -265, 552.8134),
   #STLRIVER 
-  optimal_flow_days(flow_sum, "STLRIVER","2020-01-01", "2024-12-31", -294, 784.0671),
+  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -294, 784.0671),
   #STLSTPT
-  optimal_flow_days(flow_sum, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.8245)
+  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.8245)
   ) %>% mutate(Type = "Adult"))
 (Larvae_optimal <- rbind(
   #HR1
-  optimal_flow_days(flow_sum, "HR1","2020-01-01", "2024-12-31", -202, 770.6214),
+  optimal_flow_days(flow_ave, "HR1","2020-01-01", "2024-12-31", -202, 770.6214),
   #STLRIVER 
-  optimal_flow_days(flow_sum, "STLRIVER","2020-01-01", "2024-12-31", -210, 1064.4825),
+  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -210, 1064.4825),
   #STLSTPT
-  optimal_flow_days(flow_sum, "STLSTPT","2020-01-01", "2024-12-31", -79, 14472.53761)
+  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -79, 14472.53761)
 ) %>% mutate(Type = "Larvae"))
 #
 #
@@ -461,7 +603,7 @@ count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
     summarise(mean_outlier_days = mean(days_outlier_flow),
               mean_flow = mean(mean_flow))
     }
-outlier_flow <- count_outlier_flow_days(flow_sum, "2020-01-01", "2024-12-31", "Flow") %>% mutate(Type = "All")
+outlier_flow <- count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") %>% mutate(Type = "All")
 #
 #
 #
