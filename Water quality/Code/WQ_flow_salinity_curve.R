@@ -418,6 +418,22 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
 #
 models <- fit_salinity_flow_models(flow_monthly, sal_monthly)
 #
+remove_models <- function(results, models_to_remove) {
+  # Filter the results list to remove specified models
+  filtered_results <- results[!names(results) %in% models_to_remove]
+  
+  # If Model_data exists in the global environment, filter it as well
+  if (exists("Model_data", envir = .GlobalEnv)) {
+    Model_data <- get("Model_data", envir = .GlobalEnv)
+    Model_data <- Model_data[!names(Model_data) %in% models_to_remove]
+    assign("Model_data", Model_data, envir = .GlobalEnv)
+  }
+  
+  return(filtered_results)
+}
+#
+models <- remove_models(models, c("SSSal1_USGS-02313700", "SSSal3_USGS-02313700", "SSSal4_USGS-02313700", "SSSal5_USGS-02313700"))
+#
 # Calculate flow at specified salinity (from HSM curves)
 flow_at_salinity_hyp2 <- function(results, target_sal) {
   # results: output from fit_salinity_flow_models (list of summaries or error messages)
@@ -525,8 +541,9 @@ ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Fl
     ) +
     theme_classic()
 }
-
-ggplot_hyperbolic_fit(Model_data, models, "SSSal1_ALL", "Mean_Flow", "Mean_Salinity")
+#
+names(models)
+ggplot_hyperbolic_fit(Model_data, models, "SSSal2_USGS-02313700", "Mean_Flow", "Mean_Salinity")
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
 #       filename = paste("Flow_salinity_curve_", "HR1",".tiff", sep = ""), dpi = 1000)
 #
@@ -557,6 +574,55 @@ optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFl
     # Mean number of annual days within ideal flow at logger point
     summarise(meanDays = mean(Days)) 
 }
+#
+automate_optimal_df <- function(df, flow_ave_df, start_date, end_date, dfType){
+  # Get unique combinations of salinity_station and flow_station
+  unique_combos <- df %>%
+    dplyr::select(salinity_station, flow_station) %>%
+    dplyr::distinct()
+  
+  # Initialize a list to store results for each combination
+  results <- list()
+  
+  # Loop over each unique combination
+  for (i in 1:nrow(unique_combos)) {
+    salStation <- unique_combos$salinity_station[i]
+    flowStation <- unique_combos$flow_station[i]
+    
+    # Filter the adult dataframe for the current combination
+    combo_data <- df %>% 
+      dplyr::filter(salinity_station == salStation & flow_station == flowStation)
+    
+    # Compute min and max Sal for the combination (assuming 'Sal' is the salinity column)
+    min_flow <- as.numeric(ifelse(is.na((combo_data %>% filter(Sal == "min"))$flow_at_target), 
+                                 -900,  
+                                 (combo_data %>% filter(Sal == "min"))$flow_at_target))
+    max_flow <- as.numeric(ifelse(is.na((combo_data %>% filter(Sal == "max"))$flow_at_target), 
+                                 -900,  
+                                 (combo_data %>% filter(Sal == "max"))$flow_at_target))
+    
+    # Call optimal_flow_days with the flow_station and computed min/max Sal as minFlow/maxFlow
+    opt_flow <- optimal_flow_days(flow_ave_df, salStation, start_date, end_date, min_flow, max_flow)
+    
+    # Store the result with a key like "salinity_station_flow_station"
+    key <- paste(salStation, flowStation, sep = "_")
+    results[[key]] <- opt_flow
+  }
+  
+  # Combine all results into a single dataframe
+  if (length(results) == 0) {
+    stop("No valid combinations found.")
+  }
+  combined <- do.call(rbind, results)
+  
+  # Add the Type column
+  combined <- combined %>% 
+    dplyr::mutate(Type = dfType)
+  
+  return(combined)
+}
+#
+automate_optimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult")
 #
 (Adult_optimal <- rbind(
   #HR1
