@@ -152,18 +152,18 @@ KML_separation <- function(Status_of_KML, one_file = NA){
 #### Parameter Assignment
 #
 ##Function to read excel files and limit to required setup data
-Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters, FL_Oysters, Shellfish_Harvest_Area_Designations){
+Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters, FL_Oysters, Shellfish_Harvest_Area_Designations, Navigation_channels, Aquaculture_lease){
   if(file.exists("Reference files/Setup_data.xlsx")){
     temp <- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Levels") %>% as.data.frame()
     #Load sheets if file exists and if data is required. If data isn't required, state as such. Limit to data required for model.
     if(Long_Names == "Y"){Names <<- suppressWarnings(read_excel("Reference files/Setup_data.xlsx", sheet = "Long_Names") %>% as.data.frame() %>% subset(Designation == Site_Code | Is_Used == "Y"))} else {Names <<- "Long names are not needed."}
     if(Order_of_Sections == "Y"){suppressWarnings(Sections <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Section_Order") %>% as.data.frame() %>% mutate(Order = as.integer(Order)) %>% subset(Site == Site_Code & !is.na(Order)))} else {Sections <<- "Section order is not needed."}
     if(Order_of_Parameters == "Y"){suppressWarnings(Parameters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Order") %>% as.data.frame() %>% mutate(Priority = as.integer(Priority)) %>% subset(!is.na(Priority)))} else {Parameters <<- "Parameter order is not needed."}
-    if(FL_Oysters == "Y"){Oysters <<- temp %>% subset(Parameter == "Oysters")} else {Parameters <<- "'Oyster Beds in Florida' layer is not needed."}
-    if(Seagrass == "Y"){Seagrasses <<- temp %>% subset(Parameter == "Seagrass")} else {Parameters <<- "'Seagrass habitat in Florida' layer is not needed."}
+    if(FL_Oysters == "Y"){Oysters <<- temp %>% subset(Parameter == "Oysters")} else {Oysters <<- "'Oyster Beds in Florida' layer is not needed."}
+    if(Seagrass == "Y"){Seagrasses <<- temp %>% subset(Parameter == "Seagrass")} else {Seagrasses <<- "'Seagrass habitat in Florida' layer is not needed."}
     if(Shellfish_Harvest_Area_Designations == "Y"){SHAreas  <<- temp %>% subset(Parameter == "SHA_Class")} else {SHAreas <<- "Shellfish Harvest Areas is not needed."}
-    if(Navigation_channels == "Y"){NavCha <<- temp %>% subset(Parameter == "Nav_Channels")} else {Parameters <<- "'Navigational channels' layer is not needed."}
-    if(Aquaculture_lease == "Y"){AquaLease <<- temp %>% subset(Parameter == "Aquaculture_Lease")} else {Parameters <<- "'Aquaculture leases' layer is not needed."}
+    if(Navigation_channels == "Y"){NavCha <<- temp %>% subset(Parameter == "Nav_Channels")} else {NavCha <<- "'Navigational channels' layer is not needed."}
+    if(Aquaculture_lease == "Y"){AquaLease <<- temp %>% subset(Parameter == "Aquaculture_Lease")} else {AquaLease <<- "'Aquaculture leases' layer is not needed."}
     df_list <<- list("Long_Names" = Names, 
                      "Section_Order" = Sections, 
                      "Parameter_Order" = Parameters, 
