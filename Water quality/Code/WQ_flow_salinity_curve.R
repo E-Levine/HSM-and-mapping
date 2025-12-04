@@ -10,7 +10,8 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                readxl, openxlsx, progress, writexl,
                slider, minpack.lm, #rolling mean
                sf, sp, terra, furrr, future,
-               mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
+               mgcv, fpc, fields, interp, #interpolation, fpc::bscan - clustering
+               geospehere, igraph, leaflet, #Cluster points
                RColorBrewer, magicfor, ecorest, #HSV scoring
                gstat, dismo, #Depth, interpolation
                install = TRUE) 
@@ -543,9 +544,9 @@ ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Fl
 }
 #
 names(models)
-ggplot_hyperbolic_fit(Model_data, models, "SSSal2_USGS-02313700", "Mean_Flow", "Mean_Salinity")
+ggplot_hyperbolic_fit(Model_data, models, "SSSal5_USGS-02323592", "Mean_Flow", "Mean_Salinity")
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-#       filename = paste("Flow_salinity_curve_", "HR1",".tiff", sep = ""), dpi = 1000)
+#       filename = paste("Flow_salinity_curve_", "SS5_SS",".tiff", sep = ""), dpi = 1000)
 #
 #ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
  #                     Salinity_min = 11.98, Salinity_max = 35.98,
@@ -575,6 +576,7 @@ optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFl
     summarise(meanDays = mean(Days)) 
 }
 #
+#Calculates the mean optimal days for each station 
 automate_optimal_df <- function(df, flow_ave_df, start_date, end_date, dfType){
   # Get unique combinations of salinity_station and flow_station
   unique_combos <- df %>%
@@ -617,29 +619,34 @@ automate_optimal_df <- function(df, flow_ave_df, start_date, end_date, dfType){
   
   # Add the Type column
   combined <- combined %>% 
-    dplyr::mutate(Type = dfType)
+    dplyr::mutate(Type = dfType) %>%
+    group_by(Station, Type) %>%
+    summarise(meanDays = mean(meanDays),
+              .groups = "drop")
+    
   
   return(combined)
 }
 #
-automate_optimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult")
+Adult_optimal <- automate_optimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult")
+Larvae_optimal <- automate_optimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae")
 #
-(Adult_optimal <- rbind(
-  #HR1
-  optimal_flow_days(flow_ave, "HR1","2020-01-01", "2024-12-31", -265, 552.8134),
-  #STLRIVER 
-  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -294, 784.0671),
-  #STLSTPT
-  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.8245)
-  ) %>% mutate(Type = "Adult"))
-(Larvae_optimal <- rbind(
-  #HR1
-  optimal_flow_days(flow_ave, "HR1","2020-01-01", "2024-12-31", -202, 770.6214),
-  #STLRIVER 
-  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -210, 1064.4825),
-  #STLSTPT
-  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -79, 14472.53761)
-) %>% mutate(Type = "Larvae"))
+#(Adult_optimal <- rbind(
+#  #HR1
+#  optimal_flow_days(flow_ave, "SSSal1","2020-01-01", "2024-12-31", -105.71566, -98.60245),
+#  #STLRIVER 
+#  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -294, 784.0671),
+#  #STLSTPT
+#  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.8245)
+#  ) %>% mutate(Type = "Adult"))
+#(Larvae_optimal <- rbind(
+#  #HR1
+#  optimal_flow_days(flow_ave, "HR1","2020-01-01", "2024-12-31", -202, 770.6214),
+#  #STLRIVER 
+#  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -210, 1064.4825),
+#  #STLSTPT
+#  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -79, 14472.53761)
+#) %>% mutate(Type = "Larvae"))
 #
 #
 # Count number of days in month more than 1.5 SD from monthly mean
@@ -669,6 +676,7 @@ count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
     summarise(mean_outlier_days = mean(days_outlier_flow),
               mean_flow = mean(mean_flow))
     }
+#
 outlier_flow <- count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") %>% mutate(Type = "All")
 #
 #
@@ -781,7 +789,8 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area
-State_Grid <- c("H4") 
+State_Grid <- c("E2") #E2, H4
+Alt_Grid <- c("F2")
 Site_Grid <- load_site_grid(State_Grid, Site_area)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
@@ -946,13 +955,14 @@ plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_toleranc
     scale_color_viridis_b(direction = -1)   # Use shared limits
 }
 #
-plot_flow_interp(LOP_idw_data, Site_Grid, "meanDays")
+plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOutlier")
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-#       filename = paste("Flow_salinity_curve_", "Outlier_days",".tiff", sep = ""), dpi = 1000)
+#       filename = paste("Flow_salinity_curve_", "Adult_optimal_days",".tiff", sep = ""), dpi = 1000)
 #
 #
 #
 ## Save output
+#fileName: SiteCode_filenName
 save_flow_output <- function(output_data, fileName){
   final_output_data <- output_data
   #Save shapefile:
@@ -1023,7 +1033,7 @@ save_flow_output <- function(output_data, fileName){
     }
   }
 }
-save_flow_output(Outlier_idw_data, "outlier")
+save_flow_output(Outlier_idw_data, "flow_outlier")
 #
 ### Other possible data ####
 # 
