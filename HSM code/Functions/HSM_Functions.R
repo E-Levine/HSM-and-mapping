@@ -268,6 +268,7 @@ predictions <<- predictions %>% mutate(Value = as.numeric(ifelse(Value > 1, 1, i
 }
 #
 ###Curve data gather/combination:
+# Adds curve info to Curve_Summary sheet
 curve_point_data <- function(data_table = curve_points){
   if(exists("Curve_Summary", envir = globalenv())){rm(Curve_Summary, envir = globalenv())}
   if(exists("Parameter_Summ", envir = globalenv())){rm(Parameter_Summ, envir = globalenv())}
