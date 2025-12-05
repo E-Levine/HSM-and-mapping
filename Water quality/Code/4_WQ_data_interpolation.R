@@ -9,7 +9,7 @@
 #Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
-               readxl, openxlsx, progress, writexl,
+               readxl, openxlsx, progress, writexl, lubridate,
                sf, sp, terra, furrr, future,
                tmap, tmaptools, gridExtra, cowplot, #Mapping and figures
                mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
@@ -29,7 +29,7 @@ End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
 Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
-Param_name_2 <- c("Monthly")#Additional identify for parameter: i.e. Annual, Quarterly, etc.
+Param_name_2 <- c("Monthly")#Additional identifier for parameter: i.e. Annual, Quarterly, Monthly
 #
 color_temp <- c("cool")    #"warm" or "cool"
 #
@@ -56,7 +56,8 @@ ggplot()+
   geom_point(data = WQ_data, aes(Longitude, Latitude), size = 3.5)+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
+        axis.title = element_text(size = 18, color = "black", family = "Arial"), 
+        axis.text =  element_text(size = 16, color = "black", family = "Arial"))+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
@@ -67,9 +68,9 @@ ggplot()+
 Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID, MGID), "Spatial")
 grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) 
 plot(grid) 
-#Get extent in meters to create raster:
+#Get extent in meters to create raster: (raster only required for tps)
 Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
-#Create base raster using meters:
+#Create base raster using meters: 
 raster_t_m <- rast(resolution = c(20, 20),
                    xmin = Site_extent_m[1], xmax = Site_extent_m[3], ymin = Site_extent_m[2], ymax = Site_extent_m[4],
                    crs = "+init=EPSG:32617")
@@ -97,7 +98,8 @@ if(color_temp == "warm") {
 #Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values, Threshold
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
-WQ_summ <- summarize_data(WQ_data, Time_period = "Month", Summ_method = "Means")
+#library(lubridate)
+WQ_summ <- summarize_data(WQ_data, Time_period = "YearMonth", Summ_method = "Means")
 head(WQ_summ)
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,".xlsx"), format_headers = TRUE)
 #

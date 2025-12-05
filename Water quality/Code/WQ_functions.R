@@ -1554,7 +1554,7 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
       dplyr::filter(str_detect(Parameter, param_name)) %>%
       #Add in missing group columns
       mutate(Year = year(as.Date(ActivityStartDate)),
-             Month = month(as.Date(ActivityStartDate), label = TRUE)) %>%
+             Month = lubridate::month(as.Date(ActivityStartDate), label = TRUE)) %>%
       #Assign quarters, starting at month specified or default start of January
       {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
       #Filter to specified months if applicable
@@ -2303,8 +2303,10 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       #Convert to sf points with correct CRS
       stat_data_sf <- st_as_sf(stat_data_df, coords = c("Longitude", "Latitude"), crs = st_crs(filtered_data))
       #
+      browser()
+      
       ##OK: model(Parameter), data to use, grid to apply to 
-      ok_fit <- autofitVariogram(Working_Param ~ 1, stat_data_sf, miscFitOptions = list(merge.small.bins = FALSE))
+      ok_fit <- autofitVariogram(formula = Working_Param ~ 1, input_data = stat_data_sf, model = c("Sph"), miscFitOptions = list(merge.small.bins = FALSE))
       ok_model <- gstat(formula = Working_Param~1, locations = stat_data_sf, model = ok_fit$var_model)#, data = st_as_sf(stat_data))
       ok_pred <- predict(ok_model, newdata = grid)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
