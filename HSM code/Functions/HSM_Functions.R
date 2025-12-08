@@ -158,7 +158,7 @@ Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters
     #Load sheets if file exists and if data is required. If data isn't required, state as such. Limit to data required for model.
     if(Long_Names == "Y"){Names <<- suppressWarnings(read_excel("Reference files/Setup_data.xlsx", sheet = "Long_Names") %>% as.data.frame() %>% subset(Designation == Site_Code | Is_Used == "Y"))} else {Names <<- "Long names are not needed."}
     if(Order_of_Sections == "Y"){suppressWarnings(Sections <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Section_Order") %>% as.data.frame() %>% mutate(Order = as.integer(Order)) %>% subset(Site == Site_Code & !is.na(Order)))} else {Sections <<- "Section order is not needed."}
-    if(Order_of_Parameters == "Y"){suppressWarnings(Parameters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Order") %>% as.data.frame() %>% mutate(Priority = as.integer(Priority)) %>% subset(!is.na(Priority)))} else {Parameters <<- "Parameter order is not needed."}
+    if(Order_of_Parameters == "Y"){suppressWarnings(Parameters <<- read_excel("Reference files/Setup_data.xlsx", sheet = "Parameter_Order") %>% as.data.frame() %>% mutate(Priority = as.integer(Priority)) %>% subset(!is.na(Priority)) %>% arrange(Priority))} else {Parameters <<- "Parameter order is not needed."}
     if(FL_Oysters == "Y"){Oysters <<- temp %>% subset(Parameter == "Oysters")} else {Oysters <<- "'Oyster Beds in Florida' layer is not needed."}
     if(Seagrass == "Y"){Seagrasses <<- temp %>% subset(Parameter == "Seagrass")} else {Seagrasses <<- "'Seagrass habitat in Florida' layer is not needed."}
     if(Shellfish_Harvest_Area_Designations == "Y"){SHAreas  <<- temp %>% subset(Parameter == "SHA_Class")} else {SHAreas <<- "Shellfish Harvest Areas is not needed."}
@@ -172,7 +172,7 @@ Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters
                      "SHAs" = SHAreas,
                      "Nav_Channels" = NavCha,
                      "Aquaculture" = AquaLease,
-                     "Continuous" = temp %>% subset(Parameter %in% (Parameters %>% filter(Parameter %in% c("Salinity", "Temperature")) %>% filter(!is.na(Priority)))$Parameter))
+                     "Continuous" = temp %>% subset(Parameter %in% (Parameters %>% filter(Parameter %in% c("Salinity", "Temperature", "Flow")) %>% filter(!is.na(Priority)))$Parameter))
     return(list("Excel file found. Required sheets loaded into data frames. Levels of specified parameters listed.", df_list))
   } else {
     return(print("Excel file not found. Please find the data file and check for required data."))
