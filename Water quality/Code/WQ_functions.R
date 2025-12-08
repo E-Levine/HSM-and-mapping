@@ -1203,7 +1203,7 @@ autofitVariogram <- function(formula, input_data, model = c("Sph", "Exp", "Gau",
   if (is(input_data, "Spatial")) {
     longlat = !is.projected(input_data)
     if(is.na(longlat)) longlat = FALSE
-    diagonal = spDists(t(bbox(input_data)), longlat = longlat)[1,2]                # 0.35 times the length of the central axis through the area
+    diagonal = spDists(t(bbox(data_m)), longlat = longlat)[1,2]                # 0.35 times the length of the central axis through the area
   } else {
     longlat = st_is_longlat(input_data)
     if (is.na(longlat)) longlat = FALSE
@@ -1215,7 +1215,7 @@ autofitVariogram <- function(formula, input_data, model = c("Sph", "Exp", "Gau",
   boundaries = c(2,4,6,9,12,15,25,35,50,65,80,100) * diagonal * 0.35/100         # Boundaries for the bins in km
   
   
-  # If you specifiy a variogram model in GLS.model the Generelised least squares sample variogram is constructed
+  # If you specify a variogram model in GLS.model the Generalized least squares sample variogram is constructed
   if(!is(GLS.model, "variogramModel")) {
     experimental_variogram = variogram(formula, input_data,boundaries = boundaries, ...)
   } else {
@@ -1231,7 +1231,7 @@ autofitVariogram <- function(formula, input_data, model = c("Sph", "Exp", "Gau",
       if(length(experimental_variogram$np[experimental_variogram$np < miscFitOptions[["min.np.bin"]]]) == 0 | length(boundaries) == 1) break
       boundaries = boundaries[2:length(boundaries)]			
       if(!is(GLS.model, "variogramModel")) {
-        experimental_variogram = variogram(formula, input_data,boundaries = boundaries, ...)
+        experimental_variogram = variogram(formula, input_data, boundaries = boundaries, ...)
       } else {
         experimental_variogram = variogram(g, boundaries = boundaries, ...)
       }
@@ -2303,31 +2303,34 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       #Convert to sf points with correct CRS
       stat_data_sf <- st_as_sf(stat_data_df, coords = c("Longitude", "Latitude"), crs = st_crs(filtered_data))
       #
-      browser()
       
-      ##OK: model(Parameter), data to use, grid to apply to 
-      ok_fit <- autofitVariogram(formula = Working_Param ~ 1, input_data = stat_data_sf, model = c("Sph"), miscFitOptions = list(merge.small.bins = FALSE))
-      ok_model <- gstat(formula = Working_Param~1, locations = stat_data_sf, model = ok_fit$var_model)#, data = st_as_sf(stat_data))
-      ok_pred <- predict(ok_model, newdata = grid)
+      ##OK: model(Parameter), data to use, grid to apply to - fits model to UTM projected data
+      # Modify CRS for OK models (Florida fits):
+      data_m <- st_transform(stat_data_sf, 5070)
+      ok_fit_m <- autofitVariogram(formula = Working_Param ~ 1, input_data = data_m, model = c("Sph"), miscFitOptions = list(merge.small.bins = FALSE))
+      ok_model_m <- gstat(formula = Working_Param~1, locations = data_m, model = ok_fit_m$var_model)#, data = st_as_sf(stat_data))
+      grid_5070 <- spTransform(grid, CRS("EPSG:5070"))
+      ok_pred_m <- predict(ok_model_m, newdata = grid_5070)
       #Convert to data frame to rename and add parameters levels as values rounded to 0.1
-      ok_df <- as.data.frame(ok_pred) %>% rename("Longitude" = x1, "Latitude" = x2, "Prediction" = var1.pred) %>%
+      ok_df_m <- as.data.frame(ok_pred_m) %>% rename("Longitude" = coords.x1, "Latitude" = coords.x2, "Prediction" = var1.pred) %>%
         mutate(Pred_Value = round(Prediction, 2)) %>% dplyr::select(-var1.var)
       #
       ##PROCESSING:
       pb$tick(tokens = list(step = "Processing"))
       Sys.sleep(1/1000)
       #Convert to SpatialPointsDataFrame
-      coordinates(ok_df) <- ~Longitude + Latitude
-      proj4string(ok_df) <- proj4string(ok_pred)
+      coordinates(ok_df_m) <- ~Longitude + Latitude
+      proj4string(ok_df_m) <- proj4string(ok_pred_m)
       
       #Convert interpolated values to spatial data
-      voroni_poly <- dismo::voronoi(ok_df, ext = raster::extent(grid))#
+      voroni_poly_m <- dismo::voronoi(ok_df_m, ext = raster::extent(grid_5070))#
       #
       ##GRID App:
       pb$tick(tokens = list(step = "Grid Application"))
       Sys.sleep(1/1000)
       #Convert voronoi polygons to sf
-      voronoi_sf <- st_as_sf(voroni_poly)
+      voronoi_sf_m <- st_as_sf(voroni_poly_m)
+      voronoi_sf <- st_transform(voronoi_sf_m, 4326)
       #Determine overlay of data on SiteGrid
       centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
       #
@@ -2647,17 +2650,26 @@ grouped_plot_interpolations <- function(plot_list){
       p + theme(legend.position = "none", axis.text = element_text(size = dynamic_size))
     })
     
-    # Extract legend from the first plot (assuming all have the same legend)
+    # Extract legend from the first plot (assuming all have the same legend) - get title, modify and apply, then extract
+    # Detect legend aesthetic (color or fill)
+    legend_title <- group[[1]]$labels$colour %||% group[[1]]$labels$fill
+    
+    # Remove text after last underscore
+    if (!is.null(legend_title)) {
+      new_title <- sub("_[^_]*$", "", legend_title)
+      # Apply new legend title
+      group[[1]] <- group[[1]] +
+        labs(color = new_title, fill = new_title)
+    }
     legend <- suppressWarnings(get_legend(group[[1]]))
     
     # Arrange the plots in a grid
     grid_obj <- grid.arrange(grobs = group_no_legend, nrow = nrows, ncol = ncols, 
-                             padding = unit(0, "cm"), 
+                             padding = unit(0.1, "cm"), 
                              widths = unit(rep(1, ncols), "null"), 
                              heights = unit(rep(1, nrows), "null"))
-    
     # Combine plots grid and legend into one grid_obj
-    grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(3, 1))  # Adjust rel_widths as needed
+    grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(4.5, 0.5))  # Adjust rel_widths as needed
     
     # Print the grid (displays it)
     grid_list[[prefix]] <- grid_obj
