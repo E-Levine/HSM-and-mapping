@@ -2424,7 +2424,8 @@ extract_time_stat <- function(df) {
   return(list(Times = unique_times, Statistics = unique_stats))
 }
 #
-join_interpolation <- function(Site_Grid_df){
+#Use RangeValues to specify if Range is used and Max/Min both included in df ("yes")
+join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
   # Starting data:
   output <- Site_Grid_df
   #
@@ -2493,7 +2494,11 @@ join_interpolation <- function(Site_Grid_df){
   # Merge all combined results into one final object
   final_result <- Reduce(function(x, y) merge(x, y, by = intersect(names(x), names(y)), all = TRUE), all_combined)
   # Create a dynamic variable name for the result
-  statistic <- strsplit(params[i], "_")[[1]][length(strsplit(params[i], "_")[[1]])]
+  if(tolower(RangeValues) == "yes"){
+    statistic <- "Range"
+  } else {
+    statistic <- strsplit(params[i], "_")[[1]][length(strsplit(params[i], "_")[[1]])]
+  }
   result_name <- paste0("result_", statistic)
   # Assign the combined result to a new variable
   assign(result_name, final_result, envir = .GlobalEnv)

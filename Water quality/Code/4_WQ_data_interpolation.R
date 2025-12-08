@@ -68,7 +68,7 @@ ggplot()+
 Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID, MGID), "Spatial")
 grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) 
 plot(grid) 
-#Get extent in meters to create raster: (raster only required for tps)
+#Get extent in meters to create raster: (raster only required for tps - skip to 81)
 Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
 #Create base raster using meters: 
 raster_t_m <- rast(resolution = c(20, 20),
@@ -99,7 +99,7 @@ if(color_temp == "warm") {
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
 #library(lubridate)
-WQ_summ <- summarize_data(WQ_data, Time_period = "YearMonth", Summ_method = "Means")
+WQ_summ <- summarize_data(WQ_data %>% drop_na(Value), Time_period = "YearMonth", Summ_method = "Mins")
 head(WQ_summ)
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,".xlsx"), format_headers = TRUE)
 #
@@ -121,7 +121,7 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitu
 #
 ##Inverse distance weighted - updated for Month, Year
 idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
-#
+                 #
 ##Nearest neighbor - not updated
 nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ, "Month")
 #
@@ -142,13 +142,14 @@ join_interpolation(Site_Grid_df)
 plotting <- plot_interpolations(result_Mean, Site_Grid, simplify_tolerance = 0.01)
 #
 combined_plot <- grouped_plot_interpolations(plotting) #needs work. Having issues plotting. 
+grouped_plot_interpolations(final_data$plots)
 #
 #
 ####Ensemble or model selection####
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- ensemble_weighting("ensemble", c("idw", "nn"), result_Mean, c(0.75, 0.25), Site_Grid)
+final_data <- ensemble_weighting("ensemble", c("idw", "ok"), result_Mean, c(0.50, 0.50), Site_Grid)
 #
 #
 ####Save model####
