@@ -149,11 +149,11 @@ grouped_plot_interpolations(final_data$plots)
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- ensemble_weighting("ensemble", c("idw", "ok"), result_Mean, c(0.50, 0.50), Site_Grid)
+final_data <- ensemble_weighting("ensemble", c("idw", "ok"), result_Minimum, weighting = c(0.50, 0.50), Site_Grid)
 #
 #
 ####Save model####
-#
+#Specify month range if months used: Month_range = c(5, 10)
 save_model_output(final_data, threshold_val = NA)
 #
 #

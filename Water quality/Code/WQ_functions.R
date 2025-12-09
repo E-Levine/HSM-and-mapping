@@ -2494,10 +2494,12 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
   # Merge all combined results into one final object
   final_result <- Reduce(function(x, y) merge(x, y, by = intersect(names(x), names(y)), all = TRUE), all_combined)
   # Create a dynamic variable name for the result
-  if(tolower(RangeValues) == "yes"){
+  if(!is.null(RangeValues) && length(RangeValues) == 1 && !is.na(RangeValues) && tolower(RangeValues) == "yes"){
     statistic <- "Range"
   } else {
-    statistic <- strsplit(params[i], "_")[[1]][length(strsplit(params[i], "_")[[1]])]
+    # Extract statistic from the last parameter processed
+    pieces <- strsplit(params[length(params)], "_")[[1]]
+    statistic <- tail(pieces, 1)
   }
   result_name <- paste0("result_", statistic)
   # Assign the combined result to a new variable
@@ -2699,13 +2701,14 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
       dplyr::select(PGID, Latitude, Longitude, MGID, State_Ref, County, matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
     #
     model_weighting(result_data_final, weighting)
-
+ 
     ##Create ensemble values
     # Define matching columns and groups
     matching_cols <- names(result_data_final)[grepl("(idw|nn|tps|ok)_*", names(result_data_final))]
     groups <- sapply(matching_cols, function(col) {
       split <- strsplit(col, "_")[[1]]
-      if (length(split) > 2) split[2] else split[1]  # Middle if exists, else first
+      split <- split[-1]#if (length(split) > 2) split[2] else split[1]  # Middle if exists, else first
+      paste(split, collapse = "_")
     })
     unique_groups <- unique(groups)
     #
@@ -2810,7 +2813,7 @@ model_weighting <- function(final_data, weighting) {
           num_groups <- length(unique_suffixes)  # e.g., 12 for months Jan-Dec
           
           # Create weights: repeat for each group (total length = 2 * num_groups)
-          weights <- rep(c(0.75, 0.25), times = num_groups)
+          weights <- rep(weighting, times = num_groups)
           
           # Sort matched_columns by suffix (month), then by prefix to match weight order
           prefixes <- sub("_.*", "", matched_columns)
@@ -2852,15 +2855,12 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   matching_cols <- colnames(final_output_data$spatialData)[grepl("^(idw|nn|ok|tps)_", colnames(final_output_data$spatialData))]
   extracted_stats <- sapply(matching_cols, function(col) {
     parts <- strsplit(col, "_")[[1]]
-    if (length(parts) > 1) {
-      return(tail(parts, 1))  # Get the last part after the last underscore
-    } else {
-      return(NA)  # In case of unexpected format, though unlikely with the pattern
-    }
+    parts <- parts[-1]#if (length(split) > 2) split[2] else split[1]  # Middle if exists, else first
+    paste(parts, collapse = "_")
   })
   Stat_type <- unique(extracted_stats[!is.na(extracted_stats)])
+  #parts <- strsplit(col, "_")[[1]]    if (length(parts) > 1) {      return(tail(parts, 1))  # Get the last part after the last underscore    } else {      return(NA)  # In case of unexpected format, though unlikely with the pattern  }  })
   #
-
   #Save plots:
   if(interactive()){
     result <- select.list(c("Yes", "No"), title = paste0("\nShould the plots of the chosen interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
@@ -2870,14 +2870,14 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
       for (i in seq_along(final_output_data$plots)){
         #Current plot
         p <- final_output_data$plots[[i]]
-        p_name <- final_output_data$plots[[i]]$labels$colour
+        p_name <- final_output_data$plots[[i]]$labels$title
         #Desired file name and specs
         jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
                                #File name
                                if(all(!is.na(Month_range))){
-                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type[i], "_", gsub("_.*","",p_name), "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
                                } else {
-                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", gsub(".*_","",p_name), "_", Start_year, "_", End_year)
+                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type[i], "_", gsub("_.*","",p_name), "_", Start_year, "_", End_year)
                                }, 
                                ".jpg")
         if(is.numeric(threshold_val)) {jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)} else {jpg_filename <- jpg_filename}
@@ -2886,7 +2886,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
         height_pixels <- round(width_pixels * aspect_ratio)
         #Save plot
         ggsave(filename = jpg_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
-        cat("Interpolation model figure for", gsub(".*_","",p_name), "model was saved in 'Output/Figure files'.", "\n")
+        cat("Interpolation model figure for", p_name, "model was saved in 'Output/Figure files'.", "\n")
       }
     }
   }
@@ -2899,7 +2899,35 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
     if(result == "No"){
       message("Shapefile will not be saved.")
     } else {
+      # Get shapefile 
       shape_file <- final_output_data$spatialData
+      # Check for proper stat, "Range" if both Min and Max
+      Stat_type <- unique(gsub(".*_", "", Stat_type))
+      Stat_type <- if("Minimum" %in% Stat_type && "Maximum" %in% Stat_type){
+        "Range"
+      } else {
+       Stat_type 
+      }
+      #
+      # Rename columns:
+      shape_file <- shape_file %>% 
+        dplyr::rename_with(~ .x %>%
+                             # stats
+                             str_replace_all("Mean",    "E") %>%
+                             str_replace_all("Minimum", "I") %>%
+                             str_replace_all("Maximum", "A") %>%
+                             str_replace_all("Threshold", "T") %>%
+                             # models
+                             str_replace_all("^idw", "i") %>%
+                             str_replace_all("^nn", "n") %>%
+                             str_replace_all("^tps", "t") %>%
+                             str_replace_all("^ok", "o") %>%
+                             str_replace_all("^ens", "e") %>%
+                             # underscores
+                             str_replace_all("_", ""),
+                           .cols = everything())
+      #
+      # Construct file name
       shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
                                #File name
                                if(all(!is.na(Month_range))){
@@ -2925,7 +2953,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
     if(result == "No"){
       message("Interpolation data will not be saved in an Excel file.")
     } else {
-      model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
+      model_data <- as.data.frame(final_output_data$spatialData) %>% dplyr::select(-geometry)
       data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                           #File name
                           if(all(!is.na(Month_range))){
