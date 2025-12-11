@@ -28,7 +28,7 @@ Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
-Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
+Param_name <- c("Temperature, water")#Column/parameter name of interest - from WQ data file.
 Param_name_2 <- c("Monthly")#Additional identifier for parameter: i.e. Annual, Quarterly, Monthly
 #
 color_temp <- c("cool")    #"warm" or "cool"
@@ -99,7 +99,8 @@ if(color_temp == "warm") {
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
 #library(lubridate)
-WQ_summ <- summarize_data(WQ_data %>% drop_na(Value), Time_period = "YearMonth", Summ_method = "Mins")
+WQ_summ <- summarize_data(WQ_data %>% drop_na(Value), Time_period = "YearMonth", Summ_method = "Threshold", Threshold_parameters = c("above", 35))
+#
 head(WQ_summ)
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,".xlsx"), format_headers = TRUE)
 #
@@ -121,7 +122,7 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitu
 #
 ##Inverse distance weighted - updated for Month, Year
 idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
-                 #
+#
 ##Nearest neighbor - not updated
 nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ, "Month")
 #
@@ -139,7 +140,7 @@ ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_
 join_interpolation(Site_Grid_df)
 #
 #Generates plots for each model and output of all models together - run for each parameter
-plotting <- plot_interpolations(result_Mean, Site_Grid, simplify_tolerance = 0.01)
+plotting <- plot_interpolations(result_Threshold, Site_Grid, simplify_tolerance = 0.01)
 #
 combined_plot <- grouped_plot_interpolations(plotting) #needs work. Having issues plotting. 
 grouped_plot_interpolations(final_data$plots)
@@ -149,7 +150,7 @@ grouped_plot_interpolations(final_data$plots)
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- ensemble_weighting("ensemble", c("idw", "ok"), result_Minimum, weighting = c(0.50, 0.50), Site_Grid)
+final_data <- ensemble_weighting("ensemble", c("idw", "ok"), result_Threshold, weighting = c(0.50, 0.50), Site_Grid)
 #
 #
 ####Save model####

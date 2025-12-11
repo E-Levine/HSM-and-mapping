@@ -1624,7 +1624,7 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
   output_data <- summary_data %>% ungroup() %>% 
     pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range", "Threshold"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
     pivot_wider(names_from = "Parameter", values_from = "Value") %>% 
-    dplyr::select(any_of(c("Year", "Month", "YearMonth", "Quarter", "YearQuarter")), Longitude, Latitude, Statistic, n, all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
+    dplyr::select(any_of(c("Year", "Month", "YearMonth", "Quarter", "YearQuarter")), Longitude, Latitude, Statistic, any_of("n"), all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
     rename(Working_Param = any_of(Param_name))
   #
   message(Param_name," summarized by ", Summ_method, " over ", Time_period)
@@ -2554,6 +2554,23 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simpli
     df_filtered <- st_simplify(df_filtered, dTolerance = simplify_tolerance, preserveTopology = TRUE)
   }
   #Create plots
+  safe_scale <- function(values) {
+    # Drop NAs
+    v <- values[!is.na(values)]
+    #
+    if (length(v) == 0) {
+      return(scale_color_viridis_b(direction = -1, guide = "none"))
+    }
+    # If there is only one unique valid value
+    if (length(unique(v)) == 1) {
+      return(scale_color_viridis_b(direction = -1, guide = "none"))
+    }
+    # Normal continuous scale
+    return(scale_color_viridis_b(
+      direction = -1,
+      limits = range(v, na.rm = TRUE)
+    ))
+  }
   # Pre-calculate color limits for each prefix (for consistent scales)
   color_limits <- list()
   for (p in names(groups)) {
@@ -2583,7 +2600,7 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simpli
         p_plot <- ggplot() +
           geom_sf(data = df_filtered, aes(color = !!sym(col))) +
           base_theme +
-          scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
+          safe_scale(df_filtered[[col]]) + #scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
           {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
           labs(title = paste(p, s, sep = "_"))
         plot_list[[paste(p, s, sep = "_")]] <- p_plot
@@ -2610,11 +2627,10 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simpli
         # Loop over each middle part for separate plots
         for (mid in levels_order) {
           df_mid <- df_long %>% filter(facet_var == mid)
-          
           p_plot <- ggplot() +
             geom_sf(data = df_mid, aes(color = value)) +
             base_theme +
-            scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
+            safe_scale(df_mid$value) + #scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
             {if (Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
             labs(title = paste(p, mid, s, sep = "_"))
           
@@ -2633,7 +2649,6 @@ grouped_plot_interpolations <- function(plot_list){
   prefixes2 <- sapply(names(plot_list), function(name) str_split(name, "_", simplify = TRUE)[1])
   grouped_plots <- split(plot_list, prefixes2)
   grid_list <- list()
-  
   # For each group, calculate length and arrange in a grid
   for (prefix in names(grouped_plots)) {
     group <- grouped_plots[[prefix]]
@@ -2676,7 +2691,13 @@ grouped_plot_interpolations <- function(plot_list){
                              widths = unit(rep(1, ncols), "null"), 
                              heights = unit(rep(1, nrows), "null"))
     # Combine plots grid and legend into one grid_obj
-    grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(4.5, 0.5))  # Adjust rel_widths as needed
+    #grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(4.5, 0.5))  # Adjust rel_widths as needed
+    if (!is.null(legend)) {
+      grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(4.5, 0.5))
+    } else {
+      # Legend missing → return grid only
+      grid_obj <- plot_grid(grid_obj, ncol = 1)
+    }
     
     # Print the grid (displays it)
     grid_list[[prefix]] <- grid_obj
