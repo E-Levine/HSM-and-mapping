@@ -99,7 +99,9 @@ if(color_temp == "warm") {
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
 #library(lubridate)
-WQ_summ <- summarize_data(WQ_data %>% drop_na(Value), Time_period = "YearMonth", Summ_method = "Threshold", Threshold_parameters = c("above", 35))
+WQ_summ <- summarize_data(WQ_data %>% drop_na(Value), 
+                          Time_period = "YearMonth", Summ_method = "Threshold", 
+                          Threshold_parameters = c("below", 20), Month_range = c(5, 10))
 #
 head(WQ_summ)
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,".xlsx"), format_headers = TRUE)
@@ -150,12 +152,14 @@ grouped_plot_interpolations(final_data$plots)
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- ensemble_weighting("ensemble", c("idw", "ok"), result_Threshold, weighting = c(0.50, 0.50), Site_Grid)
+final_data <- ensemble_weighting("ensemble", c("idw", "ok"), 
+                                 result_Threshold, weighting = c(0.50, 0.50), 
+                                 Site_Grid)
 #
 #
 ####Save model####
 #Specify month range if months used: Month_range = c(5, 10)
-save_model_output(final_data, threshold_val = NA)
+save_model_output(final_data, threshold_val = 20, Month_range = c(5,10))
 #
 #
 #If continuing to work, good practice to remove objects to make sure correct data is used:

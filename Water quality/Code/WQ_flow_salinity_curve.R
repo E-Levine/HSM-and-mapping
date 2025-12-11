@@ -153,7 +153,7 @@ cluster_points <- function(df, distance_threshold, Site = Site_code) {
   coords <- df[, c("Longitude", "Latitude")]
   
   # Compute pairwise distances using Haversine formula (in meters)
-  dist_mat <- distm(coords, fun = distHaversine)
+  dist_mat <- geosphere::distm(coords, fun = geosphere::distHaversine)
   
   # Ability to check number of groups based on distance and change distance if desired:
   repeat{
@@ -244,7 +244,7 @@ sali_grps <- cluster_points(salinity_raw, 7500)
 # Access modified data: sali_grps$data
 # Access group summaries: sali_grps$groups#
 #
-# Add station locations to Loggers data frame in R and Excel data file
+# Add group station locations to Loggers data frame in R and Excel data file
 update_logger_locations <- function(new_locations){
   # Columns and file path
   key_columns = c("Site", "StationID", "Latitude", "Longitude", "DataType")
@@ -291,8 +291,8 @@ flow_ave <- flow_raw %>%
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Flow = mean(Value, na.rm = T)) %>% 
   ungroup()
-# Mean daily salinity for each logger: either salinity_rae if no grouping, sali_grps$data if grouped
-salinity_ave <- sali_grps$data %>% 
+# Mean daily salinity for each logger: either salinity_raw if no grouping, sali_grps$data if grouped
+salinity_ave <- sali_grps$data %>% #salinity_raw %>% 
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
   mutate(Site = Site_code, Date = as.Date(Date)) %>% 
@@ -544,7 +544,8 @@ ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Fl
 }
 #
 names(models)
-ggplot_hyperbolic_fit(Model_data, models, "SSSal5_USGS-02323592", "Mean_Flow", "Mean_Salinity")
+ggplot_hyperbolic_fit(Model_data, models, "SSSal1_USGS-02323592", "Mean_Flow", 
+                      "Mean_Salinity", Salinity_min = 11.98, Salinity_max = 38.95)
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
 #       filename = paste("Flow_salinity_curve_", "SS5_SS",".tiff", sep = ""), dpi = 1000)
 #
@@ -962,7 +963,7 @@ plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOutlier")
 #
 #
 ## Save output
-#fileName: SiteCode_filenName
+#fileName: SiteCode_fileName
 save_flow_output <- function(output_data, fileName){
   final_output_data <- output_data
   #Save shapefile:
@@ -971,6 +972,9 @@ save_flow_output <- function(output_data, fileName){
     if(result == "No"){
       message("Shapefile and summary will not be saved.")
     } else {
+      #### ---------------------------------------------------------
+      #### Save shape file 
+      #### --------------------------------------------------------
       #Shape file
       shape_file <- final_output_data
       shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
@@ -984,6 +988,9 @@ save_flow_output <- function(output_data, fileName){
           "- ", nrow(final_output_data), " features saved with ", ncol(final_output_data)-1, "fields")
       #
       #
+      #### ---------------------------------------------------------
+      #### Save model data 
+      #### --------------------------------------------------------
       # Excel data
       model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
       data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
@@ -1001,8 +1008,12 @@ save_flow_output <- function(output_data, fileName){
           "File: ", data_path, "\n")
       #
       #
+      #### ---------------------------------------------------------
+      #### Add Interpolation Summary info 
+      #### --------------------------------------------------------
+      model_setup_path <- paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx")
       # Summary info
-      sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      sheet_names <- excel_sheets(model_setup_path)
       sheet_name <- "Interpolation_Summary"
       summ_info <- data.frame(Parameter = fileName,
                               Type = "Flow",
@@ -1014,11 +1025,11 @@ save_flow_output <- function(output_data, fileName){
                               Threshold_value = NA,
                               Date_updated = Sys.Date())
       #Load the workbook
-      wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      wb <- loadWorkbook(model_setup_path)
       #Check if the sheet exists
       if (sheet_name %in% sheet_names) {
         #If it exists, append data to the existing sheet
-        existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name, detectDates = TRUE)
+        existing_data <- readWorkbook(model_setup_path, sheet = sheet_name, detectDates = TRUE)
         new_data <- rbind(existing_data, summ_info)
         writeData(wb, sheet = sheet_name, new_data)
       } else {
@@ -1027,12 +1038,43 @@ save_flow_output <- function(output_data, fileName){
         writeData(wb, sheet = sheet_name, summ_info)
       }
       #Save the workbook
-      saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+      saveWorkbook(wb, model_setup_path, overwrite = TRUE)
       #Print a message to confirm saving
       cat("Summary information was saved within:", sheet_name, "\n")
+      #
+      #
+      #### -----------------------------------------------------------
+      #### Add Flow_stations sheet 
+      #### -----------------------------------------------------------
+      flow_sheet <- "Flow_stations"
+      
+      # Load again (safe; but avoids overwriting earlier)
+      wb <- loadWorkbook(model_setup_path)
+      sheet_names <- sheets(wb)
+      
+      # Replace Logger_data with whatever your logger dataframe is
+      if (!exists("Loggers")) {
+        warning("'Loggers' object not found. Flow_stations sheet was not added.")
+      } else {
+        if (flow_sheet %in% sheet_names) {
+          # Clear + rewrite
+          removeWorksheet(wb, flow_sheet)
+          addWorksheet(wb, flow_sheet)
+        } else {
+          addWorksheet(wb, flow_sheet)
+        }
+        
+        writeData(wb, sheet = flow_sheet, Loggers)
+        saveWorkbook(wb, model_setup_path, overwrite = TRUE)
+        
+        cat("Logger data successfully added to sheet 'Flow_stations' in model_setup.xlsx\n")
+      }
     }
   }
 }
+#
+save_flow_output(AOP_idw_data, "flow_optimal_adult")
+save_flow_output(LOP_idw_data, "flow_optimal_larvae")
 save_flow_output(Outlier_idw_data, "flow_outlier")
 #
 ### Other possible data ####
