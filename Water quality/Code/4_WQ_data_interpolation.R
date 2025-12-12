@@ -19,11 +19,11 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
 #
 source("Code/WQ_functions.R")
 #
-Site_code <- c("SL")       #Two letter estuary code
+Site_code <- c("SS")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
-State_Grid <- c("H4")      #Two-letter StateGrid ID
-Alt_Grid <- c("NA")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("SLHSM") #Project code given to data, found in file name
+State_Grid <- c("E2")      #Two-letter StateGrid ID
+Alt_Grid <- c("F2")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("SSHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
@@ -61,6 +61,8 @@ ggplot()+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
+#Site_version/Output/Figure files/Site_WQ_Stations
+#
 #END OF SECTION
 #
 ####Grid/raster set up - run once per session####
@@ -68,7 +70,7 @@ ggplot()+
 Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID, MGID), "Spatial")
 grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) 
 plot(grid) 
-#Get extent in meters to create raster: (raster only required for tps - skip to 81)
+#Get extent in meters to create raster: (raster only required for tps - skip to 83)
 Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
 #Create base raster using meters: 
 raster_t_m <- rast(resolution = c(20, 20),
@@ -100,8 +102,8 @@ if(color_temp == "warm") {
 #
 #library(lubridate)
 WQ_summ <- summarize_data(WQ_data %>% drop_na(Value), 
-                          Time_period = "YearMonth", Summ_method = "Threshold", 
-                          Threshold_parameters = c("below", 20), Month_range = c(5, 10))
+                          Time_period = "YearMonth", Summ_method = "Mean", 
+                          Threshold_parameters = c("above", 35), Month_range = c(5, 10))
 #
 head(WQ_summ)
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,".xlsx"), format_headers = TRUE)

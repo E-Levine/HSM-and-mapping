@@ -957,8 +957,9 @@ plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_toleranc
 }
 #
 plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOutlier")
-#ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-#       filename = paste("Flow_salinity_curve_", "Adult_optimal_days",".tiff", sep = ""), dpi = 1000)
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+     filename = paste("Flow_salinity_curve_", "Adult_optimal_days",".tiff", sep = ""), dpi = 1000)
 #
 #
 #
