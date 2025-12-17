@@ -2246,6 +2246,57 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
     loop_vars <- unique(Site_data_spdf@data$Statistic)
     loop_name <- "Statistic"
   }
+  #
+  # ---- PRE-CHECK: minimum observations per group ----
+  skipped_groups <- NULL  # initialize
+  #
+  if (Individual %in% c("Month", "Year")) {
+    time_col <- Individual
+    min_obs <- 3
+    #
+    obs_counts <- Site_data_spdf@data %>%
+      dplyr::group_by(.data[[time_col]], Statistic) %>%
+      dplyr::summarise(n_obs = dplyr::n(), .groups = "drop")
+    #
+    # Identify groups with insufficient data
+    skipped_groups <- obs_counts %>%
+      dplyr::filter(n_obs < min_obs)
+    #
+    if (nrow(skipped_groups) > 0) {
+      warning(
+        paste0(
+          "Insufficient data for some ", time_col,
+          "–Statistic groups (minimum = ", min_obs,
+          "). These groups will be skipped."
+        ),
+        call. = FALSE
+      )
+      # Print summary table
+      print(skipped_groups)
+    }
+    # Keep only valid groups for modeling
+    loop_vars <- loop_vars %>%
+      dplyr::inner_join(
+        obs_counts %>% dplyr::filter(n_obs >= min_obs),
+        by = c(time_col, "Statistic")
+      ) %>%
+      dplyr::select(-n_obs)
+    #
+    if (nrow(loop_vars) == 0) {
+      warning(
+        paste0(
+          "No ", time_col,
+          "–Statistic groups have at least ",
+          min_obs,
+          " observations. No interpolation performed."
+        ),
+        call. = FALSE
+      )
+      return(NULL)
+    }
+  }
+  # ---------------------------------------------------
+  #
   # Create a progress bar
   total_steps <- if (Individual == "Month" | Individual == "Year") nrow(loop_vars) * 4 + 2 else length(loop_vars) * 4 + 2
   pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
