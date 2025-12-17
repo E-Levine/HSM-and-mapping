@@ -2496,20 +2496,30 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
   if (existing_count == 0) {
     stop("Error: None of the model outputs exist in the global environment.")
   } else if (existing_count == 1) {
-    stop(paste("Error: Only one model output exists: ", existing_objects[1]," Creation of ensemble model not applicable"))
+    stop(
+      paste(
+        "Error: Only one model output exists: ", existing_objects[1]," Creation of ensemble model not applicable"))
   }
   #
   # Get the list of statistics/list names:
   all_extracted <- lapply(existing_objects, function(obj) extract_time_stat(get(obj)))
+  #
   # Combine across all data frames: unique Months and Statistics overall
   unique_time_all <- unique(unlist(lapply(all_extracted, `[[`, "Times")))
   unique_stats_all <- unique(unlist(lapply(all_extracted, `[[`, "Statistics")))
-  result <- list(Unique_Times = unique_time_all, Unique_Statistics = unique_stats_all)
+  result <- list(
+    Unique_Times = unique_time_all, 
+    Unique_Statistics = unique_stats_all
+    )
   #
   # Determine params: combined Month_Statistic if months exist, else just Statistics
   if (length(result$Unique_Times) > 0) {
     # Create all combinations of Month and Statistic
-    combo_df <- expand.grid(Times = result$Unique_Times, Statistic = result$Unique_Statistics, stringsAsFactors = FALSE)
+    combo_df <- expand.grid(
+      Times = result$Unique_Times, 
+      Statistic = result$Unique_Statistics, 
+      stringsAsFactors = FALSE
+      )
     params <- paste(combo_df$Times, combo_df$Statistic, sep = "_")
   } else {
     # Fall back to just Statistics
@@ -2520,20 +2530,36 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
   # Iterate over each parameter/combination
   for (i in seq_along(params)){
     temp_results <- list()
+    #
     # Iterate through each possible SF object
     for (sf_obj in existing_objects) {
-      if (exists(sf_obj, envir = .GlobalEnv)) {
         model_name <- strsplit(sf_obj, "_")[[1]][1]
         cat("Joining ", sf_obj, " with existing data...\n")
+        #
+        sf_data <- get(sf_obj)
+        pred_col <- paste0("Pred_Value_", params[i])
+        #
+        if (pred_col %in% colnames(sf_data)) {
         temp_data <- get(sf_obj) %>% #[[i]] %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
-          dplyr::select(PGID, any_of(paste0("Pred_Value_", params[i]))) %>% #dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
+          dplyr::select(PGID, all_of(pred_col)) %>% #dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
           as.data.frame() %>%
-          rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>%
-          group_by(PGID) %>% arrange(desc(across(contains("Pred_Value")))) %>% slice(1) %>%
-          rename(!!paste0(model_name, "_", params[i]) := !!paste0("Pred_Value_", params[i]))
+          dplyr::rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>%
+          dplyr::group_by(PGID) %>% 
+          dplyr::arrange(desc(.data[[pred_col]])) %>% 
+          dplyr::slice(1) %>%
+          dplyr::rename(!!paste0(model_name, "_", params[i]) := !!pred_col)
+        
         temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data, by = "PGID"))
       } else {
-        cat("Warning: ", sf_obj, " does not exist in the global environment.\n")
+        warning(
+          paste0(
+            "Column ", pred_col, " not found in ", sf_obj,
+            ". Keeping existing data unchanged for this parameter."
+          ),
+          call. = FALSE
+        )
+        # Keep existing output unchanged
+        temp_results[[sf_obj]] <- output
       }
     }
     #
