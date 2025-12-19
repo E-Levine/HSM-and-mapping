@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                install = TRUE) 
 #
 #
-Site_code <- c("SS")       #Two letter estuary code
+Site_code <- c("SL")       #Two letter estuary code
 Version <- c("v1")         #For saving plots
 Start_year <- c("2020")
 End_year <- c("2024")
@@ -289,10 +289,10 @@ flow_ave <- flow_raw %>%
   # If using all stations as 1 run next line, if stations should be separate, remove line
   #mutate(Station = "ALL") %>%
   group_by(Site, Date, Station, Parameter) %>% 
-  summarise(Flow = mean(Value, na.rm = T)) %>% 
+  summarise(Flow = sum(Value, na.rm = T)) %>% 
   ungroup()
 # Mean daily salinity for each logger: either salinity_raw if no grouping, sali_grps$data if grouped
-salinity_ave <- sali_grps$data %>% #salinity_raw %>% 
+salinity_ave <- salinity_raw %>% #sali_grps$data %>% 
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
   mutate(Site = Site_code, Date = as.Date(Date)) %>% 
@@ -329,7 +329,10 @@ calculate_monthly_value <- function(df, value_col = "Salinity") {
   #
   # Calculate mean monthly salinity
   monthly_salinity <- df %>%
-    mutate(Year = year(Date), Month = month(Date), Date = as.Date(paste(Year, Month, "01", sep = "-"))) %>%
+    mutate(
+      Year = year(Date), 
+      Month = month(Date), 
+      Date = as.Date(paste(Year, Month, "01", sep = "-"))) %>%
     group_by(Date, Year, Month, Station) %>%
     summarise(!!output_col := mean(.data[[value_col]], na.rm = TRUE), .groups = "drop")
   #
@@ -418,6 +421,8 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
 }
 #
 models <- fit_salinity_flow_models(flow_monthly, sal_monthly)
+#Fit fails unless means used: models <- fit_salinity_flow_models(flow_ave, sal_monthly, flow_col = "Flow")
+#
 #
 remove_models <- function(results, models_to_remove) {
   # Filter the results list to remove specified models
@@ -488,11 +493,11 @@ flow_at_salinity_hyp2 <- function(results, target_sal) {
 }
 #
 adult <- rbind(
-  flow_at_salinity_hyp2(models, 11.98) %>% mutate(Sal = "min"), 
-  flow_at_salinity_hyp2(models, 35.98) %>% mutate(Sal = "max")) %>% mutate(Type = "Adult")
+  flow_at_salinity_hyp2(models, 11.98) %>% mutate(Sal = "min", Flow = "max"), 
+  flow_at_salinity_hyp2(models, 35.98) %>% mutate(Sal = "max", Flow = "min")) %>% mutate(Type = "Adult")
 larvae <- rbind(
-  flow_at_salinity_hyp2(models, 10.01) %>% mutate(Sal = "min"), 
-  flow_at_salinity_hyp2(models, 31.49) %>% mutate(Sal = "max")) %>% mutate(Type = "Larave")
+  flow_at_salinity_hyp2(models, 10.01) %>% mutate(Sal = "min", Flow = "max"), 
+  flow_at_salinity_hyp2(models, 31.49) %>% mutate(Sal = "max", Flow = "min")) %>% mutate(Type = "Larave")
 #
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
 ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Flow", value_col = "Salinity", 
@@ -544,7 +549,7 @@ ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Fl
 }
 #
 names(models)
-ggplot_hyperbolic_fit(Model_data, models, "SSSal1_USGS-02323592", "Mean_Flow", 
+ggplot_hyperbolic_fit(Model_data, models, "STLSTPT_S97S", "Mean_Flow", 
                       "Mean_Salinity", Salinity_min = 11.98, Salinity_max = 38.95)
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
 #       filename = paste("Flow_salinity_curve_", "SS5_SS",".tiff", sep = ""), dpi = 1000)
@@ -561,124 +566,382 @@ ggplot_hyperbolic_fit(Model_data, models, "SSSal1_USGS-02323592", "Mean_Flow",
 ## Determine mean number of days in year within range 
 #min and max Dates to include
 optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFlow){
-  df %>% 
+  #
+  # Setup data
+  data_setup <- df %>% 
     # Filter data to date range
-    filter(Date >= as.Date(minDate) & Date <= as.Date(maxDate)) %>%
-    # Count if within ideal range
-    mutate(Year = year(Date), 
-           Station = Station_name, 
-           Conditions = case_when(Flow < maxFlow & Flow > minFlow ~ 1,  
-                                  TRUE ~ 0)) %>%
-    # Group by year and count number of good days
-    group_by(Year, Station) %>%
-    summarise(Days = sum(Conditions)) %>% 
-    ungroup() %>% group_by(Station) %>%
-    # Mean number of annual days within ideal flow at logger point
-    summarise(meanDays = mean(Days)) 
+    dplyr::filter(Date >= as.Date(minDate) & Date <= as.Date(maxDate)) %>%
+    # Add Years and Stations
+    dplyr::mutate(
+      Year = lubridate::year(Date))
+  #
+  # Get total possible days in date range
+  total_days <- data_setup %>%
+    # Group by Year
+    dplyr::group_by(Year) %>%
+    # Get total number
+    dplyr::summarise(
+      TotalDays = dplyr::n_distinct(Date)
+    )
+    
+  # Get optimal days
+  opt_days <- data_setup %>% 
+    # Identify optimal days
+    dplyr::mutate(
+      is_optimal = Flow > minFlow & Flow < maxFlow
+    ) %>%
+    #
+    # Count optimal days per year
+    dplyr::group_by(Station, Year) %>%
+    dplyr::summarise(
+      Days = sum(is_optimal, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    #
+    dplyr::left_join(total_days, by = "Year") %>%
+    # Calculate days/year
+    dplyr::mutate(OptimalDays = Days/TotalDays) %>%
+    # Get mean optimal days with station ID
+    dplyr::group_by(Station) %>% rename(FlowStation = Station) %>%
+    dplyr::summarise(
+      meanOptimal = mean(OptimalDays, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    # Add salinity station
+    dplyr::mutate(SalStation = Station_name)
+  
+  return(opt_days)
 }
 #
 #Calculates the mean optimal days for each station 
-automate_optimal_df <- function(df, flow_ave_df, start_date, end_date, dfType){
+#returndf = individual, combined, both
+automate_optimal_df <- function(df, flow_ave_df, start_date, end_date, dfType, returndf = c("individual", "combined", "both")){
+  
+  returndf <- match.arg(returndf,
+                        choices = c("individual", "combined", "both"))
+  
+  flow_ave_df <- flow_ave_df %>%
+    dplyr::mutate(Station_clean = gsub("_", "", Station))
+  
   # Get unique combinations of salinity_station and flow_station
   unique_combos <- df %>%
-    dplyr::select(salinity_station, flow_station) %>%
-    dplyr::distinct()
+    dplyr::distinct(salinity_station, flow_station)
   
   # Initialize a list to store results for each combination
-  results <- list()
+  results <- vector("list", nrow(unique_combos))
   
   # Loop over each unique combination
-  for (i in 1:nrow(unique_combos)) {
+  for (i in seq_len(nrow(unique_combos))) {
     salStation <- unique_combos$salinity_station[i]
     flowStation <- unique_combos$flow_station[i]
     
     # Filter the adult dataframe for the current combination
     combo_data <- df %>% 
-      dplyr::filter(salinity_station == salStation & flow_station == flowStation)
+      dplyr::filter(
+        salinity_station == salStation,
+        flow_station == flowStation)
     
-    # Compute min and max Sal for the combination (assuming 'Sal' is the salinity column)
-    min_flow <- as.numeric(ifelse(is.na((combo_data %>% filter(Sal == "min"))$flow_at_target), 
-                                 -900,  
-                                 (combo_data %>% filter(Sal == "min"))$flow_at_target))
-    max_flow <- as.numeric(ifelse(is.na((combo_data %>% filter(Sal == "max"))$flow_at_target), 
-                                 -900,  
-                                 (combo_data %>% filter(Sal == "max"))$flow_at_target))
+    # Filter flow to current flow station
+    single_flow <- flow_ave_df %>% 
+      dplyr::filter(Station_clean == flowStation)
+    
+    # Extract min and max flow for the combination
+    min_flow <- combo_data %>%
+      dplyr::filter(Flow == "min") %>%
+      dplyr::pull(flow_at_target) %>%
+      dplyr::first()
+    
+    max_flow <- combo_data %>%
+      dplyr::filter(Flow == "max") %>%
+      dplyr::pull(flow_at_target) %>%
+      dplyr::first()
+    
+    min_flow <- ifelse(is.na(min_flow), -900, min_flow)
+    max_flow <- ifelse(is.na(max_flow), -900, max_flow)
+    
+    if (nrow(single_flow) == 0) next
     
     # Call optimal_flow_days with the flow_station and computed min/max Sal as minFlow/maxFlow
-    opt_flow <- optimal_flow_days(flow_ave_df, salStation, start_date, end_date, min_flow, max_flow)
+    opt_flow <- optimal_flow_days(
+      single_flow, 
+      salStation, 
+      start_date, 
+      end_date, 
+      min_flow, 
+      max_flow)
     
     # Store the result with a key like "salinity_station_flow_station"
-    key <- paste(salStation, flowStation, sep = "_")
-    results[[key]] <- opt_flow
+    results[[i]] <- opt_flow
   }
+  
+  # Combine individual results
+  individual <- dplyr::bind_rows(results)
   
   # Combine all results into a single dataframe
-  if (length(results) == 0) {
-    stop("No valid combinations found.")
+  if (nrow(individual) == 0) {
+    stop("No valid station combinations produced results.")
   }
-  combined <- do.call(rbind, results)
-  
-  # Add the Type column
-  combined <- combined %>% 
+
+  # Combined (mean) summary 
+  combined <- individual %>% 
     dplyr::mutate(Type = dfType) %>%
-    group_by(Station, Type) %>%
-    summarise(meanDays = mean(meanDays),
+    dplyr::group_by(SalStation, Type) %>%
+    dplyr::summarise(meanOptimal = mean(meanOptimal, na.rm = T),
               .groups = "drop")
-    
   
-  return(combined)
+  # return based on function input
+  if (returndf == "individual") {
+    return(individual)
+    
+  } else if (returndf == "combined") {
+    return(combined)
+    
+  } else if (returndf == "both") {
+    return(list(Individual = individual, Mean = combined))
+  }
 }
 #
-Adult_optimal <- automate_optimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult")
-Larvae_optimal <- automate_optimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae")
+Adult_optimal <- automate_optimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult", "both")
+Larvae_optimal <- automate_optimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae", "both")
 #
-#(Adult_optimal <- rbind(
-#  #HR1
-#  optimal_flow_days(flow_ave, "SSSal1","2020-01-01", "2024-12-31", -105.71566, -98.60245),
-#  #STLRIVER 
-#  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -294, 784.0671),
-#  #STLSTPT
-#  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -415, 8103.8245)
-#  ) %>% mutate(Type = "Adult"))
-#(Larvae_optimal <- rbind(
-#  #HR1
-#  optimal_flow_days(flow_ave, "HR1","2020-01-01", "2024-12-31", -202, 770.6214),
-#  #STLRIVER 
-#  optimal_flow_days(flow_ave, "STLRIVER","2020-01-01", "2024-12-31", -210, 1064.4825),
-#  #STLSTPT
-#  optimal_flow_days(flow_ave, "STLSTPT","2020-01-01", "2024-12-31", -79, 14472.53761)
-#) %>% mutate(Type = "Larvae"))
+## Number above or below optimal
+nonoptimal_flow_days <- function(df, Station_name, minDate, maxDate, flowThreshold, type = c("sub", "super")) {
+  
+  type <- match.arg(type)
+  
+  # ---- Setup data ----
+  data_setup <- df %>% 
+    dplyr::filter(
+      Date >= as.Date(minDate),
+      Date <= as.Date(maxDate)
+    ) %>%
+    dplyr::mutate(
+      Year = lubridate::year(Date)
+    )
+  
+  # ---- Total possible days per year ----
+  total_days <- data_setup %>%
+    dplyr::group_by(Year) %>%
+    dplyr::summarise(
+      TotalDays = dplyr::n_distinct(Date),
+      .groups = "drop"
+    )
+  
+  # ---- Identify non-optimal days ----
+  result <- data_setup %>%
+    dplyr::mutate(
+      Conditions = dplyr::case_when(
+        type == "sub"   & Flow < flowThreshold ~ 1,
+        type == "super" & Flow > flowThreshold ~ 1,
+        TRUE                                   ~ 0
+      )
+    ) %>%
+    # Count non-optimal days per year
+    dplyr::group_by(Station, Year) %>%
+    dplyr::summarise(
+      Days = sum(Conditions, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    # Join total days
+    dplyr::left_join(total_days, by = "Year") %>%
+    # Proportion of days per year
+    dplyr::mutate(PropDays = Days/TotalDays) %>%
+    # Mean across years
+    dplyr::group_by(Station) %>%
+    dplyr::rename(FlowStation = Station) %>%
+    dplyr::summarise(
+      meanDays = mean(PropDays, na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    # Add salinity station + type label
+    dplyr::mutate(
+      SalStation = Station_name,
+      FlowType   = type
+    )
+  
+  return(result)
+}
+#
+automate_nonoptimal_df <- function(df, flow_ave_df, start_date, end_date, dfType, returndf = c("individual", "combined", "both")){
+  
+  returndf <- match.arg(returndf,
+                        choices = c("individual", "combined", "both"))
+  
+  flow_ave_df <- flow_ave_df %>%
+    dplyr::mutate(Station_clean = gsub("_", "", Station))
+  
+  # Get unique combinations of salinity_station and flow_station
+  unique_combos <- df %>%
+    dplyr::distinct(salinity_station, flow_station)
+  
+  # Initialize a list to store results for each combination
+  results <- vector("list", nrow(unique_combos))
+  
+  # Loop over each unique combination
+  for (i in seq_len(nrow(unique_combos))) {
+    salStation <- unique_combos$salinity_station[i]
+    flowStation <- unique_combos$flow_station[i]
+    
+    # Filter the adult dataframe for the current combination
+    combo_data <- df %>% 
+      dplyr::filter(
+        salinity_station == salStation,
+        flow_station == flowStation)
+    
+    # Filter flow to current flow station
+    single_flow <- flow_ave_df %>% 
+      dplyr::filter(Station_clean == flowStation)
+    
+    # Extract min and max flow for the combination
+    min_flow <- combo_data %>%
+      dplyr::filter(Flow == "min") %>%
+      dplyr::pull(flow_at_target) %>%
+      dplyr::first()
+    
+    max_flow <- combo_data %>%
+      dplyr::filter(Flow == "max") %>%
+      dplyr::pull(flow_at_target) %>%
+      dplyr::first()
+    
+    min_flow <- ifelse(is.na(min_flow), -900, min_flow)
+    max_flow <- ifelse(is.na(max_flow), -900, max_flow)
+    
+    if (nrow(single_flow) == 0) next
+    
+    # Determine non-optimal days
+    sub_flow <- nonoptimal_flow_days(
+      df = single_flow,
+      Station_name = salStation,
+      minDate = start_date,
+      maxDate = end_date,
+      flowThreshold = min_flow,
+      type = "sub")
+    super_flow <- nonoptimal_flow_days(
+      df = single_flow,
+      Station_name = salStation,
+      minDate = start_date,
+      maxDate = end_date,
+      flowThreshold = max_flow,
+      type = "super")
+    
+    # Store the result with a key like "salinity_station_flow_station"
+    results[[i]] <- dplyr::bind_rows(sub_flow, super_flow)
+  }
+  
+  # Combine individual results
+  individual <- dplyr::bind_rows(results)
+  
+  # Combine all results into a single dataframe
+  if (nrow(individual) == 0) {
+    stop("No valid combinations produced results.")
+  }
+  
+  # Combined (mean) summary 
+  combined <- individual %>% 
+    dplyr::mutate(Type = dfType) %>%
+    dplyr::group_by(SalStation, Type, FlowType) %>%
+    dplyr::summarise(meanDays = mean(meanDays, na.rm = T),
+                     .groups = "drop")
+  
+  # return based on function input
+  if (returndf == "individual") {
+    return(individual)
+    
+  } else if (returndf == "combined") {
+    return(combined)
+    
+  } else if (returndf == "both") {
+    return(list(Individual = individual, Mean = combined))
+  }
+  
+}#
+#
+Adult_nonoptimal <- automate_nonoptimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult", "both")
+Larvae_nonoptimal <- automate_nonoptimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae", "both")
+#
 #
 #
 # Count number of days in month more than 1.5 SD from monthly mean
 count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
   #
-  df %>%
+  # Get annual ranges ----
+  monthly_range <- df %>% 
+    dplyr::mutate(
+      Month = factor(
+        format(Date, "%b"),
+        levels = month.abb,
+        ordered = TRUE)) %>% 
+    dplyr::group_by(Month, Date) %>% 
+    summarise(
+      MinFlow = min(Flow, na.rm = T), 
+      MaxFlow = max(Flow, na.rm = T), 
+      .groups = "drop") %>%
+    # Get daily range
+    dplyr::mutate(Range = MaxFlow - MinFlow) %>%
+    dplyr::group_by(Month) %>%
+    summarise(
+      meanRange = mean(Range, na.rm = T), 
+      sdRange = sd(Range, na.rm = T),
+      .groups = "drop") 
+  #
+  # Get monthly values ----
+  monthly_summary <- df %>% 
     # Filter data to date range
     filter(Date >= as.Date(minDate) & Date <= as.Date(maxDate)) %>%
-    #Get Year and Month
-    mutate(Year  = year(Date),
-           Month = month(Date)) %>%
-    group_by(Year, Month) %>%
-    # Determine mean monthly flow, 1.5 SD, and identify outliers
-    mutate(
-      mean_flow = mean(.data[[flow_col]], na.rm = TRUE), #mean monthly flow
-      sd_flow   = sd(.data[[flow_col]], na.rm = TRUE), #SD monthly flow
-      outlier   = abs(.data[[flow_col]] - mean_flow) > 1.5 * sd_flow,
-      within_1.5sd = !outlier
-    ) %>%
+    # Get Year and Month
+    mutate(Year  = lubridate::year(Date),
+           Month = factor(
+             format(Date, "%b"),
+             levels = month.abb,
+             ordered = TRUE)) %>%
+    group_by(Year, Month, Date) %>%
+    # Determine daily range
+    summarise(
+      MinFlow = min(Flow, na.rm = T), 
+      MaxFlow = max(Flow, na.rm = T), 
+      .groups = "drop") %>%
+    # Get daily range
+    dplyr::mutate(Range = MaxFlow - MinFlow) %>%
+    # Add in monthly mean range
+    left_join(monthly_range, by = c("Month")) %>%
+    # Determine outliers
+    dplyr::mutate(outlier_1sd = abs(Range - meanRange) > 1 * sdRange &
+                    abs(Range - meanRange) <= 2 * sdRange,
+                  outlier_2sd = abs(Range - meanRange) > 2 * sdRange) %>%
+    dplyr::group_by(Year, Month) %>%
     # Count number of outliers per MonYr, and mean flow
     summarise(
-      days_outlier_flow = sum(outlier, na.rm = TRUE),
-      mean_flow = (first(mean_flow)),
+      days_outlier1sd = sum(outlier_1sd, na.rm = TRUE),
+      days_outlier2sd = sum(outlier_2sd, na.rm = TRUE),
+      meanRange = mean(meanRange, na.rm = T),
+      sdRange = mean(sdRange, na.rm = T),
       .groups = "drop"
     ) %>%
+    dplyr::group_by(Month) %>%
     # Calculate mean number of days per month and mean flow
-    summarise(mean_outlier_days = mean(days_outlier_flow),
-              mean_flow = mean(mean_flow))
+    summarise(mean_outlier1_days = mean(days_outlier1sd),
+              mean_outlier2_days = mean(days_outlier2sd),
+              meanRange = mean(meanRange),
+              meanSDRange = mean(sdRange))
+  #
+  # Get overall average ----
+  overall_row <- monthly_summary %>%
+    dplyr::summarise(
+      Month = "Overall",
+      mean_outlier1_days = mean(mean_outlier1_days, na.rm = TRUE),
+      mean_outlier2_days = mean(mean_outlier2_days, na.rm = TRUE),
+      meanRange   = mean(meanRange, na.rm = TRUE),
+      meanSDRange = mean(meanSDRange, na.rm = TRUE)
+    )
+  #
+  # Join together
+  final_summary <- dplyr::bind_rows(monthly_summary, overall_row)
+  return(final_summary)
+  #
     }
 #
-outlier_flow <- count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") %>% mutate(Type = "All")
+outlier_flow <- count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") %>% 
+  mutate(Type = "All")
 #
 #
 #
