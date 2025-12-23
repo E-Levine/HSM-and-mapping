@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                install = TRUE) 
 #
 #
-Site_code <- c("SL")       #Two letter estuary code
+Site_code <- c("SS")       #Two letter estuary code
 Version <- c("v1")         #For saving plots
 Start_year <- c("2020")
 End_year <- c("2024")
@@ -292,7 +292,7 @@ flow_ave <- flow_raw %>%
   summarise(Flow = sum(Value, na.rm = T)) %>% 
   ungroup()
 # Mean daily salinity for each logger: either salinity_raw if no grouping, sali_grps$data if grouped
-salinity_ave <- salinity_raw %>% #sali_grps$data %>% 
+salinity_ave <- sali_grps$data %>%  #salinity_raw %>% #
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
   mutate(Site = Site_code, Date = as.Date(Date)) %>% 
@@ -549,10 +549,11 @@ ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Fl
 }
 #
 names(models)
-ggplot_hyperbolic_fit(Model_data, models, "STLSTPT_S97S", "Mean_Flow", 
+ggplot_hyperbolic_fit(Model_data, models, "SSSal1_USGS-02323592", "Mean_Flow", 
                       "Mean_Salinity", Salinity_min = 11.98, Salinity_max = 38.95)
+#
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-#       filename = paste("Flow_salinity_curve_", "SS5_SS",".tiff", sep = ""), dpi = 1000)
+#       filename = paste("Flow_salinity_curve_", "SS2_WC",".tiff", sep = ""), dpi = 1000)
 #
 #ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
  #                     Salinity_min = 11.98, Salinity_max = 35.98,
@@ -864,37 +865,45 @@ Larvae_nonoptimal <- automate_nonoptimal_df(larvae, flow_ave, "2020-01-01", "202
 # Count number of days in month more than 1.5 SD from monthly mean
 count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
   #
-  # Get annual ranges ----
-  monthly_range <- df %>% 
+  # Set up ----
+  working_df <- df %>% 
     dplyr::mutate(
+      Year  = lubridate::year(Date),
       Month = factor(
         format(Date, "%b"),
         levels = month.abb,
-        ordered = TRUE)) %>% 
-    dplyr::group_by(Month, Date) %>% 
-    summarise(
-      MinFlow = min(Flow, na.rm = T), 
-      MaxFlow = max(Flow, na.rm = T), 
-      .groups = "drop") %>%
-    # Get daily range
-    dplyr::mutate(Range = MaxFlow - MinFlow) %>%
-    dplyr::group_by(Month) %>%
-    summarise(
-      meanRange = mean(Range, na.rm = T), 
-      sdRange = sd(Range, na.rm = T),
-      .groups = "drop") 
+        ordered = TRUE))
   #
+  # Get annual ranges per logger ----
+  monthly_range <- working_df %>% 
+    dplyr::group_by(Year, Month, Station) %>% 
+    summarise(
+      MonthMin = min(Flow, na.rm = T), 
+      MonthMax = max(Flow, na.rm = T), 
+      .groups = "drop") %>%
+    # Get monthly range
+    dplyr::mutate(MonthRange = MonthMax - MonthMin) %>%
+    # Get average monthly range
+    dplyr::group_by(Month, Station) %>% 
+    summarise(
+      meanRange = mean(MonthRange, na.rm = T), 
+      sdRange = sd(MonthRange, na.rm = T), 
+      .groups = "drop")
+  #
+  # Get total possible months in date range ----
+  total_months <- working_df %>%
+    filter(Date >= as.Date(minDate) & Date <= as.Date(maxDate)) %>%
+    # Group by Year
+    dplyr::group_by(Year) %>%
+    # Get total number
+    dplyr::summarise(
+      TotalMonths = dplyr::n_distinct(Month)
+    )
   # Get monthly values ----
-  monthly_summary <- df %>% 
+  monthly_summary <- working_df %>% 
     # Filter data to date range
     filter(Date >= as.Date(minDate) & Date <= as.Date(maxDate)) %>%
-    # Get Year and Month
-    mutate(Year  = lubridate::year(Date),
-           Month = factor(
-             format(Date, "%b"),
-             levels = month.abb,
-             ordered = TRUE)) %>%
-    group_by(Year, Month, Date) %>%
+    group_by(Year, Month, Station) %>%
     # Determine daily range
     summarise(
       MinFlow = min(Flow, na.rm = T), 
@@ -903,55 +912,67 @@ count_outlier_flow_days <- function(df, minDate, maxDate, flow_col = "Flow") {
     # Get daily range
     dplyr::mutate(Range = MaxFlow - MinFlow) %>%
     # Add in monthly mean range
-    left_join(monthly_range, by = c("Month")) %>%
+    dplyr::left_join(monthly_range, by = c("Month", "Station")) %>%
     # Determine outliers
     dplyr::mutate(outlier_1sd = abs(Range - meanRange) > 1 * sdRange &
                     abs(Range - meanRange) <= 2 * sdRange,
                   outlier_2sd = abs(Range - meanRange) > 2 * sdRange) %>%
-    dplyr::group_by(Year, Month) %>%
-    # Count number of outliers per MonYr, and mean flow
+    dplyr::group_by(Year, Station) %>%
+    # Count number of outliers per Year, and mean flow
     summarise(
-      days_outlier1sd = sum(outlier_1sd, na.rm = TRUE),
-      days_outlier2sd = sum(outlier_2sd, na.rm = TRUE),
+      month_outlier1sd = sum(outlier_1sd, na.rm = TRUE),
+      month_outlier2sd = sum(outlier_2sd, na.rm = TRUE),
       meanRange = mean(meanRange, na.rm = T),
       sdRange = mean(sdRange, na.rm = T),
       .groups = "drop"
     ) %>%
-    dplyr::group_by(Month) %>%
-    # Calculate mean number of days per month and mean flow
-    summarise(mean_outlier1_days = mean(days_outlier1sd),
-              mean_outlier2_days = mean(days_outlier2sd),
-              meanRange = mean(meanRange),
-              meanSDRange = mean(sdRange))
+    dplyr::left_join(total_months, by = "Year") %>%
+    # Calculate months/year
+    dplyr::mutate(Out_1_Months = month_outlier1sd/TotalMonths,
+                  Out_2_Months = month_outlier2sd/TotalMonths)
   #
+  # Get average per logger ----
+  logger_rows <- monthly_summary %>%
+    dplyr::group_by(Station) %>%
+    dplyr::summarise(
+      Out_1_Months = mean(Out_1_Months, na.rm = TRUE),
+      Out_2_Months = mean(Out_2_Months, na.rm = TRUE),
+      meanRange   = mean(meanRange, na.rm = TRUE),
+      meanSDRange = mean(sdRange, na.rm = TRUE))
   # Get overall average ----
   overall_row <- monthly_summary %>%
     dplyr::summarise(
-      Month = "Overall",
-      mean_outlier1_days = mean(mean_outlier1_days, na.rm = TRUE),
-      mean_outlier2_days = mean(mean_outlier2_days, na.rm = TRUE),
+      Station = "Overall",
+      Out_1_Months = mean(Out_1_Months, na.rm = TRUE),
+      Out_2_Months = mean(Out_2_Months, na.rm = TRUE),
       meanRange   = mean(meanRange, na.rm = TRUE),
-      meanSDRange = mean(meanSDRange, na.rm = TRUE)
-    )
+      meanSDRange = mean(sdRange, na.rm = TRUE))
   #
   # Join together
-  final_summary <- dplyr::bind_rows(monthly_summary, overall_row)
+  final_summary <- dplyr::bind_rows(logger_rows, overall_row)
   return(final_summary)
   #
     }
 #
-outlier_flow <- count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") %>% 
-  mutate(Type = "All")
+outlier_flow <- count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") 
 #
 #
 #
 # Save data and/or figure created
-save_flow_output <- function(adultFlow, larvaeFlow, adultOptimal, larvaeOptimal, outlierFlow){
+#make sure to specify list item if list objetc used
+save_flow_output <- function(adultFlow, 
+                             larvaeFlow, 
+                             adultOptimal,
+                             adultNonOptimal,
+                             larvaeOptimal, 
+                             larvaeNonOptimal,
+                             outlierFlow){
   #
   Logger_stations <- "Flow_stations"
   FlowSalinity <- "Flow_at_salinity"
   Optimal <- "Flow_optimal_days"
-  Outlier <- "Flow_outlier_days"
+  NonOptimal <- "Flow_days_above_below"
+  Outlier <- "Flow_outlier_months"
   #
   if(interactive()){
     result<- select.list(c("Yes", "No"), title = paste0("\nCan a summary of the flow curve results be saved locally to the version tracking file?"))
@@ -989,12 +1010,21 @@ save_flow_output <- function(adultFlow, larvaeFlow, adultOptimal, larvaeOptimal,
       }
       
       # Save optimal flow output
-      temp_data_optimal <- rbind(adultOptimal, larvaeOptimal)
+      temp_data_optimal <- dplyr::bind_rows(adultOptimal, larvaeOptimal)
       if (Optimal %in% existing_sheets) {
         writeData(wb, sheet = Optimal, temp_data_optimal)
       } else {
         addWorksheet(wb, Optimal)
         writeData(wb, sheet = Optimal, temp_data_optimal)
+      }
+      
+      # Save nonoptimal flow output
+      temp_data_nonoptimal <- dplyr::bind_rows(adultNonOptimal, larvaeNonOptimal)
+      if (NonOptimal %in% existing_sheets) {
+        writeData(wb, sheet = NonOptimal, temp_data_nonoptimal)
+      } else {
+        addWorksheet(wb, NonOptimal)
+        writeData(wb, sheet = NonOptimal, temp_data_nonoptimal)
       }
       
       # Save outlier flow output
@@ -1013,7 +1043,13 @@ save_flow_output <- function(adultFlow, larvaeFlow, adultOptimal, larvaeOptimal,
   }
 }
 #
-save_flow_output(adult, larvae, Adult_optimal, Larvae_optimal, outlier_flow)
+save_flow_output(adult, 
+                 larvae, 
+                 Adult_optimal$Mean, 
+                 Adult_nonoptimal$Mean, 
+                 Larvae_optimal$Mean, 
+                 Larvae_nonoptimal$Mean,
+                 outlier_flow)
 #
 ##
 ### Interpolation ####
@@ -1024,15 +1060,31 @@ save_flow_output(adult, larvae, Adult_optimal, Larvae_optimal, outlier_flow)
   # Get into same format
   Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
   # add values
-  Adult_optimal) %>%
+  Adult_optimal$Mean %>% rename(Station = SalStation)) %>%
   # add flow logger data
-  mutate(meanDays = case_when(is.na(meanDays) ~ 0, TRUE ~ meanDays)))
+  mutate(meanOptimal = case_when(is.na(meanOptimal) ~ 0, TRUE ~ meanOptimal)))
+#
+(A_nonoptimal <- left_join(
+  # Get into same format
+  Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
+  # add values
+  Adult_nonoptimal$Mean %>% rename(Station = SalStation)) %>%
+    # add flow logger data
+    mutate(meanDays = case_when(is.na(meanDays) ~ 0, TRUE ~ meanDays)))
 #
 (L_optimal <- left_join(
   # Get into same format
   Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
   # add values
-  Larvae_optimal) %>%
+  Larvae_optimal$Mean %>% rename(Station = SalStation)) %>%
+    # add flow logger data
+    mutate(meanOptimal = case_when(is.na(meanOptimal) ~ 0, TRUE ~ meanOptimal)))
+#
+(L_nonoptimal <- left_join(
+  # Get into same format
+  Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
+  # add values
+  Larvae_nonoptimal$Mean %>% rename(Station = SalStation)) %>%
   # add flow logger data
   mutate(meanDays = case_when(is.na(meanDays) ~ 0, TRUE ~ meanDays)))
 #
@@ -1040,13 +1092,22 @@ save_flow_output(adult, larvae, Adult_optimal, Larvae_optimal, outlier_flow)
   # Get into same format
   Loggers %>% rename(Station = StationID) %>% mutate(Station = str_replace(Station, "_", "")),  
   # add values
-  data.frame(Station = c("S49", "S80", "S97"), 
-             outlier_flow %>% rename(meanOutlier = mean_outlier_days) %>% dplyr::select(meanOutlier))) %>%
+  outlier_flow %>%
+    rename(meanOut1 = Out_1_Months,
+           meanOut2 = Out_2_Months) %>% 
+    mutate(Station = gsub("_", "", Station)) %>%
+    dplyr::filter(Station != "Overall") %>%
+    dplyr::select(-contains("Range"))) %>%
   # add flow logger data
-  mutate(meanOutlier = case_when(is.na(meanOutlier) ~ 0, TRUE ~ meanOutlier)))
+  mutate(meanOut1 = case_when(is.na(meanOut1) ~ 0, TRUE ~ meanOut1),
+         meanOut2 = case_when(is.na(meanOut2) ~ 0, TRUE ~ meanOut2)))
 #
 #
-source("Code/WQ_functions.R")
+#source("Code/WQ_functions.R")
+WQ <- new.env()
+source("Code/WQ_functions.R", local = WQ)
+#WQ$load_site_grid()
+
 Site_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
 plot(Site_area[2])
 ###State Outline
@@ -1055,7 +1116,7 @@ plot(FL_outline)
 ##Get Site area
 State_Grid <- c("E2") #E2, H4
 Alt_Grid <- c("F2")
-Site_Grid <- load_site_grid(State_Grid, Site_area)
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
 #Map of stations
@@ -1156,46 +1217,6 @@ flow_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, colName
   return(final_sf)
 }
 #
-#
-## Repeat for each data frame:
-data_cols <- if(ncol(A_optimal) >= 3) {
-  A_optimal[, !names(A_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
-} else {
-  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
-}
-Site_data_spdf <- SpatialPointsDataFrame(coords = A_optimal[,c("Longitude","Latitude")], data_cols, 
-                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-#
-AOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanDays")
-#plot_interpolations(AOP_idw_data, Site_Grid, Threshold = "N", simplify_tolerance = 0)
-#
-#
-#
-data_cols <- if(ncol(L_optimal) >= 3) {
-  L_optimal[, !names(L_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
-} else {
-  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
-}
-Site_data_spdf <- SpatialPointsDataFrame(coords = L_optimal[,c("Longitude","Latitude")], data_cols, 
-                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-#
-LOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanDays")
-#
-#
-#
-data_cols <- if(ncol(Outliers) >= 3) {
-  Outliers[, !names(Outliers) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
-} else {
-  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
-}
-Site_data_spdf <- SpatialPointsDataFrame(coords = Outliers[,c("Longitude","Latitude")], data_cols, 
-                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-#
-Outlier_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOutlier")#
-#
-#
-#
-#
 plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_tolerance = 0){
   special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
   
@@ -1219,10 +1240,150 @@ plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_toleranc
     scale_color_viridis_b(direction = -1)   # Use shared limits
 }
 #
-plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOutlier")
+#
+#
+## Repeat for each data frame:
+data_cols <- if(ncol(A_optimal) >= 3) {
+  A_optimal[, !names(A_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = A_optimal[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+AOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
+#
+plot_flow_interp(AOP_idw_data, Site_Grid, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-     filename = paste("Flow_salinity_curve_", "Adult_optimal_days",".tiff", sep = ""), dpi = 1000)
+       filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".tiff", sep = ""), dpi = 1000)
+#
+#
+#
+# Larvae optimal
+data_cols <- if(ncol(L_optimal) >= 3) {
+  L_optimal[, !names(L_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = L_optimal[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+LOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
+#
+plot_flow_interp(LOP_idw_data, Site_Grid, "meanOptimal")
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".tiff", sep = ""), dpi = 1000)
+#
+#
+#
+# Sub and super
+data_cols <- if(ncol(A_nonoptimal) >= 3) {
+  A_nonoptimal[, !names(A_nonoptimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = A_nonoptimal[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+AnonSub_idw_data <- flow_idw_interpolation(
+  Site_data_spdf[Site_data_spdf@data %>% 
+                   filter(FlowType == "sub") %>% 
+                   rownames(), ], 
+  grid, Site_Grid_spdf, "meanDays")
+#
+AnonSuper_idw_data <- flow_idw_interpolation(
+  Site_data_spdf[Site_data_spdf@data %>% 
+                   filter(FlowType == "super") %>% 
+                   rownames(), ], 
+  grid, Site_Grid_spdf, "meanDays")
+#
+plot_flow_interp(AnonSub_idw_data, Site_Grid, "meanDays")
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".tiff", sep = ""), dpi = 1000)
+#
+plot_flow_interp(AnonSuper_idw_data, Site_Grid, "meanDays")
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".tiff", sep = ""), dpi = 1000)
+#
+#
+#
+#
+# Larval optimal
+data_cols <- if(ncol(L_optimal) >= 3) {
+  L_optimal[, !names(L_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = L_optimal[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+LOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
+#
+#
+# Sub and super days
+data_cols <- if(ncol(L_nonoptimal) >= 3) {
+  L_nonoptimal[, !names(L_nonoptimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = L_nonoptimal[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+LnonSub_idw_data <- flow_idw_interpolation(
+  Site_data_spdf[Site_data_spdf@data %>% 
+                   filter(FlowType == "sub") %>% 
+                   rownames(), ], 
+  grid, Site_Grid_spdf, "meanDays")
+#
+LnonSuper_idw_data <- flow_idw_interpolation(
+  Site_data_spdf[Site_data_spdf@data %>% 
+                   filter(FlowType == "super") %>% 
+                   rownames(), ], 
+  grid, Site_Grid_spdf, "meanDays")
+#
+#
+plot_flow_interp(LnonSub_idw_data, Site_Grid, "meanDays")
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".tiff", sep = ""), dpi = 1000)
+#
+plot_flow_interp(LnonSuper_idw_data, Site_Grid, "meanDays")
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".tiff", sep = ""), dpi = 1000)
+#
+#
+##
+#
+#
+data_cols <- if(ncol(Outliers) >= 3) {
+  Outliers[, !names(Outliers) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+} else {
+  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+}
+Site_data_spdf <- SpatialPointsDataFrame(coords = Outliers[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+Outlier_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOut1")#
+#
+Outlier2_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOut2")#
+#
+plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOptimal")
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), dpi = 1000)
+#
+plot_flow_interp(Outlier2_idw_data, Site_Grid, "meanOptimal")
+#
+ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), dpi = 1000)
+
+#
+#
 #
 #
 #
