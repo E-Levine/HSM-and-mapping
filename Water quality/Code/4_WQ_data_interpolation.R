@@ -20,6 +20,8 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
 #source("Code/WQ_functions.R")
 WQ <- new.env()
 source("Code/WQ_functions.R", local = WQ)
+#modeling <- new.env()
+#load("SSv1_TMean_working.RData", envir = modeling)
 #
 Site_code <- c("SS")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
@@ -37,7 +39,7 @@ color_temp <- c("cool")    #"warm" or "cool"
 #
 ####Load data and KML files, plot existing points - will be one function####
 #
-load_WQ_data()
+WQ$load_WQ_data()
 #
 Site_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
 plot(Site_area[2])
@@ -45,7 +47,7 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area  
-Site_Grid <- load_site_grid(State_Grid, Site_area)
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
 #Df of grid data
@@ -103,9 +105,9 @@ if(color_temp == "warm") {
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
 #library(lubridate)
-WQ_summ <- summarize_data(WQ_data %>% drop_na(Value), 
-                          Time_period = "YearMonth", Summ_method = "Mean", 
-                          Threshold_parameters = c("above", 35), Month_range = c(5, 10))
+WQ_summ <- WQ$summarize_data(WQ_data %>% drop_na(Value), 
+                          Time_period = "YearMonth", Summ_method = "Mean") 
+                          #Threshold_parameters = c("above", 35), Month_range = c(5, 10))
 #
 head(WQ_summ)
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,".xlsx"), format_headers = TRUE)
@@ -127,23 +129,23 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitu
 #
 #
 ##Inverse distance weighted - updated for Month, Year
-idw_data <- perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
+idw_data <- WQ$perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
 #
 ##Nearest neighbor - not updated
-nn_data <- perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ, "Month")
+nn_data <- WQ$perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ, "Month")
 #
 ##Thin plate spline - not updated
-tps_data <- perform_tps_interpolation(Site_data_spdf, raster_t, Site_area, Site_Grid, Param_name)
+tps_data <- WQ$perform_tps_interpolation(Site_data_spdf, raster_t, Site_area, Site_Grid, Param_name)
 #
 ####Ordinary Kriging
-ok_data <- perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
+ok_data <- WQ$perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
 #ok_data <- ok_data %>% dplyr::select(PGID, MGID, Latitude.x, Longitude.x, contains("Pred_value")) %>% rename("Latitude" = Latitude.x, "Longitude" = Longitude.x)
 #
 #
 ####Joining and comparing####
 #
 #Outputs df of 'results_[Param]'
-join_interpolation(Site_Grid_df)
+WQ$join_interpolation(Site_Grid_df)
 #
 #Generates plots for each model and output of all models together - run for each parameter
 plotting <- plot_interpolations(result_Threshold, Site_Grid, simplify_tolerance = 0.01)
@@ -156,14 +158,15 @@ grouped_plot_interpolations(final_data$plots)
 #
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
-final_data <- ensemble_weighting("ensemble", c("idw", "ok"), 
+final_data <- WQ$ensemble_weighting("ensemble", c("idw", "ok"), 
                                  result_Mean, weighting = c(0.50, 0.50), 
                                  Site_Grid)
 #
 #
 ####Save model####
 #Specify month range if months used: Month_range = c(5, 10)
-save_model_output(final_data, threshold_val = NA)
+#Specify threshold or NA
+WQ$save_model_output(final_data, threshold_val = NA)
 #
 #
 #If continuing to work, good practice to remove objects to make sure correct data is used:
