@@ -1114,8 +1114,8 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area
-State_Grid <- c("E2") #E2, H4
-Alt_Grid <- c("F2")
+State_Grid <- c("H4") #E2, H4
+Alt_Grid <- c(NA)
 Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
@@ -1167,8 +1167,8 @@ library(dplyr)    # For data manipulation
 library(lubridate) # For parse_date_time() and time calculations
 flow_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, colName) {
   #
-  StartTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
-  cat("Starting time:", format(Sys.time()), "\n")
+  StartTime <- Sys.time()
+  cat("Starting time:", format(StartTime), "\n")
   #
   tryCatch({
    #Convert Site_Grid_spdf polygons to sf and get centroids
@@ -1180,11 +1180,11 @@ flow_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, colName
     # IDW interpolation (power=2 by default)
     idw_model <- suppressMessages(idw(formula = idw_formula, locations = Site_data_spdf, newdata = grid, idp = 2))
     #
-    
     # Convert to data.frame and rename columns
     idw_df <- as.data.frame(idw_model) %>% 
-      rename(Longitude = x1, Latitude = x2, Prediction = var1.pred) %>%
-      mutate(Pred_Value = round(Prediction, 2)) %>% #, Statistic = stats[i]) %>% 
+      dplyr::rename(Longitude = x1, Latitude = x2) %>%
+      dplyr::rename(Prediction = var1.pred) %>%
+      dplyr::mutate(Pred_Value = round(Prediction, 2)) %>% #, Statistic = stats[i]) %>% 
       dplyr::select(-var1.var)
       #
       ##PROCESSING:
@@ -1204,14 +1204,16 @@ flow_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, colName
       #
       ##WRAP UP:
       centroids_joined <- centroids_joined %>%
-        rename(!!colName := Pred_Value)
+        dplyr::rename(!!colName := Pred_Value)
       #
       # Join back to original site polygons (assuming PGID matches)
       final_sf <- site_sf %>% 
-        left_join(st_drop_geometry(centroids_joined %>% dplyr::select(-Latitude, -Longitude)), by = "PGID")
+        dplyr::left_join(st_drop_geometry(centroids_joined %>% 
+                                            dplyr::select(-Latitude, -Longitude)), 
+                         by = "PGID")
   })
-  EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
-  cat("Ending time:", format(Sys.time()), "\n")
+  EndTime <- Sys.time()
+  cat("Ending time:", format(EndTime), "\n")
   print(EndTime - StartTime)
   #
   return(final_sf)
@@ -1243,6 +1245,8 @@ plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_toleranc
 #
 #
 ## Repeat for each data frame:
+#
+# Adult optimal
 data_cols <- if(ncol(A_optimal) >= 3) {
   A_optimal[, !names(A_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
 } else {
@@ -1288,15 +1292,11 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = A_nonoptimal[,c("Longitude","L
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
 AnonSub_idw_data <- flow_idw_interpolation(
-  Site_data_spdf[Site_data_spdf@data %>% 
-                   filter(FlowType == "sub") %>% 
-                   rownames(), ], 
+  Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "super", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
 AnonSuper_idw_data <- flow_idw_interpolation(
-  Site_data_spdf[Site_data_spdf@data %>% 
-                   filter(FlowType == "super") %>% 
-                   rownames(), ], 
+  Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "sub", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
 plot_flow_interp(AnonSub_idw_data, Site_Grid, "meanDays")
@@ -1312,19 +1312,7 @@ ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"),
 #
 #
 #
-# Larval optimal
-data_cols <- if(ncol(L_optimal) >= 3) {
-  L_optimal[, !names(L_optimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
-} else {
-  stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
-}
-Site_data_spdf <- SpatialPointsDataFrame(coords = L_optimal[,c("Longitude","Latitude")], data_cols, 
-                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
-#
-LOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
-#
-#
-# Sub and super days
+# Larval sub and super days
 data_cols <- if(ncol(L_nonoptimal) >= 3) {
   L_nonoptimal[, !names(L_nonoptimal) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
 } else {
@@ -1334,15 +1322,11 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = L_nonoptimal[,c("Longitude","L
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
 LnonSub_idw_data <- flow_idw_interpolation(
-  Site_data_spdf[Site_data_spdf@data %>% 
-                   filter(FlowType == "sub") %>% 
-                   rownames(), ], 
+  Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "super", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
 LnonSuper_idw_data <- flow_idw_interpolation(
-  Site_data_spdf[Site_data_spdf@data %>% 
-                   filter(FlowType == "super") %>% 
-                   rownames(), ], 
+  Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "sub", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
 #
@@ -1372,12 +1356,12 @@ Outlier_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf,
 #
 Outlier2_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOut2")#
 #
-plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOptimal")
+plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOut1")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), dpi = 1000)
 #
-plot_flow_interp(Outlier2_idw_data, Site_Grid, "meanOptimal")
+plot_flow_interp(Outlier2_idw_data, Site_Grid, "meanOut2")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), dpi = 1000)
@@ -1499,8 +1483,13 @@ save_flow_output <- function(output_data, fileName){
 }
 #
 save_flow_output(AOP_idw_data, "flow_optimal_adult")
+save_flow_output(AnonSub_idw_data, "flow_sub_adult")
+save_flow_output(AnonSuper_idw_data, "flow_super_adult")
 save_flow_output(LOP_idw_data, "flow_optimal_larvae")
-save_flow_output(Outlier_idw_data, "flow_outlier")
+save_flow_output(LnonSub_idw_data, "flow_sub_larvae")
+save_flow_output(LnonSuper_idw_data, "flow_super_larvae")
+save_flow_output(Outlier_idw_data, "flow_outlier1")
+save_flow_output(Outlier2_idw_data, "flow_outlier2")
 #
 ### Other possible data ####
 # 
