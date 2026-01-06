@@ -2824,80 +2824,275 @@ plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simpli
   }
   return(plot_list)
 }
+#
+plot_interpolations2 <- function(results_data,
+                                Site_Grid,
+                                Threshold = "N",
+                                simplify_tolerance = 0) {
+  
+  ## ---- fast column parsing (regex, no str_split) ----
+  cn <- colnames(results_data)
+  prefix <- sub("_.*", "", cn)
+  suffix <- sub(".*_", "", cn)
+  
+  valid_prefix <- prefix %in% c("idw", "nn", "tps", "ok", "ens")
+  special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
+  
+  df_filtered <- results_data[, valid_prefix | special_cols, drop = FALSE]
+  
+  ## ---- build groups using split (much faster) ----
+  cols_groups   <- cn[valid_prefix]
+  prefix_groups <- prefix[valid_prefix]
+  suffix_groups <- suffix[valid_prefix]
+  
+  groups <- split(cols_groups, prefix_groups)
+  groups <- lapply(groups, function(x) split(x, suffix[match(x, cn)]))
+  
+  ## ---- sf conversion once ----
+  df_filtered <- sf::st_as_sf(df_filtered)
+  
+  if (simplify_tolerance > 0) {
+    df_filtered <- sf::st_simplify(
+      df_filtered,
+      dTolerance = simplify_tolerance,
+      preserveTopology = TRUE
+    )
+  }
+  
+  geom <- sf::st_geometry(df_filtered)
+  
+  ## replace Inf / -Inf with NA once ----
+  df_filtered <- df_filtered %>% 
+    dplyr::mutate(
+      dplyr::across(
+        where(is.numeric),
+        ~ ifelse(is.finite(.x), .x, NA_real_)
+      )
+    )
+  
+  ## ---- base theme ----
+  base_theme <- ggplot2::theme_classic() +
+    ggplot2::theme(
+      panel.border = ggplot2::element_rect(color = "black", fill = NA),
+      axis.text = ggplot2::element_text(size = 16),
+      plot.margin = grid::unit(c(0, 0, 0, 0), "cm"),
+      plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5)),
+      plot.caption = ggplot2::element_text(face = "italic", size = 9)
+    )
+   base_plot <- ggplot2::ggplot() + base_theme
+  plot_list <- list()
+  
+  ## ---- precompute color limits per prefix ----
+  color_limits <- list()
+  for (p in names(groups)) {
+    all_cols <- unlist(groups[[p]], use.names = FALSE)
+    
+    if (length(all_cols) > 0) {
+      vals <- df_filtered %>%
+        dplyr::select(dplyr::all_of(all_cols)) %>%
+        sf::st_drop_geometry() %>%
+        as.matrix()
+      
+      vals <- vals[is.finite(vals)]
+      
+      if (length(vals) == 0) {
+        color_limits[[p]] <- c(NA_real_, NA_real_)
+      } else {
+        color_limits[[p]] <- range(vals)
+      }
+    }
+  }
+  
+  ## ---- plotting loop ----
+  for (p in names(groups)) {
+    for (s in names(groups[[p]])) {
+      
+      cols <- groups[[p]][[s]]
+      if (length(cols) == 0) next
+      
+      # extract middle once
+      mid <- sub(paste0("^", p, "_([^_]+)_", s, "$"), "\\1", cols)
+      mid[mid == cols] <- ""  # no middle case
+      
+      ## ---- single column (no middle) ----
+      if (length(cols) == 1 || all(mid == "")) {
+        col <- cols[1]
+        
+        plot_list[[paste(p, s, sep = "_")]] <-
+          base_plot +
+          ggplot2::geom_sf(
+            data = df_filtered,
+            ggplot2::aes(color = .data[[col]])
+          ) +
+          ggplot2::scale_color_viridis_b(
+            direction = -1,
+            limits = color_limits[[p]],
+            guide = "none"
+          ) +
+          {if (Threshold == "Y")
+            ggplot2::labs(caption = "Values = Threshold sample proportions")} +
+          ggplot2::labs(title = paste(p, s, sep = "_"))
+        
+        next
+      }
+      
+      ## ---- multi-middle case (melt once) ----
+      df_subset <- df_filtered |>
+        dplyr::select(geometry, dplyr::all_of(cols))
+      
+      DT_long <- data.table::as.data.table(df_subset)
+      DT_long[, row_id := .I]   # <-- explicit row index
+      
+      DT_long <- data.table::melt(
+        DT_long,
+        measure.vars = cols,
+        id.vars = "row_id",
+        variable.name = "var",
+        value.name = "value"
+      )
+      
+      DT_long[, mid := sub(
+        paste0("^", p, "_([^_]+)_", s, "$"),
+        "\\1",
+        var
+      )]
+      
+      # ordering
+      mids <- unique(DT_long$mid)
+      if (all(mids %in% month.abb)) {
+        mids <- month.abb[month.abb %in% mids]
+      } else if (all(grepl("^\\d{4}$", mids))) {
+        mids <- sort(as.numeric(mids))
+      } else {
+        mids <- sort(mids)
+      }
+      
+      for (m in mids) {
+        idx <- DT_long$mid == m
+        df_mid <- sf::st_sf(
+          value = DT_long$value[idx],
+          geometry = geom[DT_long$row_id[idx]]
+        )
+        
+        plot_list[[paste(p, m, s, sep = "_")]] <-
+          ggplot2::ggplot() +
+          ggplot2::geom_sf(
+            data = df_mid,
+            ggplot2::aes(color = value)
+          ) +
+          base_theme +
+          ggplot2::scale_color_viridis_b(
+            direction = -1,
+            limits = color_limits[[p]],
+            guide = "none"
+          ) +
+          {if (Threshold == "Y")
+            ggplot2::labs(caption = "Values = Threshold sample proportions")} +
+          ggplot2::labs(title = paste(p, m, s, sep = "_"))
+      }
+    }
+  }
+  
+  return(plot_list)
+}
+
 #library(cowplot, gridExtra)
-grouped_plot_interpolations <- function(plot_list){
+grouped_plot_interpolations <- function(plot_list, print_plots = FALSE){
   #
-  prefixes2 <- sapply(names(plot_list), function(name) str_split(name, "_", simplify = TRUE)[1])
-  grouped_plots <- split(plot_list, prefixes2)
+  ## Prefixes ----
+  plot_names <- names(plot_list)
+  prefixes <- sub("_.*", "", plot_names)
+  
+  grouped_plots <- split(plot_list, prefixes)
   grid_list <- list()
+  #
   # For each group, calculate length and arrange in a grid
   for (prefix in names(grouped_plots)) {
     group <- grouped_plots[[prefix]]
     n <- length(group)  # Length of the group
     if (n == 0) next  # Skip empty groups
     
-    # Dynamic axis text size (adjust formula as needed)
+    ## Dynamic sizing ----
     dynamic_size <- max(6, 16 - (n / 2))  # Larger n -> smaller size
-    
-    # Calculate grid dimensions 
+    #
     ncols <- ceiling(sqrt(n))
     nrows <- ceiling(n / ncols)
     #
-    # Create plots without legends (modify base_theme or add here)
-    group_no_legend <- lapply(group, function(p) {
-      plot_data <- p$data
-      if (!is.null(plot_data) && inherits(plot_data, "sf")) {
-        plot_data <- st_simplify(plot_data, dTolerance = 1)  # Adjust tolerance
-        p$data <- plot_data
-      }
-      p + theme(legend.position = "none", axis.text = element_text(size = dynamic_size))
-    })
-    
-    # Extract legend from the first plot (assuming all have the same legend) - get title, modify and apply, then extract
-    # Detect legend aesthetic (color or fill)
-    legend_title <- group[[1]]$labels$colour %||% group[[1]]$labels$fill
-    
-    # Remove text after last underscore
+    ## Extract legend ----
+    legend_plot <- group[[1]]
+    #
+    legend_title <- legend_plot$labels$colour %||% legend_plot$labels$fill
     if (!is.null(legend_title)) {
       new_title <- sub("_[^_]*$", "", legend_title)
-      # Apply new legend title
-      group[[1]] <- group[[1]] +
-        labs(color = new_title, fill = new_title)
+      legend_plot <- legend_plot +
+        ggplot2::labs(color = new_title, fill = new_title)
     }
-    legend <- suppressWarnings(get_legend(group[[1]]))
-    
-    # Arrange the plots in a grid
-    grid_obj <- grid.arrange(grobs = group_no_legend, nrow = nrows, ncol = ncols, 
-                             padding = unit(0.1, "cm"), 
-                             widths = unit(rep(1, ncols), "null"), 
-                             heights = unit(rep(1, nrows), "null"))
+    #
+    legend <- suppressWarnings(cowplot::get_legend(legend_plot))
+    #
+    ## Reformatting ----
+    for (i in seq_along(group)) {
+      group[[i]] <- group[[i]] +
+        theme(
+          legend.position = "none",
+          axis.text = element_text(size = dynamic_size)
+        )
+    }
+    #
+    grob_list <- lapply(group, ggplotGrob)
+    #
+    ## Arrange plots
+    grid_obj <- plot_grid(
+      plotlist = grob_list,
+      nrow = nrows,
+      ncol = ncols
+    )
     # Combine plots grid and legend into one grid_obj
-    #grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(4.5, 0.5))  # Adjust rel_widths as needed
     if (!is.null(legend)) {
-      grid_obj <- plot_grid(grid_obj, legend, ncol = 2, rel_widths = c(4.5, 0.5))
-    } else {
-      # Legend missing → return grid only
-      grid_obj <- plot_grid(grid_obj, ncol = 1)
-    }
-    
+      grid_obj <- cowplot::plot_grid(
+        grid_obj, 
+        legend, 
+        ncol = 2, 
+        rel_widths = c(4.5, 0.5))
+    } 
     # Print the grid (displays it)
     grid_list[[prefix]] <- grid_obj
-    print(grid_obj)
-  }
+    
+    if(print_plots){
+      print(grid_obj)
+      }
+    }
   #
   return(grid_list)
 }
 #
+#library(progress)
 ensemble_weighting <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
-  # Timing
+  #
+  model <- match.arg(model)
+  result <- NULL
+  ## Timing ----
   StartTime <- Sys.time()
   message("Starting time:", format(StartTime))
+  #
+  ## Progress bar ----
+  total_steps <- if (model == "ensemble") 5 else 4
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = total_steps,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE
+  )
+  #
+  ## Model matching ----
   #model <- match.arg(model)
+  pb$tick(tokens = list(step = "Matching models"))
+  #
   matched_models <- selected_models[selected_models %in% c("idw", "nn", "tps", "ok")]
   if (length(matched_models) > 0) {
-    cat("Matched models:", matched_models, "\n")
+    message("\n Matched models: ", paste(matched_models, collapse = ", "))
   } else {
-    cat("No matched models found.\n")
+    message("\n No matched models found.")
   }
   #
   # Safety: fallback to single if ensemble impossible
@@ -2909,15 +3104,18 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
     model <- "single"
   }
   #
-  # Set up:
-  model_regex <- paste0("^(", paste(matched_models, collapse = "|"), ")")
-  base_cols   <- c("PGID", "Latitude", "Longitude", "MGID", "State_Ref", "County")
+  ## Column selection ----
+  #model_regex <- paste0("^(", paste(matched_models, collapse = "|"), ")")
+  #base_cols   <- c("PGID", "Latitude", "Longitude", "MGID", "State_Ref", "County")
   #Determine column names to match and limit to desired columns:
   result_data_final <- results_data %>% 
-    dplyr::select(PGID, Latitude, Longitude, MGID, State_Ref, County, matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
+    dplyr::select(PGID, Latitude, Longitude, MGID, State_Ref, County, dplyr::matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
   #
   #
+  ## Ensemble ----
   if(model == "ensemble"){
+    #
+    pb$tick(tokens = list(step = "Computing ensemble model"))
     #
     model_weighting(result_data_final, weighting)
  
@@ -2970,52 +3168,97 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
       
       ens
     })
-    names(ens_values) <- paste0("ens_", unique_groups) #Column anme using group
+    names(ens_values) <- paste0("ens_", unique_groups) #Column name using group
     ens_values <- tibble::as_tibble(ens_values) #Data frame to add to PGIDs
     #
-    ens_model <- result_data_final %>% 
-      dplyr::select(PGID, all_of(matching_cols)) %>%
-      dplyr::bind_cols(ens_values) %>%
-      dplyr::group_by(PGID) %>% 
-      dplyr::slice_max(order_by = rowSums(dplyr::across(starts_with("ens_")), na.rm = TRUE), 
-                       n = 1,
-                       with_ties = FALSE)
-    #Spatial data:
-    (Site_Grid_interp <- dplyr::left_join(Site_Grid, ens_model))
-    #plotting
-    temp <- plot_interpolations(Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), Site_Grid) #filter to plot ens_*
-    grp_temp <- grouped_plot_interpolations(temp)
+    ens_cols <- grep("^ens_", names(ens_values), value = TRUE)
     #
-    if(any(Site_Grid_interp$Statistic == "Threshold")){
-      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-    }
-    ##Return plots, grid, and shapefile
-    return(list(
-      plots = temp, 
-      grid = grp_temp, 
-      spatialData = Site_Grid_interp))
+    message("\n Selecting ensemble for each PGID")
     #
-  } else if(model == "single"){
-    #Spatial data:
-    Site_Grid_interp <- left_join(Site_Grid, result_data_final)
-    #plotting
-    temp <- plot_interpolations(Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), Site_Grid) #change like L2727
-    grp_temp <- grouped_plot_interpolations(temp)
-    #
-    if(any(Site_Grid_interp$Statistic == "Threshold")){
-      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
-    }
-    ##Return plots, grid, and shapefile
-    return(list(
-      plots = temp, 
-      grid = grp_temp, 
-      spatialData = Site_Grid_interp))
-    #
+    library(data.table)
+    # Build data.table with only needed columns
+    DT <- as.data.table(
+      cbind(
+        result_data_final[, c("PGID", matching_cols), drop = FALSE],
+        ens_values
+      )
+    )
+    
+    # Compute ensemble score (very fast)
+    DT[, ens_score := rowSums(.SD, na.rm = TRUE), .SDcols = ens_cols]
+    
+    # Select best row per PGID
+    ens_model_dt <- DT[
+      DT[, .I[which.max(ens_score)], by = PGID]$V1
+    ][, ens_score := NULL]
+    
+    # ---- Convert back to data.frame for compatibility ----
+    ens_model <- as.data.frame(ens_model_dt)
+    #ens_model <- result_data_final %>%
+      #dplyr::select(PGID, all_of(matching_cols)) %>%
+      #dplyr::bind_cols(ens_values) %>%
+      #dplyr::mutate(
+      #  ens_score = rowSums(as.matrix(dplyr::pick(all_of(ens_cols))), na.rm = TRUE)
+      #) %>%
+      #dplyr::group_by(PGID) %>%
+      #dplyr::slice_max(ens_score, n = 1, with_ties = FALSE) %>%
+      #dplyr::ungroup() %>%
+      #dplyr::select(-ens_score)
+    
+    #ens_model <- result_data_final %>% 
+    #  dplyr::select(PGID, all_of(matching_cols)) %>%
+    #  dplyr::bind_cols(ens_values) %>%
+    #  dplyr::group_by(PGID) %>% 
+    #  dplyr::slice_max(order_by = rowSums(dplyr::across(starts_with("ens_")), na.rm = TRUE), 
+    #                   n = 1,
+    #                   with_ties = FALSE)
+    ## Spatial join ----
+    Site_Grid_interp <- dplyr::left_join(Site_Grid, ens_model)
+  } else {
+    Site_Grid_interp <- dplyr::left_join(Site_Grid, result_data_final)
   }
+    #
+    ## Plotting ----
+  pb$tick(tokens = list(step = "Generating individual plots"))
+  temp <- plot_interpolations2(
+    Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), 
+    Site_Grid
+    ) #filter to plot ens_*
+  ## Grouped plot ----
+  pb$tick(tokens = list(step = "Generating grouped plot"))
+  grp_temp <- grouped_plot_interpolations(temp)
+  #
+  ## Threshold note ---- 
+  if("Statistic" %in% names(Site_Grid_interp) && any(Site_Grid_interp$Statistic == "Threshold")){
+    message("\n Threshold evaluation is being used. ",
+            "Values are the proportion of all samples above/below the set threshold value.")
+  }
+  #
+  ## Final wrap up
+  Site_Grid_interp <- sf::st_as_sf(
+    Site_Grid_interp,
+    sf_column_name = attr(Site_Grid_interp, "sf_column")
+  )
+  ##Return plots, grid, and shapefile
+  result <- list()
+  result$plots <- temp
+  result$grid <- grp_temp
+  result$spatialData <- Site_Grid_interp
+  #
+  ## wrap up
+  pb$tick(tokens = list(step = "Wrap up"))
+  #
+  ## Timing end ----
   EndTime <- Sys.time()
   message("Ending time:", format(EndTime))
   print(EndTime - StartTime)
-  print(head(Site_grid_interp))
+  if (interactive()) {
+    print(utils::head(result$spatialData))
+  }
+  
+  gc(FALSE)
+  
+  invisible(result)
 }
 #Updated 25/11/20
 model_weighting <- function(final_data, weighting) {
@@ -3081,6 +3324,16 @@ model_weighting <- function(final_data, weighting) {
 #
 save_model_output <- function(output_data, Month_range = NA, threshold_val = threshold_value){
   #
+  ## File name ----
+  base_name <- if (all(!is.na(Month_range))) {
+    paste0(Param_name, "_", Param_name_2, "_", Stat_type,
+           "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+  } else {
+    paste0(Param_name, "_", Param_name_2, "_", Stat_type,
+           "_", Start_year, "_", End_year)
+  }
+  #
+  ## Month range ----
   if(all(is.na(Month_range)) && interactive()){
     result <- select.list(c("Yes", "No"), title = "\nNo month range has been specified for the data. Is this correct?")
     if(result == "Yes"){cat("Continuing... \n")} else {stop("Please specify Month_range.")}
@@ -3097,39 +3350,40 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   threshold_val <- threshold_val
   final_output_data <- output_data
   matching_cols <- colnames(final_output_data$spatialData)[grepl("^(idw|nn|ok|tps)_", colnames(final_output_data$spatialData))]
-  extracted_stats <- sapply(matching_cols, function(col) {
-    parts <- strsplit(col, "_")[[1]]
-    parts <- parts[-1]#if (length(split) > 2) split[2] else split[1]  # Middle if exists, else first
-    paste(parts, collapse = "_")
-  })
+  extracted_stats <- sub("^[^_]+_", "", matching_cols)
   Stat_type <- unique(extracted_stats[!is.na(extracted_stats)])
-  #parts <- strsplit(col, "_")[[1]]    if (length(parts) > 1) {      return(tail(parts, 1))  # Get the last part after the last underscore    } else {      return(NA)  # In case of unexpected format, though unlikely with the pattern  }  })
   #
-  #Save plots:
+  ## Save plots ----
   if(interactive()){
     result <- select.list(c("Yes", "No"), title = paste0("\nShould the plots of the chosen interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
     if(result == "No"){
       message("Interpolation plots will not be saved.")
     } else {
-      for (i in seq_along(final_output_data$plots)){
+      fig_dir <- paste0("../", Site_code, "_", Version, "/Output/Figure files/")
+      for (nm in names(final_output_data$plots)) {#for (i in seq_along(final_output_data$plots)){
         #Current plot
-        p <- final_output_data$plots[[i]]
-        p_name <- final_output_data$plots[[i]]$labels$title
+        p <- final_output_data$plots[[nm]] #p <- final_output_data$plots[[i]]
+        p_name <- nm #p_name <- final_output_data$plots[[i]]$labels$title
         #Desired file name and specs
-        jpg_filename <- paste0("../",Site_code, "_", Version,"/Output/Figure files/", #Save location
+        jpg_filename <- paste0(fig_dir, #Save location
                                #File name
-                               if(all(!is.na(Month_range))){
-                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type[i], "_", gsub("_.*","",p_name), "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
-                               } else {
-                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type[i], "_", gsub("_.*","",p_name), "_", Start_year, "_", End_year)
-                               }, 
+                               base_name, "_", nm,  
                                ".jpg")
-        if(is.numeric(threshold_val)) {jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)} else {jpg_filename <- jpg_filename}
+        if(is.numeric(threshold_val)) {
+          jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)
+        } else {
+            jpg_filename <- jpg_filename
+            }
         width_pixels <- 1000
         aspect_ratio <- 3/4
         height_pixels <- round(width_pixels * aspect_ratio)
         #Save plot
-        ggsave(filename = jpg_filename, plot = p, width = width_pixels / 100, height = height_pixels / 100, units = "in", dpi = 300)  
+        invisible(ggsave(
+          filename = jpg_filename, 
+          plot = p, 
+          width = width_pixels / 100, 
+          height = height_pixels / 100, 
+          units = "in", dpi = 300))
         cat("Interpolation model figure for", p_name, "model was saved in 'Output/Figure files'.", "\n")
       }
     }
@@ -3137,7 +3391,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   ##End figure output
   #
   #
-  #Save shapefile:
+  ## Save shapefile ----
   if(interactive()){
     result <- select.list(c("Yes", "No"), title = paste0("\nShould the shapefile of chosen interpolation values be saved locally to the '", Site_code, "_", Version,"' project folder?"))
     if(result == "No"){
@@ -3154,31 +3408,24 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
       }
       #
       # Rename columns:
-      shape_file <- shape_file %>% 
-        dplyr::rename_with(~ .x %>%
-                             # stats
-                             str_replace_all("Mean",    "E") %>%
-                             str_replace_all("Minimum", "I") %>%
-                             str_replace_all("Maximum", "A") %>%
-                             str_replace_all("Threshold", "T") %>%
-                             # models
-                             str_replace_all("^idw", "i") %>%
-                             str_replace_all("^nn", "n") %>%
-                             str_replace_all("^tps", "t") %>%
-                             str_replace_all("^ok", "o") %>%
-                             str_replace_all("^ens", "e") %>%
-                             # underscores
-                             str_replace_all("_", ""),
-                           .cols = everything())
+      names(shape_file) <- names(shape_file) %>% 
+        stringr::str_replace_all(c("Mean" = "E", 
+                                   "Minimum" = "I",
+                                   "Maximum" = "A",
+                                   "Threshold" = "T",
+                                   # models
+                                   "^idw" = "i", 
+                                   "^nn" = "n",
+                                   "^tps" = "t",
+                                   "^ok" = "o",
+                                   "^ens" = "e", 
+                                   # underscores
+                                   "_" = ""))
       #
       # Construct file name
       shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
                                #File name
-                               if(all(!is.na(Month_range))){
-                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
-                               } else {
-                                 paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
-                               }, 
+                               base_name, 
                                ".shp")
       if(is.numeric(threshold_val)) {shapefile_path <- sub("\\.shp$", paste0("_", threshold_val, ".shp"), shapefile_path)} else {shapefile_path <- shapefile_path}
       #Save the sf dataframe as a shapefile
@@ -3191,20 +3438,16 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   ##End shapefile output
   #
   #
-  #Save data to Excel sheet
+  ## Save data to Excel sheet ----
   if(interactive()){
     result <- select.list(c("Yes", "No"), title = paste0("\nShould an Excel file with chosen interpolation data be saved locally to the '", Site_code, "_", Version,"' project folder?"))
     if(result == "No"){
       message("Interpolation data will not be saved in an Excel file.")
     } else {
-      model_data <- as.data.frame(final_output_data$spatialData) %>% dplyr::select(-geometry)
+      model_data <- sf::st_drop_geometry(final_output_data$spatialData)
       data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                           #File name
-                          if(all(!is.na(Month_range))){
-                            paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
-                          } else {
-                            paste0(Param_name,"_",Param_name_2,"_",Stat_type, "_", Start_year, "_", End_year)
-                          }, 
+                          base_name, 
                           ".xlsx")
       if(is.numeric(threshold_val)) {data_path <- sub("\\.xlsx$", paste0("_", threshold_val, ".xlsx"), data_path)} else {data_path <- data_path}
       #Create wb with data:
@@ -3221,7 +3464,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   ##End data output
   #
   #
-  ##Save the summary information:
+  ## Save the summary information ----
   if(interactive()){
     result <- select.list(c("Yes", "No"), title = paste0("\nShould summary data for the chosen interpolation models and output be saved locally to the '", Site_code, "_", Version,"' project folder?"))
     if(result == "No"){
