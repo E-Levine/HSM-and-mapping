@@ -9,23 +9,233 @@
 #Load required packages (should install missing packages as necessary) - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
-               sf, raster, terra,
+               sf, raster, terra, fst,
                leaflet, tmap, openxlsx, writexl,
                install = TRUE) #Mapping and figures
 #
 #
-source("HSM code/Functions/HSM_Creation_Functions.R")
+#source("HSM code/Functions/HSM_Creation_Functions.R")
+HSMfunc <- new.env()
+source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SS") #two-letter site code
+Site_Code <- c("SL") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
-###Load shape file with data: default shp_filename = "_datalayer"
-load_model_files()
+# Data setup ----
+#
+###Load shape file with data from Arc: default shp_filename = "_datalayer"
+# Also loads files for scoring
+HSMfunc$load_model_files(shp_filename = "datalayers_260106")
+#
+# Check potential file names:
+(datafiles <- HSMfunc$list_files(paste0(Site_Code,"_",Version,"/Output/Data files"),
+                   pattern = "\\.xlsx$"))
+#
+# Add and clean interp data ----
+#
+# Add interp data: one call per data column/type
+#
+# Annual mean salinity
+SL_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Salinity_Monthly_Mean_2020_2024.xlsx"),
+  join_by = "PGID",
+  excel_columns = contains("ens"),
+  sheet = 1,
+  join_type = "left"
+)
+#
+SL_v1_data <- left_join(SL_v1_data, 
+          HSMfunc$row_average(
+            data = SL_v1_salMonMean,
+            cols = contains("ens"),
+            new_column_name = "eSAnnuE",
+            keep_columns = c("PGID")
+            ),
+        by = "PGID")
+#
+# May-Oct mean salinity
+(SL_v1_data <- left_join(SL_v1_data,
+                        HSMfunc$row_average(
+                          data = SL_v1_salMonMean,
+                          cols = c("ens_May_Mean", "ens_Jun_Mean", "ens_Jul_Mean", "ens_Aug_Mean", "ens_Sep_Mean", "ens_Oct_Mean"),
+                          new_column_name = "eSSpwnE",
+                          keep_columns = c("PGID")
+                          ),
+                        by = "PGID"))
+#
+# Annual minimum salinity
+SL_v1_salMonMin <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Salinity_Monthly_Minimum_2020_2024.xlsx"),
+  join_by = "PGID",
+  excel_columns = contains("ens"),
+  sheet = 1,
+  join_type = "left"
+)
+#
+(SL_v1_data <- left_join(SL_v1_data,
+                         HSMfunc$row_average(
+                           data = SL_v1_salMonMin,
+                           cols = contains("ens"),
+                           new_column_name = "eSAnnuI",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
+#
+# May-Oct range salinity
+SL_v1_salMonRange <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Salinity_Monthly_Range_2020_2024_May_Oct.xlsx"),
+  join_by = "PGID",
+  excel_columns = contains("ens"),
+  sheet = 1,
+  join_type = "left"
+)
+#
+# Average min max score within each month:
+SL_v1_salMonRange <- SL_v1_salMonRange %>%
+  mutate(
+    ens_May_Range = rowMeans(cbind(ens_May_Maximum, ens_May_Minimum), na.rm = TRUE),
+    ens_Jun_Range = rowMeans(cbind(ens_Jun_Maximum, ens_Jun_Minimum), na.rm = TRUE),
+    ens_Jul_Range = rowMeans(cbind(ens_Jul_Maximum, ens_Jul_Minimum), na.rm = TRUE),
+    ens_Aug_Range = rowMeans(cbind(ens_Aug_Maximum, ens_Aug_Minimum), na.rm = TRUE),
+    ens_Sep_Range = rowMeans(cbind(ens_Sep_Maximum, ens_Sep_Minimum), na.rm = TRUE),
+    ens_Oct_Range = rowMeans(cbind(ens_Oct_Maximum, ens_Oct_Minimum), na.rm = TRUE)
+  )
+#
+(SL_v1_data <- left_join(SL_v1_data,
+                         HSMfunc$row_average(
+                           data = SL_v1_salMonRange,
+                           cols = contains("Range"),
+                           new_column_name = "eSSpwnR",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
+#
+# Annual mean temperature
+SL_v1_temMonMean <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Temperature, water_Monthly_Mean_2020_2024.xlsx"),
+  join_by = "PGID",
+  excel_columns = contains("ens"),
+  sheet = 1,
+  join_type = "left"
+)
+#
+SL_v1_data <- left_join(SL_v1_data, 
+                        HSMfunc$row_average(
+                          data = SL_v1_temMonMean,
+                          cols = contains("ens"),
+                          new_column_name = "eTAnnuE",
+                          keep_columns = c("PGID")
+                        ),
+                        by = "PGID")
+#
+# May-Oct mean temperature
+(SL_v1_data <- left_join(SL_v1_data,
+                         HSMfunc$row_average(
+                           data = SL_v1_temMonMean,
+                           cols = c("ens_May_Mean", "ens_Jun_Mean", "ens_Jul_Mean", "ens_Aug_Mean", "ens_Sep_Mean", "ens_Oct_Mean"),
+                           new_column_name = "eTSpwnE",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
+#
+# Annual T > 35 temperature
+SL_v1_temMonT35 <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Temperature, water_Monthly_Threshold_2020_2024_30.xlsx"),
+  join_by = "PGID",
+  excel_columns = contains("ens"),
+  sheet = 1,
+  join_type = "left"
+)
+#
+SL_v1_data <- left_join(SL_v1_data, 
+                        HSMfunc$row_average(
+                          data = SL_v1_temMonT35,
+                          cols = contains("Threshold"),
+                          new_column_name = "eTAnnuT30",
+                          keep_columns = c("PGID")
+                        ),
+                        by = "PGID")
+#
+# May-Oct T < 20 temperature
+SL_v1_temMonB20 <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Temperature, water_Monthly_Threshold_2020_2024_May_Oct_20.xlsx"),
+  join_by = "PGID",
+  excel_columns = contains("ens"),
+  sheet = 1,
+  join_type = "left"
+)
+SL_v1_temMonB20$ens_Jun_Threshold <- as.numeric(SL_v1_temMonB20$ens_Jun_Threshold)
+SL_v1_temMonB20$ens_Sep_Threshold <- as.numeric(SL_v1_temMonB20$ens_Sep_Threshold)
+SL_v1_temMonB20$ens_Oct_Threshold <- as.numeric(SL_v1_temMonB20$ens_Oct_Threshold)
+#
+SL_v1_data <- left_join(SL_v1_data, 
+                        HSMfunc$row_average(
+                          data = SL_v1_temMonB20,
+                          cols = contains("Threshold"),
+                          new_column_name = "eTSpwnT20",
+                          keep_columns = c("PGID")
+                        ),
+                        by = "PGID")
+#
+# OUtlier1 flow
+(SL_v1_outlier1 <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_outlier1.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanOut1",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                        HSMfunc$row_average(
+                          data = SL_v1_outlier1,
+                          cols = contains("Out"),
+                          new_column_name = "iFAnnu1",
+                          keep_columns = c("PGID")
+                        ),
+                        by = "PGID"))
+#
+# OUtlier2 flow
+(SL_v1_outlier2 <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_outlier2.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanOut2",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                         HSMfunc$row_average(
+                           data = SL_v1_outlier2,
+                           cols = contains("Out"),
+                           new_column_name = "iFAnnu2",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
+#
+# Adult optimal flow
+# Larvae optimal flow
+# Adult super flow
+# Adult sub flow
+# Larave super flow
+# Larvae sub flow
 #
 #
-####Assign scores
+rm(SL_v1_salMonMean, SL_v1_salMonMin, SL_v1_salMonRange, 
+   SL_v1_temMonMean, SL_v1_temMonT35, SL_v1_temMonB20,
+   SL_v1_outlier1, SL_v1_outlier2)
+#
+# Assign scores ----
 #
 ##Oysters
 temp <- get(paste0(Site_Code, "_", Version, "_data"))
