@@ -454,7 +454,7 @@ assign_salinity_scores <- function(shapefile_data, curve_table, type = "separate
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(-contains("spwn")) %>%
+  data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(-contains("spwn")) %>%
     mutate_if(is.numeric, round, digits = 2) 
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster look up
@@ -497,8 +497,15 @@ assign_salinity_scores <- function(shapefile_data, curve_table, type = "separate
   data <- process_ranges(data)
   #
   #Rename columns by note "_score"
-  new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "SC", helper))
+  new_names <- names(data)  # start with current names
+  
+  for (i in seq_along(new_names)) {
+    col <- new_names[i]
+    if (!(col %in% c("PGID", "geometry"))) {
+      new_names[i] <- paste0(col, "SC", helper)
+    }
+  }
+  
   names(data) <- new_names
   #
   ##Output 
@@ -513,7 +520,7 @@ assign_sal_spawn_scores <- function(shapefile_data, curve_table, type = "separat
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(PGID, contains("spwn")) %>%
+  data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(PGID, contains("Spwn")) %>%
     mutate_if(is.numeric, round, digits = 2)
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
@@ -555,8 +562,15 @@ assign_sal_spawn_scores <- function(shapefile_data, curve_table, type = "separat
   data <- process_ranges(data)
   #
   #Rename columns by note "_score"
-  new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "SC", helper))
+  new_names <- names(data)  # start with current names
+  
+  for (i in seq_along(new_names)) {
+    col <- new_names[i]
+    if (!(col %in% c("PGID", "geometry"))) {
+      new_names[i] <- paste0(col, "SC", helper)
+    }
+  }
+  
   names(data) <- new_names
   #
   ##Output
@@ -572,7 +586,7 @@ assign_temperature_scores <- function(shapefile_data, curve_table, type = "separ
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(-matches(".*spwn.*")) %>% dplyr::select(-matches("T[AB]\\d{1,3}")) %>%
+  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(-matches(".*Spwn.*")) %>% dplyr::select(-matches("T[AB]\\d{1,3}")) %>%
     mutate_if(is.numeric, round, digits = 2)
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
@@ -616,8 +630,15 @@ assign_temperature_scores <- function(shapefile_data, curve_table, type = "separ
   data <- process_ranges(data)
   #
   #Rename columns by note "_score"
-  new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "SC", helper))
+  new_names <- names(data)  # start with current names
+  
+  for (i in seq_along(new_names)) {
+    col <- new_names[i]
+    if (!(col %in% c("PGID", "geometry"))) {
+      new_names[i] <- paste0(col, "SC", helper)
+    }
+  }
+  
   names(data) <- new_names
   ##Output
   print(head(data))
@@ -631,8 +652,8 @@ assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = 
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% 
-    dplyr::select(PGID, contains("spwn")) %>% dplyr::select(-contains("spwnT")) %>% #Keep spwn but not spwn threshold
+  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% 
+    dplyr::select(PGID, contains("Spwn")) %>% dplyr::select(-contains("SpwnT")) %>% #Keep spwn but not spwn threshold
     mutate_if(is.numeric, round, digits = 2)
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
@@ -676,9 +697,17 @@ assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = 
   data <- process_ranges(data)
   #
   #Rename columns by note "_score"
-  new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "SC", helper))
+  new_names <- names(data)  # start with current names
+  
+  for (i in seq_along(new_names)) {
+    col <- new_names[i]
+    if (!(col %in% c("PGID", "geometry"))) {
+      new_names[i] <- paste0(col, "SC", helper)
+    }
+  }
+  
   names(data) <- new_names
+  #
   print(head(data))
   return(data)
 }
@@ -686,9 +715,9 @@ assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = 
 #
 #Threshold period - number = proportion above.below the threshold - score is inverse of values
 assign_threshold_scores <- function(shapefile_data, type = "separate") {
-  #
+  #  
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(O|I)$")) %>% dplyr::select(PGID, matches(".*spwnT.*|T[AB]\\d{1,3}"))
+  data <- shapefile_data %>% dplyr::select(PGID, matches(".*(o|i|e)T.\\d{1,3}$"))#dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(PGID, matches(".*SpwnT.*|T[AB]\\d{1,3}"))
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #
   #
@@ -716,15 +745,88 @@ assign_threshold_scores <- function(shapefile_data, type = "separate") {
     data_columns <- names(data)[-1]  # Update data_columns to reflect the new averaged columns
   }
   #Re-scale values
-  data <- data %>% mutate(across(-PGID, ~1-.x))
+  data <- data %>% mutate(across(-c(PGID, geometry), ~1-.x))
   #Rename columns by note "_score"
-  new_names <- ifelse(names(data) == "PGID", "PGID", 
-                      paste0(names(data), "SC"))
+  new_names <- names(data)  # start with current names
+  
+  for (i in seq_along(new_names)) {
+    col <- new_names[i]
+    if (!(col %in% c("PGID", "geometry"))) {
+      new_names[i] <- paste0(col, "SC")
+    }
+  }
+  
   names(data) <- new_names
+  #
   print(head(data))
   return(data)
 }
 #
+#
+##Flow optimal scores
+assign_flow_scores <- function(shapefile_data, curve_table, col_pattern, type = c("separate", "ensemble")) {
+  #
+  type <- match.arg(type)
+  #
+  # Named vector for faster lookup
+  score_lookup <- setNames(curve_table$Value, curve_table$Param)
+  #Identify columns of salinity, not spawning:
+  data <- shapefile_data %>% dplyr::select(PGID, starts_with("F")) %>% dplyr::select(PGID, matches(col_pattern)) %>%
+    mutate_if(is.numeric, round, digits = 2) 
+  data_columns <- setdiff(names(data), c("PGID", "geometry"))
+  #Named vector for faster look up
+  score_lookup <- setNames(curve_table$Value, curve_table$Param)
+  #
+  #If ensemble, get average interpolated value
+  if(type == "ensemble"){
+    #Create a new data frame for averaged columns
+    averaged_data <- data.frame(PGID = data$PGID)
+    #Group columns by their names excluding the last character
+    column_groups <- split(data_columns, substr(data_columns, 1, nchar(data_columns) - 1))
+    for (group in column_groups) {
+      #Base name 
+      base_name <- substr(group[1], 1, nchar(group[1])-1)
+      new_name <- paste0(base_name, "E")     
+      if (length(group) > 1) {
+        # Average the columns in the group
+        averaged_data[[new_name]] <- round(rowMeans(st_drop_geometry(data)[group], na.rm = TRUE),2)
+      } else {
+        # If only one column, just copy it
+        averaged_data[[new_name]] <- data[[group[1]]]
+      }
+    }
+    data <- averaged_data
+    data_columns <- names(data)[-1]  # Update data_columns to reflect the new averaged columns
+  }
+  #
+  ##Scoring of values:
+  # Iterate over each identified column
+  for (col in data_columns) {
+    #Find corresponding values from the reference table
+    data[[col]] <- ifelse(data[[col]] %in% names(score_lookup),
+                          score_lookup[as.character(data[[col]])],
+                          0)
+  }
+  #
+  ##Check for ranges and process:
+  data <- process_ranges(data)
+  #
+  #Rename columns by note "_score"
+  new_names <- names(data)  # start with current names
+  
+  for (i in seq_along(new_names)) {
+    col <- new_names[i]
+    if (!(col %in% c("PGID", "geometry"))) {
+      new_names[i] <- paste0(col, "SC")
+    }
+  }
+  
+  names(data) <- new_names
+  #
+  ##Output 
+  print(head(data))
+  return(data)
+}
 #
 #
 ###Add scores back to data
@@ -772,7 +874,7 @@ join_score_dataframes <- function(shp_df, join_by = "PGID", env = .GlobalEnv, ve
       next
     }
     #Perform join 
-    shp_df <- shp_df %>% left_join(score_df, by = join_by, suffix = c("", paste0(".", df_name)))
+    shp_df <- shp_df %>% left_join(st_drop_geometry(score_df), by = join_by, suffix = c("", paste0(".", df_name)))
     
   }
   
@@ -828,7 +930,7 @@ calculate_totals <- function(data_scores){
   #
   #Salinity score
   salinity_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, starts_with("S") & ends_with("ESC")) %>%
+    dplyr::select(PGID, matches("S.*e.\\S(C|CL)$")) %>%
     mutate(STO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
     mutate(SCO = ncol(dplyr::select(., -c(PGID, STO)))) %>% 
     dplyr::select(PGID, STO, SCO) %>%
@@ -837,11 +939,20 @@ calculate_totals <- function(data_scores){
   #
   #Temperature score
   temperature_total <- data_scores %>% st_drop_geometry() %>%
-    dplyr::select(PGID, starts_with("T") & ends_with("ESC")) %>%
+    dplyr::select(PGID, matches("T.*e.\\S(C|CL)$")) %>%
     mutate(TTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
     mutate(TCO = ncol(dplyr::select(., -c(PGID, TTO)))) %>% 
     dplyr::select(PGID, TTO, TCO) %>%
     mutate(TAV = TTO/TCO) %>%
+    mutate(row_id = row_number())
+  #
+  #Flow score
+  flow_total <- data_scores %>% st_drop_geometry() %>%
+    dplyr::select(PGID, matches("^F.*S(C|CL)$")) %>%
+    mutate(FTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>%
+    mutate(FCO = ncol(dplyr::select(., -c(PGID, FTO)))) %>% 
+    dplyr::select(PGID, FTO, FCO) %>%
+    mutate(FAV = FTO/FCO) %>%
     mutate(row_id = row_number())
   #
   #Combine all totals to data frame
@@ -852,6 +963,7 @@ calculate_totals <- function(data_scores){
     left_join(channel_total, by = c("row_id", "PGID")) %>%
     left_join(salinity_total, by = c("row_id", "PGID")) %>%
     left_join(temperature_total, by = c("row_id", "PGID")) %>%
+    left_join(flow_total, by = c("row_id", "PGID")) %>%
     dplyr::select(-row_id)
   #
   print(head(all_totals))
@@ -871,58 +983,141 @@ clean_model_data <- function(data){
 #
 
 # Function to save shapefile and split if necessary
-save_model_output <- function(data, SiteCode = Site_Code, VerNum = Version) {
+save_model_output <- function(data = NULL, #good for single output, but not needed
+                              SiteCode = Site_Code, 
+                              VerNum = Version,
+                              output_type = c("all", "data", "scores", "model")) {
   #
-  #Cleaned shp and CSV data
-  HSM_shp_output <- data %>% dplyr::select(-ends_with("SC"), -ends_with("SCL"),-contains("Shape"), -ends_with("CO"), -ends_with("TO"))
-  HSM_csv <- data %>% st_set_geometry(NULL) %>% as.data.frame()
+  output_type <- match.arg(output_type)
   #
-  ##Output CSV data file
-  CSV_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", SiteCode, "_", VerNum, "_model_data.csv")
-  data.table::fwrite(HSM_csv, CSV_path)
-  message(paste0("CSV data file saved to ", CSV_path))
+  # Retrieve objects from global environment if data is missing ----
+  if(is.null(data)) {
+    if(exists("HSM_spdf", envir = .GlobalEnv)) {
+      data <- get("temp", envir = .GlobalEnv)
+      scores <- get("HSM_data_grps", envir = .GlobalEnv)
+      model <- get("HSM_spdf", envir = .GlobalEnv)
+      message("Using 'temp', 'HSM_data_grps', and 'HSM_spdf' from global environment.")
+    } else {
+      stop("No 'data' provided and 'temp' and 'HSM_spdf' not found in global environment.")
+    }
+  }
+  # Prepare objects ----
+  HSM_shp_output <- model %>% dplyr::select(-ends_with("SC"), -ends_with("SCL"),-contains("Shape"), -ends_with("CO"), -ends_with("TO"))
+  HSM_model_csv <- HSM_shp_output %>% st_drop_geometry()
+  Model_scores_csv <- scores %>% dplyr::select(-contains("HSM"))
+  Model_data_csv <- data %>% st_drop_geometry()
   #
-  #Temporary file path for the shapefile
-  temp_file_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/temp.shp")
-  temp_dbf <- sub("\\.shp$", ".dbf", temp_file_path)
-  file_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/", SiteCode, "_", VerNum, "_HSM_model.shp")
-  #Write the shape file to a temporary location
-  st_write(HSM_shp_output, temp_file_path, delete_dsn = TRUE)
+  # Paths ----
+  CSV_data_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", 
+                          SiteCode, "_", VerNum, "_model_data.csv")
+  CSV_scores_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", 
+                            SiteCode, "_", VerNum, "_model_scores.csv")
+  shapefile_temp <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/temp.shp")
+  shapefile_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/", 
+                           SiteCode, "_", VerNum, "_HSM_model.shp")
+  #
+  # ---- Save CSV for "data" ----
+  if(output_type %in% c("data", "all")) {
+    data.table::fwrite(Model_data_csv, CSV_data_path)
+    message(paste0("CSV data file saved to: ", CSV_data_path))
+  }
   
-  # Check the file size
-  file_size <- file.info(temp_dbf)$size
-  # If the file size is greater than 2 GB (2 * 1024^3 bytes) - modified to be conservative
-  if (file_size > (2 * 900^3)) {
-    # Split the data into chunks
-    chunk_size <- 2 * 900^3  # 2 GB
-    num_chunks <- ceiling(file_size / chunk_size)
+  # ---- Save CSV for "scores" ----
+  if(output_type %in% c("scores", "all")) {
+    data.table::fwrite(Model_scores_csv, CSV_scores_path)
+    message(paste0("CSV of scores saved to: ", CSV_scores_path))
+  }
+  
+  # ---- Save shapefile and model CSV ----
+  if(output_type %in% c("model", "all")) {
     
-    # Calculate the number of rows per chunk
-    rows_per_chunk <- ceiling(nrow(HSM_shp_output) / num_chunks)
+    st_write(HSM_shp_output, shapefile_temp, delete_dsn = TRUE)
     
-    #New file path
-    new_path <- sub("\\.shp", "", file_path)
-    for (i in seq_len(num_chunks)) {
-      # Determine the row indices for the current chunk
-      start_row <- (i - 1) * rows_per_chunk + 1
-      end_row <- min(i * rows_per_chunk, nrow(HSM_shp_output))
+    dbf_temp <- sub("\\.shp$", ".dbf", shapefile_temp)
+    file_size <- file.info(dbf_temp)$size
+    
+    if(file_size > (2 * 900^3)) {
+      chunk_size <- 2 * 900^3
+      num_chunks <- ceiling(file_size / chunk_size)
+      rows_per_chunk <- ceiling(nrow(HSM_shp_output) / num_chunks)
+      new_path <- sub("\\.shp$", "", shapefile_path)
       
-      # Create a subset of the data for the current chunk
-      chunk_data <- HSM_shp_output[start_row:end_row, ]
+      for(i in seq_len(num_chunks)) {
+        start_row <- (i - 1) * rows_per_chunk + 1
+        end_row <- min(i * rows_per_chunk, nrow(HSM_shp_output))
+        chunk_data <- HSM_shp_output[start_row:end_row, ]
+        chunk_file <- paste0(new_path, "_section", i, ".shp")
+        st_write(chunk_data, chunk_file, delete_dsn = TRUE)
+      }
+      message("Data split into ", num_chunks, " shapefiles.")
       
-      # Create a new file path for the chunk
-      chunk_file_path <- paste0(new_path, "_section", i, ".shp")
-      
-      # Write the chunk to a new shapefile
-      st_write(chunk_data, chunk_file_path, delete_dsn = TRUE)
+    } else {
+      st_write(HSM_shp_output, shapefile_path, delete_dsn = TRUE)
+      message("Shapefile saved successfully.")
     }
     
-    message("Data split into ", num_chunks, " files.")
-  } else {
-    # If the file size is under 2 GB, save normally
-    st_write(HSM_shp_output, file_path, delete_dsn = TRUE)
-    message("Shapefile saved successfully.")
+    # CSV of shapefile/model
+    model_csv_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", 
+                             SiteCode, "_", VerNum, "_model_shp.csv")
+    data.table::fwrite(HSM_model_csv, model_csv_path)
+    message(paste0("CSV of model outcome saved to: ", model_csv_path))
   }
 }
 # Example usage: Assuming 'my_sf_data' is your sf object
-# save_model_output(my_sf_data)  
+# save_model_output(my_sf_data) 
+#
+#
+# Model/layer plotting:
+plot_model_map <- function(sf_data,
+                           column,
+                           palette = "viridis",
+                           na_color = "grey80",
+                           title = NULL,
+                           force_scale = c("auto", "continuous", "discrete")) {
+  #
+  stopifnot(inherits(sf_data, "sf"))
+  #
+  force_scale <- match.arg(force_scale)
+  #
+  col_sym <- rlang::ensym(column)
+  col_name <- rlang::as_string(col_sym)
+  #
+  if (is.null(title)) {
+    title <- col_name
+  }
+  ## ---- base theme ----
+  base_theme <- ggplot2::theme_classic() +
+    ggplot2::theme(
+      panel.border = ggplot2::element_rect(color = "black", fill = NA),
+      axis.text = ggplot2::element_text(size = 16),
+      plot.margin = grid::unit(c(0, 0, 0, 0), "cm"),
+      plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5)),
+      plot.caption = ggplot2::element_text(face = "italic", size = 9)
+    )
+  ## ---- plot ----
+  base_plot <- ggplot2::ggplot() + base_theme
+  p <- base_plot +
+    geom_sf(data = sf_data, aes(fill = !!col_sym), color = NA) +
+    #theme_minimal() +
+    labs(fill = title, title = title)
+  #
+  ## ---- Scaling ----
+  if (force_scale == "continuous" ||
+      (force_scale == "auto" && is.numeric(values))) {
+    
+    p <- p + scale_fill_viridis_c(
+      na.value = na_color,
+      option = palette
+    )
+    
+  } else {
+    
+    p <- p + scale_fill_viridis_d(
+      na.value = na_color,
+      option = palette
+    )
+  }
+  
+  return(p)
+  #
+}

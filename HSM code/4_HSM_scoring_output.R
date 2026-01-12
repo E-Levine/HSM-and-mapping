@@ -51,7 +51,7 @@ SL_v1_data <- left_join(SL_v1_data,
           HSMfunc$row_average(
             data = SL_v1_salMonMean,
             cols = contains("ens"),
-            new_column_name = "eSAnnuE",
+            new_column_name = "SAnnueE",
             keep_columns = c("PGID")
             ),
         by = "PGID")
@@ -61,7 +61,7 @@ SL_v1_data <- left_join(SL_v1_data,
                         HSMfunc$row_average(
                           data = SL_v1_salMonMean,
                           cols = c("ens_May_Mean", "ens_Jun_Mean", "ens_Jul_Mean", "ens_Aug_Mean", "ens_Sep_Mean", "ens_Oct_Mean"),
-                          new_column_name = "eSSpwnE",
+                          new_column_name = "SSpwneE",
                           keep_columns = c("PGID")
                           ),
                         by = "PGID"))
@@ -80,7 +80,7 @@ SL_v1_salMonMin <- HSMfunc$add_excel_columns_sf(
                          HSMfunc$row_average(
                            data = SL_v1_salMonMin,
                            cols = contains("ens"),
-                           new_column_name = "eSAnnuI",
+                           new_column_name = "SAnnueI",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
@@ -110,7 +110,7 @@ SL_v1_salMonRange <- SL_v1_salMonRange %>%
                          HSMfunc$row_average(
                            data = SL_v1_salMonRange,
                            cols = contains("Range"),
-                           new_column_name = "eSSpwnR",
+                           new_column_name = "SSpwneR",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
@@ -129,7 +129,7 @@ SL_v1_data <- left_join(SL_v1_data,
                         HSMfunc$row_average(
                           data = SL_v1_temMonMean,
                           cols = contains("ens"),
-                          new_column_name = "eTAnnuE",
+                          new_column_name = "TAnnueE",
                           keep_columns = c("PGID")
                         ),
                         by = "PGID")
@@ -139,7 +139,7 @@ SL_v1_data <- left_join(SL_v1_data,
                          HSMfunc$row_average(
                            data = SL_v1_temMonMean,
                            cols = c("ens_May_Mean", "ens_Jun_Mean", "ens_Jul_Mean", "ens_Aug_Mean", "ens_Sep_Mean", "ens_Oct_Mean"),
-                           new_column_name = "eTSpwnE",
+                           new_column_name = "TSpwneE",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
@@ -158,7 +158,7 @@ SL_v1_data <- left_join(SL_v1_data,
                         HSMfunc$row_average(
                           data = SL_v1_temMonT35,
                           cols = contains("Threshold"),
-                          new_column_name = "eTAnnuT30",
+                          new_column_name = "TAnnueT30",
                           keep_columns = c("PGID")
                         ),
                         by = "PGID")
@@ -180,7 +180,7 @@ SL_v1_data <- left_join(SL_v1_data,
                         HSMfunc$row_average(
                           data = SL_v1_temMonB20,
                           cols = contains("Threshold"),
-                          new_column_name = "eTSpwnT20",
+                          new_column_name = "TSpwneT20",
                           keep_columns = c("PGID")
                         ),
                         by = "PGID")
@@ -199,7 +199,7 @@ SL_v1_data <- left_join(SL_v1_data,
                         HSMfunc$row_average(
                           data = SL_v1_outlier1,
                           cols = contains("Out"),
-                          new_column_name = "iFAnnu1",
+                          new_column_name = "FAnnui1",
                           keep_columns = c("PGID")
                         ),
                         by = "PGID"))
@@ -218,96 +218,215 @@ SL_v1_data <- left_join(SL_v1_data,
                          HSMfunc$row_average(
                            data = SL_v1_outlier2,
                            cols = contains("Out"),
-                           new_column_name = "iFAnnu2",
+                           new_column_name = "FAnnui2",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
 #
 # Adult optimal flow
+(SL_v1_adop <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_optimal_adult.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanOptimal",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                         HSMfunc$row_average(
+                           data = SL_v1_adop,
+                           cols = contains("Optimal"),
+                           new_column_name = "FAnnuiAO",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
 # Larvae optimal flow
+(SL_v1_laop <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_optimal_larvae.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanOptimal",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                         HSMfunc$row_average(
+                           data = SL_v1_laop,
+                           cols = contains("Optimal"),
+                           new_column_name = "FAnnuiLO",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
 # Adult super flow
+(SL_v1_adsup <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_super_adult.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanDays",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                         HSMfunc$row_average(
+                           data = SL_v1_adsup,
+                           cols = contains("Days"),
+                           new_column_name = "FAnnuiAP",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
 # Adult sub flow
-# Larave super flow
+(SL_v1_adsub <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_sub_adult.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanDays",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                         HSMfunc$row_average(
+                           data = SL_v1_adsub,
+                           cols = contains("Days"),
+                           new_column_name = "FAnnuiAB",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
+# Larvae super flow
+(SL_v1_lasup <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_super_larvae.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanDays",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                         HSMfunc$row_average(
+                           data = SL_v1_lasup,
+                           cols = contains("Days"),
+                           new_column_name = "FAnnuiLP",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
 # Larvae sub flow
+(SL_v1_lasub <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SL_v1_data,
+  excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SL_flow_sub_larvae.xlsx"),
+  join_by = "PGID",
+  excel_columns = "meanDays",
+  sheet = 1,
+  join_type = "left"
+))
+#
+(SL_v1_data <- left_join(SL_v1_data, 
+                         HSMfunc$row_average(
+                           data = SL_v1_lasub,
+                           cols = contains("Days"),
+                           new_column_name = "FAnnuiLB",
+                           keep_columns = c("PGID")
+                         ),
+                         by = "PGID"))
 #
 #
-rm(SL_v1_salMonMean, SL_v1_salMonMin, SL_v1_salMonRange, 
+rm(datafiles, SL_v1_salMonMean, SL_v1_salMonMin, SL_v1_salMonRange, 
    SL_v1_temMonMean, SL_v1_temMonT35, SL_v1_temMonB20,
-   SL_v1_outlier1, SL_v1_outlier2)
+   SL_v1_outlier1, SL_v1_outlier2, SL_v1_adop, SL_v1_laop, SL_v1_adsup, SL_v1_adsub, SL_v1_lasup, SL_v1_lasub)
+#
 #
 # Assign scores ----
 #
 ##Oysters
 temp <- get(paste0(Site_Code, "_", Version, "_data"))
-Oyster_scores <- assign_oyster_scores(temp)
+Oyster_scores <- HSMfunc$assign_oyster_scores(temp)
 #
 #
 #Oyster reef buffer scores
-Oybuffer_scores <- assign_oybuffer_scores(temp)
+Oybuffer_scores <- HSMfunc$assign_oybuffer_scores(temp)
 #
 #
 #
 #
 ##Seagrass scores
-Seagrass_scores <- assign_seagrass_scores(temp)
+Seagrass_scores <- HSMfunc$assign_seagrass_scores(temp)
 #
 #
 #
 ##Channels
 #If not NA, then score = 0 (present in buffer zone). If NA then score = 1
-Channel_scores <- assign_buffer_scores(temp)
+Channel_scores <- HSMfunc$assign_buffer_scores(temp)
 #
 #
 #
 ##Salinity - all year
-Salinity_scores <- assign_salinity_scores(temp, Salinity_adult, type = "ensemble")
+Salinity_scores <- HSMfunc$assign_salinity_scores(temp, Salinity_adult, type = "separate")
 #
 #Spawning period
-Salinity_spawn_scores_t <- assign_sal_spawn_scores(temp, Salinity_adult, type = "ensemble")
-Salinity_spawn_scores <- left_join(Salinity_spawn_scores_t, assign_sal_spawn_scores(temp, Salinity_larvae, type = "ensemble")) 
+Salinity_spawn_scores_t <- HSMfunc$assign_sal_spawn_scores(temp, Salinity_adult, type = "separate")
+Salinity_spawn_scores <- left_join(Salinity_spawn_scores_t, 
+                                   HSMfunc$assign_sal_spawn_scores(temp, Salinity_larvae, type = "separate") %>% st_drop_geometry()) 
 #
 #
 #
 ##Temperature - all year
-Temperature_scores <- assign_temperature_scores(temp, Temperature_adult, type = "ensemble")
+Temperature_scores <- HSMfunc$assign_temperature_scores(temp, Temperature_adult, type = "separate")
 #
 #Spawning period
-Temperature_spawn_scores_t <- assign_temperature_spawn_scores(temp, Temperature_adult, type = "ensemble")
-Temperature_spawn_scores <- left_join(Temperature_spawn_scores_t, assign_temperature_spawn_scores(temp, Temperature_larvae, type = "ensemble")) 
+Temperature_spawn_scores_t <- HSMfunc$assign_temperature_spawn_scores(temp, Temperature_adult, type = "separate")
+Temperature_spawn_scores <- left_join(Temperature_spawn_scores_t, 
+                                      HSMfunc$assign_temperature_spawn_scores(temp, Temperature_larvae, type = "separate") %>% st_drop_geometry()) 
 #
 #Threshold period - number = proportion above.below the threshold - score is inverse of values
-Temperture_thres_scores <- assign_threshold_scores(temp, type = "ensemble")
+Temperture_thres_scores <- HSMfunc$assign_threshold_scores(temp, type = "separate")
+#
+#
+#
+##Flow data
+Optimal_flow_t <- HSMfunc$assign_flow_scores(temp, `Optimal flow`, col_pattern = ".*O$",type = "separate")
+Above_flow_t <- HSMfunc$assign_flow_scores(temp, `Non-optimal flow`, col_pattern = ".*P$",type = "separate")
+Sub_flow_t <- HSMfunc$assign_flow_scores(temp, `Non-optimal flow`, col_pattern = ".*B$",type = "separate")
+Out1_flow_t <- HSMfunc$assign_flow_scores(temp, `Outlier1 flow`, col_pattern = ".*1$",type = "separate")#
+Out2_flow_t <- HSMfunc$assign_flow_scores(temp, `Outlier2 flow`, col_pattern = ".*2$",type = "separate")#
+#
+Flow_scores <- left_join(Optimal_flow_t, st_drop_geometry(Above_flow_t)) %>% 
+  left_join(st_drop_geometry(Sub_flow_t)) %>%
+  left_join(st_drop_geometry(Out1_flow_t)) %>%
+  left_join(st_drop_geometry(Out2_flow_t))
 #
 #
 #
 #
-#
+# Model wrap-up ----
 ###Add scores back to data
-assign(paste0(Site_Code, "_", Version, "_scores_data"), join_score_dataframes(temp))
+assign(paste0(Site_Code, "_", Version, "_scores_data"), HSMfunc$join_score_dataframes(temp))
 ##Work with just scores
 assign(paste0(Site_Code, "_", Version, "_scores_only"),  get(paste0(Site_Code, "_", Version, "_scores_data")) %>% 
          dplyr::select(PGID, Lat_DD_Y, Long_DD_X, ends_with("SC"), ends_with("SCL")))
 #
 ##Set working with "all" data or with just "scores" data:
-model_data <- c("all")
+model_data <- c("scores")
 #
 ###Calculate total HSM score
 if(model_data == "all"){
-  assign(paste0(Site_Code, "_", Version, "_data_totals"), calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data"))))
+  assign(paste0(Site_Code, "_", Version, "_data_totals"), HSMfunc$calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data"))))
 } else {
-  assign(paste0(Site_Code, "_", Version, "_data_totals"), calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_only"))))
+  assign(paste0(Site_Code, "_", Version, "_data_totals"), HSMfunc$calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_only"))))
 }
 #
 #Clean model data frame
-assign(paste0(Site_Code, "_", Version, "_data_clean"), clean_model_data(get(paste0(Site_Code, "_", Version, "_data_totals"))))
+assign(paste0(Site_Code, "_", Version, "_data_clean"), HSMfunc$clean_model_data(get(paste0(Site_Code, "_", Version, "_data_totals"))))
 #
 #
 #
-#SCORING
+## HSM values ----
 #
 HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>% st_drop_geometry() %>% 
   mutate(CurveCO = sum(grepl("AV$", names(st_drop_geometry(get(paste0(Site_Code, "_", Version, "_data_clean"))))))) %>% 
-  mutate(HSM = case_when(ChnlTO == 1 ~ (OystAV + BuffAV + SgrsAV + SAV + TAV)/CurveCO,
+  mutate(HSM = case_when(ChnlTO == 1 ~ (OystAV + BuffAV + SgrsAV + SAV + TAV + FAV)/CurveCO,
                              ChnlTO == 0 ~ 0, 
                              TRUE ~ NA_real_)) %>%
   mutate(HSMround = round(HSM, 2))
@@ -338,6 +457,7 @@ HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grp
 #  tm_polygons(fill = "HSM_grp", col = NA)
 #
 #
-##Output data file and shape file:
-save_model_output(HSM_spdf)
+##Output data file and shape file: currently required temp and HSM_data_grps
+HSMfunc$save_model_output(output_type = "all")
 #
+HSMfunc$plot_model_map(HSM_spdf, "HSMgrp")
