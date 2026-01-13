@@ -3399,29 +3399,43 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
     } else {
       fig_dir <- paste0("../", Site_code, "_", Version, "/Output/Figure files/")
       p <- final_output_data$grid
-        p_name <- "comb_interp_models"
-        #Desired file name and specs
-        jpg_filename <- paste0(fig_dir, #Save location
-                               #File name
-                               base_name, "_", p_name,  
-                               ".jpg")
-        if(is.numeric(threshold_val)) {
-          jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)
-        } else {
-          jpg_filename <- jpg_filename
-        }
-        width_pixels <- 1000
-        aspect_ratio <- 3/4
-        height_pixels <- round(width_pixels * aspect_ratio)
-        #Save plot
-        invisible(ggsave(
-          filename = jpg_filename, 
-          plot = p, 
-          width = width_pixels / 100, 
-          height = height_pixels / 100, 
-          units = "in", dpi = 300))
-        cat("Combined interpolation model figure was saved in 'Output/Figure files'.", "\n")
+      #naming
+      p_name <- "comb_interp_models"
+      #Desired file name and specs
+      jpg_filename <- paste0(fig_dir, #Save location
+                             #File name
+                             base_name, "_", p_name,  
+                             ".jpg")
+      if(is.numeric(threshold_val)) {
+        jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)
+      } else {
+        jpg_filename <- jpg_filename
       }
+      width_pixels <- 1000
+      aspect_ratio <- 3/4
+      height_pixels <- round(width_pixels * aspect_ratio)
+      #Save plot
+      invisible(if (inherits(p, "patchwork")) {
+        
+        patchwork::save_plot(
+          filename = jpg_filename,
+          plot = p,
+          width = width_pixels / 100,
+          height = height_pixels / 100,
+          dpi = 300
+        )
+      } else {
+        ggsave(
+          filename = jpg_filename,
+          plot = p,
+          width = width_pixels / 100,
+          height = height_pixels / 100,
+          units = "in",
+          dpi = 300
+        )
+      })
+      cat("Combined interpolation model figure was saved in 'Output/Figure files'.", "\n")
+    }
   }
   ##End figure output
   #
@@ -3559,3 +3573,4 @@ result <- map_dfr(chunks, function(chunk) {
 })
 return(result)
 }
+#
