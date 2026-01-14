@@ -2178,35 +2178,59 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
       message("Interpolation plots will not be saved.")
     } else {
       fig_dir <- paste0("../", Site_code, "_", Version, "/Output/Figure files/")
-      browser()
+      #
+      skipped_plots <- list()
       for (nm in names(final_output_data$plots)) {#for (i in seq_along(final_output_data$plots)){
         #Current plot
         p <- final_output_data$plots[[nm]] #p <- final_output_data$plots[[i]]
         p_name <- nm #p_name <- final_output_data$plots[[i]]$labels$title
+        #
+        # Check if plot can build panels
+        if (!can_build_plot(p)) {
+          skipped_plots[[nm]] <- "No drawable panels (empty data / scale limits)"
+          next
+        }
+        #
         #Desired file name and specs
         jpg_filename <- paste0(fig_dir, #Save location
                                #File name
                                base_name, "_", nm,  
                                ".jpg")
+        #
         if(is.numeric(threshold_val)) {
           jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)
         } else {
           jpg_filename <- jpg_filename
         }
+        #
         width_pixels <- 1000
         aspect_ratio <- 3/4
         height_pixels <- round(width_pixels * aspect_ratio)
-        #Save plot
-        invisible(ggsave(
-          filename = jpg_filename, 
-          plot = p, 
-          width = width_pixels / 100, 
-          height = height_pixels / 100, 
-          units = "in", dpi = 300))
-        cat("Interpolation model figure for", p_name, "model was saved in 'Output/Figure files'.", "\n")
+        #
+        #Check and save plot
+        ok <- safe_save_plot(
+          p = p,
+          filename = jpg_filename,
+          width_px = width_pixels,
+          height_px = height_pixels
+        )
+        #
+        if (!isTRUE(ok)) {
+          skipped_plots[[nm]] <- attr(ok, "error")
+        } else {
+          cat("Interpolation model figure for", p_name, "model was saved in 'Output/Figure files'.", "\n")
+        } #End check
+      }#End for loop
+    }#End interactive result
+    if (length(skipped_plots) > 0) {
+      cat("\nThe following plots were skipped and NOT saved:\n")
+      for (nm in names(skipped_plots)) {
+        cat(" -", nm, ":", skipped_plots[[nm]], "\n")
       }
+    } else {
+      cat("\nAll plots were saved successfully.\n")
     }
-  }
+  }#End interactive/individual plots
   #
   #
   if(interactive()){
@@ -2377,6 +2401,8 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   ##End summary output
 } 
 #
+#### Helpers ####
+#
 chunked_intersection <- function(polygons, site, chunk_size = 1000) {
   # Split polygons into chunks
   n <- nrow(polygons)
@@ -2391,3 +2417,25 @@ chunked_intersection <- function(polygons, site, chunk_size = 1000) {
   return(result)
 }
 #
+can_build_plot <- function(p) {
+  tryCatch({
+    b <- ggplot2::ggplot_build(p)
+    length(b$layout$panel_params) > 0
+  }, error = function(e) FALSE)
+}
+#
+safe_save_plot <- function(p, filename, width_px, height_px, dpi = 300) {
+  tryCatch({
+    ggsave(
+      filename = filename, 
+      plot = p, 
+      width = width_pixels / 100, 
+      height = height_pixels / 100, 
+      units = "in", 
+      res = dpi)
+    TRUE
+  }, error = function(e) {
+    attr(FALSE, "error") <- conditionMessage(e)
+    FALSE
+  })
+}
