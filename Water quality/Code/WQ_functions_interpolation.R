@@ -2182,12 +2182,17 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
       skipped_plots <- list()
       for (nm in names(final_output_data$plots)) {#for (i in seq_along(final_output_data$plots)){
         #Current plot
+        cat("\nProcessing plot:", nm, "...\n")
+        flush.console()
+        #
         p <- final_output_data$plots[[nm]] #p <- final_output_data$plots[[i]]
         p_name <- nm #p_name <- final_output_data$plots[[i]]$labels$title
         #
         # Check if plot can build panels
         if (!can_build_plot(p)) {
-          skipped_plots[[nm]] <- "No drawable panels (empty data / scale limits)"
+          msg <- "Skipped: no drawable panels (empty data / scale limits)"
+          skipped_plots[[nm]] <- msg
+          cat(msg, "\n")
           next
         }
         #
@@ -2208,18 +2213,25 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
         height_pixels <- round(width_pixels * aspect_ratio)
         #
         #Check and save plot
-        ok <- safe_save_plot(
-          p = p,
+        cat("Saving plot...\n")
+        flush.console()
+        #
+        res <- safe_save_plot(
+          p = p + 
+            theme(axis.text.y = element_text(size = 10), 
+                  axis.text.x = element_text(size = 8)),
           filename = jpg_filename,
           width_px = width_pixels,
           height_px = height_pixels
         )
         #
-        if (!isTRUE(ok)) {
-          skipped_plots[[nm]] <- attr(ok, "error")
+        if (!res$ok) {
+          skipped_plots[[nm]] <- res$error
+          cat("FAILED:", res$error, "\n")
         } else {
-          cat("Interpolation model figure for", p_name, "model was saved in 'Output/Figure files'.", "\n")
+          cat("SUCCESS: Interpolation model figure for", p_name, "model was saved in 'Output/Figure files'.", "\n")
         } #End check
+        flush.console()
       }#End for loop
     }#End interactive result
     if (length(skipped_plots) > 0) {
@@ -2230,7 +2242,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
     } else {
       cat("\nAll plots were saved successfully.\n")
     }
-  }#End interactive/individual plots
+  }#End individual plots
   #
   #
   if(interactive()){
@@ -2423,19 +2435,24 @@ can_build_plot <- function(p) {
     length(b$layout$panel_params) > 0
   }, error = function(e) FALSE)
 }
-#
+# check for saving plots:
 safe_save_plot <- function(p, filename, width_px, height_px, dpi = 300) {
-  tryCatch({
-    ggsave(
-      filename = filename, 
-      plot = p, 
-      width = width_pixels / 100, 
-      height = height_pixels / 100, 
-      units = "in", 
-      res = dpi)
-    TRUE
-  }, error = function(e) {
-    attr(FALSE, "error") <- conditionMessage(e)
-    FALSE
-  })
+  tryCatch(
+    {
+      ggsave(
+        filename = filename,
+        plot = p,
+        device = ragg::agg_jpeg,
+        width = width_px,
+        height = height_px,
+        units = "px",
+        res = dpi
+      )
+      list(ok = TRUE, error = NULL)
+    },
+    error = function(e) {
+      list(ok = FALSE, error = conditionMessage(e))
+    }
+  )
 }
+
