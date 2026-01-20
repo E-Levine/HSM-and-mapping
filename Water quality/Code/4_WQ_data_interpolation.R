@@ -19,7 +19,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
 #
 #source("Code/WQ_functions.R")
 WQ <- new.env()
-source("Code/WQ_functions.R", local = WQ)
+source("Code/WQ_functions_interpolation.R", local = WQ)
 #modeling <- new.env()
 #load("SSv1_TMean_working.RData", envir = modeling)
 #
@@ -32,7 +32,7 @@ Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
 Data_source <- c("Portal") #Required if Folder = compiled.
-Param_name <- c("Salinity")#Column/parameter name of interest - from WQ data file.
+Param_name <- c("Temperature, water")#Column/parameter name of interest - from WQ data file.
 Param_name_2 <- c("Monthly")#Additional identifier for parameter: i.e. Annual, Quarterly, Monthly
 #
 color_temp <- c("cool")    #"warm" or "cool"
@@ -107,11 +107,11 @@ if(color_temp == "warm") {
 #
 #library(lubridate)
 WQ_summ <- WQ$summarize_data(WQ_data %>% drop_na(Value), 
-                          Time_period = "YearMonth", Summ_method = "Means")
-                          #Threshold_parameters = c("below", 20), Month_range = c(5, 10))#
+                          Time_period = "YearMonth", Summ_method = "Threshold",
+                          Threshold_parameters = c("below", 20), Month_range = c(5, 10))
 #
 head(WQ_summ)
-stat <- c("Means") #used for file naming: Means, Mins, ThresholdA35, etc.
+stat <- c("ThresholdB20") #used for file naming: Means, Mins, ThresholdA35, etc.
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,"_", stat,".xlsx"), format_headers = TRUE)
 #
 #
@@ -150,8 +150,8 @@ ok_data <- WQ$perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Par
 ####Joining and comparing####
 #
 #Outputs df of 'results_[Param]'; use Range_values = Yes if both Min and Max included
-WQ$join_interpolation(Site_Grid_df) #, RangeValues = "Yes")
-#Once idw, ok saved separately and join_interpoltation finishes:
+WQ$join_interpolation(Site_Grid_df)
+#Once idw, ok saved separately and join_interpolation finishes:
 #rm(idw_data, ok_data, Site_Grid_spdf, Site_data_spdf, Site_Grid_df); gc()
 #
 #
@@ -167,7 +167,7 @@ grouped_plot_interpolations(final_data$plots)
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
 final_data <- WQ$ensemble_weighting("ensemble", c("idw", "ok"), 
-                                 result_Mean, weighting = c(0.50, 0.50), 
+                                 result_Threshold, weighting = c(0.50, 0.50), 
                                  Site_Grid)
 #saveRDS(final_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.rds"))
 #rm(final_data); gc()
@@ -181,7 +181,7 @@ final_data <- WQ$ensemble_weighting("ensemble", c("idw", "ok"),
 #Specify month range if months used: Month_range = c(5, 10)
 #Specify threshold or NA
 #Can remove Site_Grid and result_[...] if workspace saved and final_data created: rm(Site_Grid, result_Mean)
-WQ$save_model_output(final_data, threshold_val = NA)
+WQ$save_model_output(final_data, threshold_val = 20, Month_range = c(5, 10))
 #
 #
 #If continuing to work, good practice to remove objects to make sure correct data is used:

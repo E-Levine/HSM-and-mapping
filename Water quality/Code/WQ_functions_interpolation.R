@@ -1448,10 +1448,11 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
       temp_data <- sf_data %>% #[[i]] %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
         dplyr::select(PGID, all_of(pred_col)) %>% #dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
         dplyr::group_by(PGID) %>% 
-        dplyr::summarise(
-          !!paste0(model_name, "_", param_name) :=
-            max(.data[[pred_col]], na.rm = TRUE),
-          .groups = "drop"
+        dplyr::summarise(!!paste0(model_name, "_", param_name) := {
+          x <- .data[[pred_col]]
+          if (all(is.na(x))) NA_real_ else max(x, na.rm = TRUE)
+        },
+        .groups = "drop"
         )
       #dplyr::rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>%
       #dplyr::arrange(desc(.data[[pred_col]])) %>% 
@@ -1688,7 +1689,8 @@ plot_interpolations2 <- function(results_data,
   base_theme <- ggplot2::theme_classic() +
     ggplot2::theme(
       panel.border = ggplot2::element_rect(color = "black", fill = NA),
-      axis.text = ggplot2::element_text(size = 16),
+      axis.text.y = ggplot2::element_text(size = 14),
+      axis.text.x = ggplot2::element_text(size = 10),
       plot.margin = grid::unit(c(0, 0, 0, 0), "cm"),
       plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5)),
       plot.caption = ggplot2::element_text(face = "italic", size = 9)
@@ -1715,7 +1717,6 @@ plot_interpolations2 <- function(results_data,
   ## ---- plotting loop ----
   for (p in names(groups)) {
     for (s in names(groups[[p]])) {
-      
       cols <- groups[[p]][[s]]
       if (length(cols) == 0) next
       
@@ -1735,8 +1736,10 @@ plot_interpolations2 <- function(results_data,
           ggplot2::scale_color_viridis_c(
             limits = color_limits[[p]],
             oob = scales::squish,
-            direction = -1,
-            guide = "none"
+            direction = -1
+          ) +
+          ggplot2::theme(
+            legend.position = "right"
           ) +
           ggplot2::labs(
             title = paste(p, s, sep = "_"),
@@ -1795,8 +1798,10 @@ plot_interpolations2 <- function(results_data,
           ggplot2::scale_color_viridis_c(
             limits = color_limits[[p]],
             oob = scales::squish,
-            direction = -1,
-            guide = "none"
+            direction = -1
+          ) +
+          ggplot2::theme(
+            legend.position = "right"
           ) +
           ggplot2::labs(
             title = paste(p, m, s, sep = "_"),
@@ -1806,7 +1811,6 @@ plot_interpolations2 <- function(results_data,
       }
     }
   }
-  
   plot_list
 }
 
@@ -2233,15 +2237,15 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
         } #End check
         flush.console()
       }#End for loop
-    }#End interactive result
-    if (length(skipped_plots) > 0) {
-      cat("\nThe following plots were skipped and NOT saved:\n")
-      for (nm in names(skipped_plots)) {
-        cat(" -", nm, ":", skipped_plots[[nm]], "\n")
+      if (length(skipped_plots) > 0) {
+        cat("\nThe following plots were skipped and NOT saved:\n")
+        for (nm in names(skipped_plots)) {
+          cat(" -", nm, ":", skipped_plots[[nm]], "\n")
+        }
+      } else {
+        cat("\nAll plots were saved successfully.\n")
       }
-    } else {
-      cat("\nAll plots were saved successfully.\n")
-    }
+    }#End interactive result
   }#End individual plots
   #
   #
@@ -2354,6 +2358,13 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
     if(result == "No"){
       message("Interpolation data will not be saved in an Excel file.")
     } else {
+      shp_name <- if (any(!is.na(Month_range))) {
+        paste0(Param_name, "_", Param_name_2, "_", Stat_type,
+               "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+      } else {
+        paste0(Param_name, "_", Param_name_2, "_", Stat_type_clean,
+               "_", Start_year, "_", End_year)
+      }
       model_data <- sf::st_drop_geometry(final_output_data$spatialData)
       data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                           #File name
