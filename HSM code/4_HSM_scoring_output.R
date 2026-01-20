@@ -11,6 +11,7 @@ if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
                sf, raster, terra, fst,
                leaflet, tmap, openxlsx, writexl,
+               classInt, BAMMtools, #Jenks
                install = TRUE) #Mapping and figures
 #
 #
@@ -432,6 +433,8 @@ HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>% st_drop_geom
   mutate(HSMround = round(HSM, 2))
 #Define the breaks for grouping (0 to 1 by 0.1)
 breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
+#Determine natural Jenks breaks (thirds)
+jenks_breaks <- getJenksBreaks(var = HSM_data$HSM, k = 4)
 #Assign groups using cut()
 HSM_data_grps <- HSM_data %>%
   mutate(HSMgrp = as.factor(cut(HSMround, breaks = breaks, include.lowest = TRUE, right = FALSE))) %>%
@@ -442,10 +445,23 @@ HSM_data_grps <- HSM_data %>%
   mutate(HSMgyr = factor(case_when(HSMgrp %in% c("(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)") ~ "Low",
                              HSMgrp %in% c("[0.4,0.5)", "[0.5,0.6)") ~ "Moderate",
                              HSMgrp %in% c("[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]") ~ "High",
-                           TRUE ~ HSMgrp), levels = c("0", "Low", "Moderate", "High")))
+                           TRUE ~ HSMgrp), levels = c("0", "Low", "Moderate", "High"))) %>%
+  ungroup() %>%
+  mutate(HSMjb = factor(if_else(is.na(HSM), NA_character_, 
+                                as.character(cut(HSM,
+                                                 breaks = jenks_breaks,
+                                                 include.lowest = TRUE,
+                                                 labels = c("Low", "Medium", "High")))), levels = c("Low", "Medium", "High")))
 summary(HSM_data_grps$HSMgrp)
 summary(HSM_data_grps$HSMgyr)
+summary(HSM_data_grps$HSMjb)
+levels(cut(HSM_data$HSM, breaks = jenks_breaks, include.lowest = TRUE))
+jenks.tests(classIntervals(HSM_data$HSM, n = 3, style = "fixed", fixedBreaks = jenks_breaks))
 #
+hist(HSM_data$HSM, col = "gray90", main = "Jenks Breakpoints Overlay", xlab = "HSM score")
+abline(v = jenks_breaks, col = "red", lwd = 2, lty = 2)
+text(x = jenks_breaks, y = 5, labels = round(jenks_breaks, 2), pos = 4, col = "red")
+### SAVE PLOT: SiteCode_version_HSMjb_hist - ~850 * auto
 #
 #
 HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps) %>% st_zm() %>% 
@@ -460,4 +476,5 @@ HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grp
 ##Output data file and shape file: currently required temp and HSM_data_grps
 HSMfunc$save_model_output(output_type = "all")
 #
-HSMfunc$plot_model_map(HSM_spdf, "HSMgrp")
+HSMfunc$plot_model_map(HSM_spdf, "HSMgrp") #SiteCode_Version_HSM_scores
+HSMfunc$plot_model_map(HSM_spdf, "HSMjb") #SiteCode_Version_HSM_jb
