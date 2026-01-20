@@ -91,41 +91,50 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
 list_files <- function(directory,
                        pattern = NULL,
                        recursive = FALSE) {
-  #
+  
   if (!dir.exists(directory)) {
     stop("Directory does not exist: ", directory)
   }
-  #
+  
   files <- list.files(
     path = directory,
     pattern = pattern,
     full.names = TRUE,
     recursive = recursive
   )
-  #
-  purrr::map_dfr(files, function(file) {
-   # 
-    ext <- tools::file_ext(file)
-    #
-    cols <- tryCatch({
+  
+  if (length(files) == 0) {
+    return(tibble::tibble(file = character(), column = character()))
+  }
+  
+  get_cols <- function(file) {
+    ext <- tolower(tools::file_ext(file))
+    
+    cols <- try({
       switch(
         ext,
         csv  = names(readr::read_csv(file, show_col_types = FALSE, n_max = 0)),
         xlsx = names(readxl::read_excel(file, n_max = 0)),
         xls  = names(readxl::read_excel(file, n_max = 0)),
-        rds  = names(readRDS(file)),
         fst  = names(fst::read_fst(file, from = 1, to = 1)),
+        rds  = {
+          obj <- readRDS(file)
+          if (is.data.frame(obj)) names(obj) else character(0)
+        },
         character(0)
       )
-    }, error = function(e) {
-      character(0)
-    })
-    #
+    }, silent = TRUE)
+    
+    if (inherits(cols, "try-error")) cols <- character(0)
+    
     tibble::tibble(
-      file = basename(file),
+      file   = basename(file),
       column = cols
     )
-  })
+  }
+  
+  purrr::map(files, get_cols) |>
+    dplyr::bind_rows()
 }
 #
 #
@@ -138,7 +147,8 @@ add_excel_columns_sf <- function(existing_sf,
                                  new_column_names = NULL,
                                  sheet = 1,
                                  join_type = c("left", "inner", "right", "full"),
-                                 drop_geometry = FALSE) {
+                                 drop_geometry = FALSE,
+                                 cache = FALSE) {
   
   join_type <- match.arg(join_type)
   
@@ -155,17 +165,28 @@ add_excel_columns_sf <- function(existing_sf,
     stop("Join column not found in existing_sf: ", join_by)
   }
   
-  # Load Excel ----
-  excel_data <- readxl::read_excel(excel_path, sheet = sheet)
+  ext <- tools::file_ext(excel_path)  
   
-  if (!excel_join_by %in% names(excel_data)) {
+  # Column names without loading Excel ----
+  excel_colnames <- switch(
+    ext,
+    xlsx = names(readxl::read_excel(excel_path, sheet = sheet, n_max = 0)),
+    xls  = names(readxl::read_excel(excel_path, sheet = sheet, n_max = 0)),
+    csv  = names(readr::read_csv(excel_path, n_max = 0, show_col_types = FALSE)),
+    fst  = fst::fst_metadata(excel_path)$columnNames,
+    stop("Unsupported file type: ", ext)
+  )
+  
+  #excel_data <- readxl::read_excel(excel_path, sheet = sheet)
+  
+  if (!excel_join_by %in% excel_colnames) {
     stop("Join column not found in Excel data: ", excel_join_by)
   }
-  
+
   # Resolve tidyselect / character input ----
   selected_cols <- tidyselect::eval_select(
     rlang::enquo(excel_columns),
-    excel_data
+    setNames(seq_along(excel_colnames), excel_colnames)
   )
   
   selected_names <- names(selected_cols)
@@ -173,6 +194,8 @@ add_excel_columns_sf <- function(existing_sf,
   if (length(selected_names) == 0) {
     stop("No columns matched `excel_columns`")
   }
+  
+  cols_to_read <- unique(c(excel_join_by, selected_names))
   
   # Optional renaming ----
   if (!is.null(new_column_names)) {
@@ -195,15 +218,27 @@ add_excel_columns_sf <- function(existing_sf,
     }
   }
   
-  # Select columns ----
-  excel_subset <- excel_data |>
-    dplyr::select(
-      dplyr::all_of(c(excel_join_by, selected_names))
+  # ---- Reader with caching ----
+  reader <- function() {
+    switch(
+      ext,
+      xlsx = readxl::read_excel(excel_path, sheet = sheet, col_select = cols_to_read),
+      xls  = readxl::read_excel(excel_path, sheet = sheet, col_select = cols_to_read),
+      csv  = readr::read_csv(excel_path, col_select = cols_to_read,
+                             show_col_types = FALSE),
+      fst  = fst::read_fst(excel_path, columns = cols_to_read)
     )
+  }
+  
+  if (cache) {
+    reader <- memoise::memoise(reader)
+  }
+  
+  excel_subset <- reader()
   
   # Apply renaming only if requested ----
   if (!is.null(new_column_names)) {
-    excel_subset <- excel_subset |>
+    excel_subset <- excel_subset %>%
       dplyr::rename(!!!new_column_names)
   }
   

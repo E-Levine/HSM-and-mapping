@@ -19,7 +19,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("SS") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -38,8 +38,8 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
 # Add interp data: one call per data column/type
 #
 # Annual mean salinity
-SL_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
-  existing_sf = SL_v1_data,
+SS_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
+  existing_sf = SS_v1_data,
   excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Salinity_Monthly_Mean_2020_2024.xlsx"),
   join_by = "PGID",
   excel_columns = contains("ens"),
@@ -47,9 +47,9 @@ SL_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
   join_type = "left"
 )
 #
-SL_v1_data <- left_join(SL_v1_data, 
+SS_v1_data <- left_join(SS_v1_data, 
           HSMfunc$row_average(
-            data = SL_v1_salMonMean,
+            data = SS_v1_salMonMean,
             cols = contains("ens"),
             new_column_name = "SAnnueE",
             keep_columns = c("PGID")
