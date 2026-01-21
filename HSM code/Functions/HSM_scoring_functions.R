@@ -177,8 +177,6 @@ add_excel_columns_sf <- function(existing_sf,
     stop("Unsupported file type: ", ext)
   )
   
-  #excel_data <- readxl::read_excel(excel_path, sheet = sheet)
-  
   if (!excel_join_by %in% excel_colnames) {
     stop("Join column not found in Excel data: ", excel_join_by)
   }
@@ -195,7 +193,7 @@ add_excel_columns_sf <- function(existing_sf,
     stop("No columns matched `excel_columns`")
   }
   
-  cols_to_read <- unique(c(excel_join_by, selected_names))
+  cols_to_keep <- unique(c(excel_join_by, selected_names))
   
   # Optional renaming ----
   if (!is.null(new_column_names)) {
@@ -222,11 +220,11 @@ add_excel_columns_sf <- function(existing_sf,
   reader <- function() {
     switch(
       ext,
-      xlsx = readxl::read_excel(excel_path, sheet = sheet, col_select = cols_to_read),
-      xls  = readxl::read_excel(excel_path, sheet = sheet, col_select = cols_to_read),
-      csv  = readr::read_csv(excel_path, col_select = cols_to_read,
+      xlsx = readxl::read_excel(excel_path, sheet = sheet),
+      xls  = readxl::read_excel(excel_path, sheet = sheet),
+      csv  = readr::read_csv(excel_path,
                              show_col_types = FALSE),
-      fst  = fst::read_fst(excel_path, columns = cols_to_read)
+      fst  = fst::read_fst(excel_path, columns = cols_to_keep)
     )
   }
   
@@ -234,7 +232,14 @@ add_excel_columns_sf <- function(existing_sf,
     reader <- memoise::memoise(reader)
   }
   
-  excel_subset <- reader()
+  excel_data <- reader()
+  
+  excel_subset <- excel_data %>%
+    dplyr::select(dplyr::all_of(cols_to_keep)) %>%
+    dplyr::mutate(dplyr::across(
+      where(is.logical), as.numeric
+    ))
+  
   
   # Apply renaming only if requested ----
   if (!is.null(new_column_names)) {
@@ -243,6 +248,9 @@ add_excel_columns_sf <- function(existing_sf,
   }
   
   # Join (sf-safe) ----
+  geom <- sf::st_geometry(existing_sf)
+  sf::st_geometry(existing_sf) <- NULL
+  
   joined_sf <- switch(
     join_type,
     left  = dplyr::left_join(existing_sf, excel_subset,
@@ -254,6 +262,8 @@ add_excel_columns_sf <- function(existing_sf,
     full  = dplyr::full_join(existing_sf, excel_subset,
                              by = setNames(excel_join_by, join_by))
   )
+  
+  sf::st_geometry(joined_sf) <- geom
   
   if (drop_geometry) {
     joined_sf <- sf::st_drop_geometry(joined_sf)
