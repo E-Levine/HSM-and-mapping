@@ -188,6 +188,7 @@ add_excel_columns_sf <- function(existing_sf,
   )
   
   selected_names <- names(selected_cols)
+  numeric_cols <- selected_names
   
   if (length(selected_names) == 0) {
     stop("No columns matched `excel_columns`")
@@ -237,7 +238,8 @@ add_excel_columns_sf <- function(existing_sf,
   excel_subset <- excel_data %>%
     dplyr::select(dplyr::all_of(cols_to_keep)) %>%
     dplyr::mutate(dplyr::across(
-      where(is.logical), as.numeric
+      dplyr::all_of(numeric_cols),
+      ~ suppressWarnings(as.numeric(.x))
     ))
   
   
@@ -245,7 +247,10 @@ add_excel_columns_sf <- function(existing_sf,
   if (!is.null(new_column_names)) {
     excel_subset <- excel_subset %>%
       dplyr::rename(!!!new_column_names)
+    
+    numeric_cols <- unname(new_column_names[numeric_cols])
   }
+  
   
   # Join (sf-safe) ----
   geom <- sf::st_geometry(existing_sf)
@@ -811,6 +816,7 @@ assign_threshold_scores <- function(shapefile_data, type = "separate") {
 ##Flow optimal scores
 assign_flow_scores <- function(shapefile_data, curve_table, col_pattern, type = c("separate", "ensemble")) {
   #
+  browser()
   type <- match.arg(type)
   #
   # Named vector for faster lookup
