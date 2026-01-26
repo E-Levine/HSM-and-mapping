@@ -37,14 +37,14 @@ library(dataRetrieval)
                                   skipGeometry = TRUE))
 #
 #
-clean_save_usgs_flow(temp_data, "2020-01-01", "2024-12-31", "flow")
+WQ$clean_save_usgs_flow(temp_data, "2020-01-01", "2024-12-31", "flow")
 #
 #
 #
 ### Data from cleaned Storet files ####
 # Name of file to use
 #
-clean_save_existing_data("SS_Portal_combined_filtered_2020_2024", "Salinity")
+WQ$clean_save_existing_data("SS_Portal_combined_filtered_2020_2024", "Salinity")
 #
 #
 #
@@ -52,7 +52,7 @@ clean_save_existing_data("SS_Portal_combined_filtered_2020_2024", "Salinity")
 ### Data gather and cleaning####
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
 #Make sure only desired logger data files are in the main folder
-load_WQ_data()
+WQ$load_WQ_data()
 #
 ## Clean data
 #
@@ -60,13 +60,13 @@ load_WQ_data()
 # library(geosphere, igraph, dplyr, leaflet)
 # df should have columns: ID, Latitude, Longitude, Value
 # distance_threshold in meters (e.g., 2000)
-sali_grps <- cluster_points(salinity_raw, 7500)
+sali_grps <- WQ$cluster_points(salinity_raw, 7500)
 # View the map: sali_grps$map
 # Access modified data: sali_grps$data
 # Access group summaries: sali_grps$groups
 #
 # Add group station locations to Loggers data frame in R and Excel data file
-updated_Loggers <- update_logger_locations(sali_grps$locations)
+updated_Loggers <- WQ$update_logger_locations(sali_grps$locations)
 Loggers <- updated_Loggers
 #
 #
@@ -92,8 +92,8 @@ salinity_ave <- sali_grps$data %>%  #salinity_raw %>% #
 #
 #
 ## Get monthly means
-(sal_monthly <- calculate_monthly_value(salinity_ave, "Salinity"))
-(flow_monthly <- calculate_monthly_value(flow_ave, "Flow"))
+(sal_monthly <- WQ$calculate_monthly_value(salinity_ave, "Salinity"))
+(flow_monthly <- WQ$calculate_monthly_value(flow_ave, "Flow"))
 #
 #
 #
@@ -104,23 +104,24 @@ salinity_ave <- sali_grps$data %>%  #salinity_raw %>% #
 #
 ## Fit curve
 #library(stringr, minpack.lm, dplyr)
-models <- fit_salinity_flow_models(flow_monthly, sal_monthly)
+models <- WQ$fit_salinity_flow_models(flow_monthly, sal_monthly)
 #Fit fails unless means used: models <- fit_salinity_flow_models(flow_ave, sal_monthly, flow_col = "Flow")
 #
 #
-models <- remove_models(models, c("SSSal1_USGS-02313700", "SSSal3_USGS-02313700", "SSSal4_USGS-02313700", "SSSal5_USGS-02313700"))
+models <- WQ$remove_models(models, c("SSSal1_USGS-02313700", "SSSal3_USGS-02313700", "SSSal4_USGS-02313700", "SSSal5_USGS-02313700"))
 #
 # Calculate flow at specified salinity (from HSM curves)
 adult <- rbind(
-  flow_at_salinity_hyp2(models, 11.98) %>% mutate(Sal = "min", Flow = "max"), 
-  flow_at_salinity_hyp2(models, 35.98) %>% mutate(Sal = "max", Flow = "min")) %>% mutate(Type = "Adult")
+  WQ$flow_at_salinity_hyp2(models$models, 11.98, models$data_lookup) %>% mutate(Sal = "min", Flow = "max"), 
+  WQ$flow_at_salinity_hyp2(models$models, 35.98, models$data_lookup) %>% mutate(Sal = "max", Flow = "min")) %>% 
+  mutate(Type = "Adult")
 larvae <- rbind(
-  flow_at_salinity_hyp2(models, 10.01) %>% mutate(Sal = "min", Flow = "max"), 
-  flow_at_salinity_hyp2(models, 31.49) %>% mutate(Sal = "max", Flow = "min")) %>% mutate(Type = "Larave")
+  WQ$flow_at_salinity_hyp2(models$models, 10.01, models$data_lookup) %>% mutate(Sal = "min", Flow = "max"), 
+  WQ$flow_at_salinity_hyp2(models$models, 31.49, models$data_lookup) %>% mutate(Sal = "max", Flow = "min")) %>% mutate(Type = "Larave")
 #
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
-names(models)
-ggplot_hyperbolic_fit(Model_data, models, "SSSal1_USGS-02323592", "Mean_Flow", 
+names(models$models)
+WQ$ggplot_hyperbolic_fit(Model_data, models$models, "SSSal1_USGS-02323592", "Mean_Flow", 
                       "Mean_Salinity", Salinity_min = 11.98, Salinity_max = 38.95)
 #
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
@@ -140,23 +141,23 @@ ggplot_hyperbolic_fit(Model_data, models, "SSSal1_USGS-02323592", "Mean_Flow",
 #
 #Calculate the mean optimal days for each station 
 #returndf = individual, combined, both
-Adult_optimal <- automate_optimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult", "both")
-Larvae_optimal <- automate_optimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae", "both")
+Adult_optimal <- WQ$automate_optimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult", "both")
+Larvae_optimal <- WQ$automate_optimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae", "both")
 #
 ## Number above or below optimal
-Adult_nonoptimal <- automate_nonoptimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult", "both")
-Larvae_nonoptimal <- automate_nonoptimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae", "both")
+Adult_nonoptimal <- WQ$automate_nonoptimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult", "both")
+Larvae_nonoptimal <- WQ$automate_nonoptimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae", "both")
 #
 #
 #
 # Count number of days in month more than 1.5 SD from monthly mean
-outlier_flow <- count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") 
+outlier_flow <- WQ$count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") 
 #
 #
 #
 # Save data and/or figure created
-#make sure to specify list item if list objetc used
-save_flow_output(adult, 
+#make sure to specify list item if list object used
+WQ$save_flow_output(adult, 
                  larvae, 
                  Adult_optimal$Mean, 
                  Adult_nonoptimal$Mean, 
@@ -278,6 +279,7 @@ library(raster)   # For extent()
 library(sp)       # For SpatialPointsDataFrame
 library(dplyr)    # For data manipulation
 library(lubridate) # For parse_date_time() and time calculations
+library(ggrastr)
 #
 ## Repeat for each data frame:
 #
@@ -290,12 +292,13 @@ data_cols <- if(ncol(A_optimal) >= 3) {
 Site_data_spdf <- SpatialPointsDataFrame(coords = A_optimal[,c("Longitude","Latitude")], data_cols, 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
-AOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
+AOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
 #
-plot_flow_interp(AOP_idw_data, Site_Grid, "meanOptimal")
+WQ$plot_flow_interp(AOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".tiff", sep = ""), dpi = 1000)
+       filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".tiff", sep = ""), 
+       dpi = 600)
 #
 #
 #
@@ -308,12 +311,18 @@ data_cols <- if(ncol(L_optimal) >= 3) {
 Site_data_spdf <- SpatialPointsDataFrame(coords = L_optimal[,c("Longitude","Latitude")], data_cols, 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
-LOP_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
+LOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
 #
-plot_flow_interp(LOP_idw_data, Site_Grid, "meanOptimal")
+WQ$plot_flow_interp(LOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".tiff", sep = ""), dpi = 1000)
+       filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".tiff", sep = ""), 
+       dpi = 600,
+       device = ragg::agg_tiff,
+       width = 8,
+       height = 7,
+       units = "in",
+       compression = "lzw")
 #
 #
 #
@@ -326,23 +335,37 @@ data_cols <- if(ncol(A_nonoptimal) >= 3) {
 Site_data_spdf <- SpatialPointsDataFrame(coords = A_nonoptimal[,c("Longitude","Latitude")], data_cols, 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
-AnonSub_idw_data <- flow_idw_interpolation(
+AnonSub_idw_data <- WQ$flow_idw_interpolation(
   Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "super", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
-AnonSuper_idw_data <- flow_idw_interpolation(
+AnonSuper_idw_data <- WQ$flow_idw_interpolation(
   Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "sub", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
-plot_flow_interp(AnonSub_idw_data, Site_Grid, "meanDays")
+p <- WQ$plot_flow_interp(AnonSub_idw_data, "meanDays")
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".tiff", sep = ""), dpi = 1000)
+ggsave(plot = p,
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".tiff", sep = ""), 
+       dpi = 600,
+       device = ragg::agg_tiff,
+       width = 8,
+       height = 8,
+       units = "in",
+       compression = "lzw")
 #
-plot_flow_interp(AnonSuper_idw_data, Site_Grid, "meanDays")
+p <- WQ$plot_flow_interp(AnonSuper_idw_data, "meanDays")
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".tiff", sep = ""), dpi = 1000)
+ggsave(plot = p,
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".tiff", sep = ""), 
+       dpi = 600,
+       device = ragg::agg_tiff,
+       width = 8,
+       height = 8,
+       units = "in",
+       compression = "lzw")
 #
 #
 #
@@ -356,24 +379,40 @@ data_cols <- if(ncol(L_nonoptimal) >= 3) {
 Site_data_spdf <- SpatialPointsDataFrame(coords = L_nonoptimal[,c("Longitude","Latitude")], data_cols, 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
-LnonSub_idw_data <- flow_idw_interpolation(
+LnonSub_idw_data <- WQ$flow_idw_interpolation(
   Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "super", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
-LnonSuper_idw_data <- flow_idw_interpolation(
+LnonSuper_idw_data <- WQ$flow_idw_interpolation(
   Site_data_spdf[is.na(Site_data_spdf$FlowType) | Site_data_spdf$FlowType != "sub", ], 
   grid, Site_Grid_spdf, "meanDays")
 #
 #
-plot_flow_interp(LnonSub_idw_data, Site_Grid, "meanDays")
+p <- WQ$plot_flow_interp(LnonSub_idw_data, "meanDays")
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".tiff", sep = ""), dpi = 1000)
+ggsave(plot = p,
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".tiff", sep = ""), 
+       dpi = 600,
+       device = ragg::agg_tiff,
+       width = 8,
+       height = 8,
+       units = "in",
+       compression = "lzw")
 #
-plot_flow_interp(LnonSuper_idw_data, Site_Grid, "meanDays")
+p <- WQ$plot_flow_interp(LnonSuper_idw_data, "meanDays")
+p_fast <- p +
+  ggrastr::rasterise(geom_sf(), dpi = 600)
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".tiff", sep = ""), dpi = 1000)
+ggsave(plot = p_fast,
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".tiff", sep = ""), 
+       dpi = 600,
+       device = ragg::agg_tiff,
+       width = 8,
+       height = 8,
+       units = "in",
+       compression = "lzw")
 #
 #
 ##
@@ -387,19 +426,37 @@ data_cols <- if(ncol(Outliers) >= 3) {
 Site_data_spdf <- SpatialPointsDataFrame(coords = Outliers[,c("Longitude","Latitude")], data_cols, 
                                          proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
 #
-Outlier_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOut1")#
+Outlier_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOut1")#
 #
-Outlier2_idw_data <- flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOut2")#
+Outlier2_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOut2")#
 #
-plot_flow_interp(Outlier_idw_data, Site_Grid, "meanOut1")
+p <- WQ$plot_flow_interp(Outlier_idw_data, "meanOut1")
+p_fast <- p +
+  ggrastr::rasterise(geom_sf(), dpi = 450)
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), dpi = 1000)
+ggsave(plot = p_fast,
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), 
+       dpi = 450,
+       device = ragg::agg_tiff,
+       width = 8,
+       height = 8,
+       units = "in",
+       compression = "lzw")
 #
-plot_flow_interp(Outlier2_idw_data, Site_Grid, "meanOut2")
+p <- WQ$plot_flow_interp(Outlier2_idw_data, "meanOut2")
+p_fast <- p +
+  ggrastr::rasterise(geom_sf(), dpi = 450)
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), dpi = 1000)
+ggsave(plot = p_fast, 
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+       filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), 
+       dpi = 450,
+       device = ragg::agg_tiff,
+       width = 8,
+       height = 8,
+       units = "in",
+       compression = "lzw")
 
 #
 #
@@ -408,14 +465,58 @@ ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"),
 #
 ## Save output
 #fileName: SiteCode_fileName
-save_flow_interp_output(AOP_idw_data, "flow_optimal_adult")
-save_flow_interp_output(AnonSub_idw_data, "flow_sub_adult")
-save_flow_interp_output(AnonSuper_idw_data, "flow_super_adult")
-save_flow_interp_output(LOP_idw_data, "flow_optimal_larvae")
-save_flow_interp_output(LnonSub_idw_data, "flow_sub_larvae")
-save_flow_interp_output(LnonSuper_idw_data, "flow_super_larvae")
-save_flow_interp_output(Outlier_idw_data, "flow_outlier1")
-save_flow_interp_output(Outlier2_idw_data, "flow_outlier2")
+WQ$save_flow_interp_output(AOP_idw_data, "flow_optimal_adult")
+WQ$save_flow_interp_output(AnonSub_idw_data, "flow_sub_adult")
+WQ$save_flow_interp_output(AnonSuper_idw_data, "flow_super_adult")
+WQ$save_flow_interp_output(LOP_idw_data, "flow_optimal_larvae")
+WQ$save_flow_interp_output(LnonSub_idw_data, "flow_sub_larvae")
+WQ$save_flow_interp_output(LnonSuper_idw_data, "flow_super_larvae")
+WQ$save_flow_interp_output(Outlier_idw_data, "flow_outlier1")
+WQ$save_flow_interp_output(Outlier2_idw_data, "flow_outlier2")
+#
+#
+## Saving Excel data files: had issue with remove geometry and file size
+write_csv_chunks <- function(
+    df,
+    out_dir,
+    prefix = "data",
+    chunk_size = 1e6
+) {
+  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  n <- nrow(df)
+  idx <- ceiling(seq_len(n) / chunk_size)
+  
+  split_df <- split(df, idx)
+  
+  purrr::iwalk(split_df, function(x, i) {
+    readr::write_csv(
+      x,
+      file.path(out_dir, sprintf("%s_part_%s.csv", prefix, i))
+    )
+  })
+  
+  invisible(length(split_df))
+}
+#
+temp_data <- st_drop_geometry(Outlier_idw_data) %>% 
+  as.data.frame() %>%
+  dplyr::rename("Long_DD_X" = Longitude, "Lat_DD_Y" = Latitude) %>%
+  mutate(Long_DD_X = as.numeric(Long_DD_X),
+         Lat_DD_Y = as.numeric(Lat_DD_Y),
+         meanOut1 = as.numeric(meanOut1),
+         dplyr::across(
+           where(is.character),
+           ~ na_if(trimws(.x), "")
+         ))
+write_csv_chunks(
+  df = temp_data,
+  out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                   #File name
+                   paste0(Site_code, "_", paste("flow_outlier1"))),
+  prefix = "flow_outlier1"
+)
+#
 #
 ### Other possible data ####
 # 

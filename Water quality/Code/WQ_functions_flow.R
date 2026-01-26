@@ -310,7 +310,7 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
   flow_stations <- unique(flow_data[[station_col]])
   # Initialize a list to store results
   results <- list()
-  results_data <- list()
+  data_lookup <- list()
   
   # Loop over each combination
   for (sal_station in salinity_stations) {
@@ -318,15 +318,27 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
       # Subset salinity data for the current station
       sal_sub <- salinity_data %>%
         dplyr::filter(.data[[station_col]] == sal_station) %>%
-        dplyr::select(.data[[time_col]], !!salinity_col := .data[[salinity_col]])
+        dplyr::select(all_of(time_col), !!salinity_col := all_of(salinity_col))
       
       # Subset flow data for the current station
       flow_sub <- flow_data %>%
         dplyr::filter(.data[[station_col]] == flow_station) %>%
-        dplyr::select(.data[[time_col]], !!flow_col := .data[[flow_col]])
+        dplyr::select(all_of(time_col), !!flow_col := all_of(flow_col))
       
       # Merge on time (inner join to get matching time points)
-      combined <- inner_join(sal_sub, flow_sub, by = time_col) %>% drop_na()
+      combined <- inner_join(sal_sub, flow_sub, by = time_col) %>% tidyr::drop_na()
+      
+      # Get model name
+      model_name <- paste(
+        stringr::str_replace_all(sal_station, "_", ""),
+        stringr::str_replace_all(flow_station, "_", ""),
+        sep = "_"
+      )
+      
+      # Store data_lookup table
+      if (nrow(combined) > 0) {
+        data_lookup[[model_name]] <- combined
+      }
       
       # Check if there are enough data points (at least 4 for NLS)
       if (nrow(combined) >= 4) {
@@ -346,50 +358,54 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
           ),
           silent = TRUE
         )
-        results_data[[paste(str_replace_all(sal_station, "_", ""), str_replace_all(flow_station, "_", ""), sep = "_")]] <- combined
+        results[[model_name]] <- combined
         # Store the summary if fit succeeded, otherwise store an error message
         if (!inherits(fit, "try-error")) {
-          results[[paste(str_replace_all(sal_station, "_", ""), str_replace_all(flow_station, "_", ""), sep = "_")]] <- summary(fit)
+          results[[model_name]] <- summary(fit)
         } else {
-          results[[paste(str_replace_all(sal_station, "_", ""), str_replace_all(flow_station, "_", ""), sep = "_")]] <- paste("Fit failed for salinity station", sal_station, "and flow station", flow_station, ":", attr(fit, "condition")$message)
+          results[[model_name]] <- paste("Fit failed for salinity station", sal_station, "and flow station", flow_station, ":", attr(fit, "condition")$message)
         }
       } else {
-        results[[paste(str_replace_all(sal_station, "_", ""), str_replace_all(flow_station, "_", ""), sep = "_")]] <- paste("Insufficient data for salinity station", sal_station, "and flow station", flow_station, "(only", nrow(combined), "matching time points)")
+        results[[model_name]] <- paste("Insufficient data for salinity station", sal_station, "and flow station", flow_station, "(only", nrow(combined), "matching time points)")
       }
     }
   }
   # Print the list of all model names (combinations) that were attempted
   print("Models attempted (salinityStation_flowStation):")
   print(names(results))
-  assign("Model_data", results_data, envir = .GlobalEnv)
-  return(results)
+  #assign("Model_data", results_data, envir = .GlobalEnv)
+  return(list(models = results,
+              data_lookup = data_lookup))
 }
 #
 # Remove unneeded models:
 remove_models <- function(results, models_to_remove) {
+  #
+  stopifnot(is.list(results), all(c("models", "data_lookup") %in% names(results)))
   # Filter the results list to remove specified models
-  filtered_results <- results[!names(results) %in% models_to_remove]
+  keep <- !names(results$models) %in% models_to_remove
   
   # If Model_data exists in the global environment, filter it as well
-  if (exists("Model_data", envir = .GlobalEnv)) {
-    Model_data <- get("Model_data", envir = .GlobalEnv)
-    Model_data <- Model_data[!names(Model_data) %in% models_to_remove]
-    assign("Model_data", Model_data, envir = .GlobalEnv)
-  }
-  
-  return(filtered_results)
+  list(
+    models      = results$models[keep],
+    data_lookup = results$data_lookup[names(results$data_lookup) %in% names(results$models)[keep]]
+  )
 }
 #
 #
 # Calculate flow at specified salinity (from HSM curves)
-flow_at_salinity_hyp2 <- function(results, target_sal) {
+flow_at_salinity_hyp2 <- function(results, target_sal, data_lookup) {
   # results: output from fit_salinity_flow_models (list of summaries or error messages)
   # target_sal: target salinity value
+  # data_lookup: named list of data frames used in each model
+  #              must include columns: salinity, flow
   
   # Initialize a data frame to store results
   flow_results <- data.frame(
     salinity_station = character(),
     flow_station = character(),
+    flow_min         = numeric(),
+    flow_max         = numeric(),
     flow_at_target = numeric(),
     status = character(),
     stringsAsFactors = FALSE
@@ -402,6 +418,13 @@ flow_at_salinity_hyp2 <- function(results, target_sal) {
     parts <- str_split(model_name, "_", n = 2)[[1]]
     sal_station_clean <- parts[1]
     flow_station_clean <- parts[2]
+    
+    flow_min <- NA
+    flow_max <- NA
+    flow_val <- NA
+    status   <- "Failed fit"
+    #
+    # Successful fit ----
     if (inherits(result, "summary.nls")) {
       # Successful fit: extract coefficients and compute flow
       p <- coef(result)
@@ -410,24 +433,42 @@ flow_at_salinity_hyp2 <- function(results, target_sal) {
       b  <- p[3]
       
       if (target_sal <= y0) {
-        flow_val <- NA
-        status <- "Target salinity <= y0; flow cannot be solved"
+        status <- "Target salinity <= y0"
       } else {
         flow_val <- (a * b) / (target_sal - y0) - b
         status <- "Success"
       }
-    } else {
-      # Failed fit or insufficient data
-      flow_val <- NA
-      status <- result  # Use the error message as status
     }
-    # Append to results data frame
-    flow_results <- rbind(flow_results, data.frame(
-      salinity_station = sal_station_clean,
-      flow_station = flow_station_clean,
-      flow_at_target = flow_val,
-      status = status,
-      stringsAsFactors = FALSE
+    #
+    # All flow in ideal salinity range ----
+    if (is.na(flow_val) && model_name %in% names(data_lookup)) {
+      dat <- data_lookup[[model_name]]
+      
+      if (target_sal <= min(dat$Mean_Salinity, na.rm = TRUE) ||
+          target_sal >= max(dat$Mean_Salinity, na.rm = TRUE)) {
+        
+        flow_min <- min(dat$Mean_Flow, na.rm = TRUE)
+        flow_max <- max(dat$Mean_Flow, na.rm = TRUE)
+        status   <- "All flows within target range; returning flow bounds"
+        
+        if(target_sal <= min(dat$Mean_Salinity, na.rm = TRUE)){
+          flow_val <- flow_max
+        } else if(target_sal >= max(dat$Mean_Salinity, na.rm = TRUE)){
+          flow_val <- flow_min
+        }
+      }
+    }
+    # Append to results data frame ----
+    flow_results <- rbind(
+      flow_results, 
+      data.frame(
+        salinity_station = sal_station_clean,
+        flow_station = flow_station_clean,
+        flow_min = flow_min,
+        flow_max = flow_max,
+        flow_at_target = flow_val,
+        status = status,
+        stringsAsFactors = FALSE
     ))
   }
   return(flow_results)
@@ -1020,18 +1061,22 @@ flow_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, colName
 #
 #
 # Plot interp flow output
-plot_flow_interp <- function(results_data, Site_Grid, colName, simplify_tolerance = 0){
-  special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
+plot_flow_interp <- function(results_data, colName, simplify_tolerance = 0){
+  # Subset 
+  special_cols <- c("Latitude", "Longitude", "geometry")
+  plot_cols <- c("geometry", colName)
+  df_filtered <- results_data[, plot_cols, drop = FALSE]
+  
   
   if (simplify_tolerance > 0) {
-    df_filtered <- st_simplify(results_data, dTolerance = simplify_tolerance, preserveTopology = TRUE)
+    df_filtered <- st_simplify(df_filtered, dTolerance = simplify_tolerance, preserveTopology = FLASE)
   } else {
-    df_filtered <- results_data
+    df_filtered <- df_filtered
   }
   # Define base theme for reuse (avoids redundancy)
   base_theme <- theme_classic() +
     theme(panel.border = element_rect(color = "black", fill = NA), 
-          axis.text = element_text(size = 16),
+          axis.text = element_text(size = 12),
           plot.margin = unit(c(0,0,0,0), "cm"), 
           plot.title = element_text(margin = margin(b = 5)), 
           plot.caption = element_text(face = "italic", size = 9))
@@ -1054,9 +1099,7 @@ save_flow_interp_output <- function(output_data, fileName){
     if(result == "No"){
       message("Shapefile and summary will not be saved.")
     } else {
-      #### ---------------------------------------------------------
-      #### Save shape file 
-      #### --------------------------------------------------------
+      #### Save shape file ----
       #Shape file
       shape_file <- final_output_data
       shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
@@ -1070,9 +1113,7 @@ save_flow_interp_output <- function(output_data, fileName){
           "- ", nrow(final_output_data), " features saved with ", ncol(final_output_data)-1, "fields")
       #
       #
-      #### ---------------------------------------------------------
-      #### Save model data 
-      #### --------------------------------------------------------
+      #### Save model data ----
       # Excel data
       model_data <- as.data.frame(shape_file) %>% dplyr::select(-geometry)
       data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
@@ -1090,9 +1131,7 @@ save_flow_interp_output <- function(output_data, fileName){
           "File: ", data_path, "\n")
       #
       #
-      #### ---------------------------------------------------------
-      #### Add Interpolation Summary info 
-      #### --------------------------------------------------------
+      #### Add Interpolation Summary info ----
       model_setup_path <- paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx")
       # Summary info
       sheet_names <- excel_sheets(model_setup_path)
@@ -1125,9 +1164,7 @@ save_flow_interp_output <- function(output_data, fileName){
       cat("Summary information was saved within:", sheet_name, "\n")
       #
       #
-      #### -----------------------------------------------------------
-      #### Add Flow_stations sheet 
-      #### -----------------------------------------------------------
+      #### Add Flow_stations sheet ----
       flow_sheet <- "Flow_stations"
       
       # Load again (safe; but avoids overwriting earlier)

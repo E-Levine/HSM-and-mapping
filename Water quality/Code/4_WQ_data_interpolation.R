@@ -186,3 +186,57 @@ WQ$save_model_output(final_data, threshold_val = 20, Month_range = c(5, 10))
 #
 #If continuing to work, good practice to remove objects to make sure correct data is used:
 rm(final_data, plotting, ok_data, tps_data, nn_data, idw_data, Site_data_spdf, WQ_summ, list = ls(pattern = "result_"))
+
+####Save large files####
+#
+##Get Site area  
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
+Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
+idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
+ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
+#Run join, run final
+#
+#library(qs)
+#final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"),
+#                    nthreads = parallel::detectCores())
+write_csv_chunks <- function(
+    df,
+    out_dir,
+    prefix = "data",
+    chunk_size = 1e6
+) {
+  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  n <- nrow(df)
+  idx <- ceiling(seq_len(n) / chunk_size)
+  
+  split_df <- split(df, idx)
+  
+  purrr::iwalk(split_df, function(x, i) {
+    readr::write_csv(
+      x,
+      file.path(out_dir, sprintf("%s_part_%s.csv", prefix, i))
+    )
+  })
+  
+  invisible(length(split_df))
+}
+#
+naming <- paste0(Param_name, "_", Param_name_2, "_", stat,
+                 "_", Start_year, "_", End_year)
+naming
+#
+temp_data <- st_drop_geometry(final_data$spatialData) %>% 
+  as.data.frame() %>%
+  dplyr::rename("Long_DD_X" = Long_DD_X_, "Lat_DD_Y" = Lat_DD_Y_M) %>%
+  dplyr::select(PGID, Lat_DD_Y, Long_DD_X, contains("idw"), contains("ok"), contains("ens"))
+head(temp_data)
+#
+write_csv_chunks(
+  df = temp_data,
+  out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                   #File name
+                   naming),
+  prefix = paste(naming)
+)
+#
