@@ -277,6 +277,36 @@ add_excel_columns_sf <- function(existing_sf,
   return(joined_sf)
 }
 #
+#Function to load multiple CSV files and join into one
+read_data_files_csv <- function(Site_Code,
+                                Version,
+                                data_subdir,  
+                                pattern = "\\.csv$",
+                                ...) {
+  # Set base path
+  base_path <- file.path(
+    paste0(Site_Code, "_", Version),
+    "Output",
+    "Data files",
+    data_subdir
+  )
+  # Get list of files to load
+  files <- list.files(
+    path = base_path,
+    pattern = pattern,
+    full.names = TRUE
+  )
+  
+  if (length(files) == 0) {
+    stop("No files found in: ", base_path)
+  }
+  # Read and join files
+  data.table::rbindlist(
+    lapply(files, data.table::fread, ...),
+    use.names = TRUE,
+    fill = TRUE
+  )
+}
 #
 #Function to average across specified columns (cols) and return only specified columms (keep_columns) with new aver co;l:
 row_average <- function(data,
@@ -423,7 +453,10 @@ assign_seagrass_scores <- function(shapefile_data) {
   new_names <- ifelse(grepl(column_name, names(data)), 
                       paste0(names(data), "SC"),
                       names(data))
+  #Make sure score is numeric column
   names(data) <- new_names
+  data <- data %>%
+    mutate(across(-PGID, ~ suppressWarnings(as.numeric(as.character(.)))))
   print(head(data))
   return(data)
 }
@@ -510,6 +543,7 @@ assign_salinity_scores <- function(shapefile_data, curve_table, type = "separate
   #Named vector for faster look up
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
+  
   #If ensemble, get average interpolated value
   if(type == "ensemble"){
     #Create a new data frame for averaged columns
@@ -537,14 +571,20 @@ assign_salinity_scores <- function(shapefile_data, curve_table, type = "separate
   ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
+    #Round data values
+    rounded_col <- round(data[[col]], 2)
     #Find corresponding values from the reference table
-    data[[col]] <- ifelse(data[[col]] %in% names(score_lookup),
-                          score_lookup[as.character(data[[col]])],
+    data[[col]] <- ifelse(rounded_col %in% names(score_lookup),
+                          score_lookup[as.character(rounded_col)],
                           0)
   }
   #
   ##Check for ranges and process:
   data <- process_ranges(data)
+  
+  # Make sure numeric
+  data <- data %>%
+    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
   #
   #Rename columns by note "_score"
   new_names <- names(data)  # start with current names
@@ -603,13 +643,19 @@ assign_sal_spawn_scores <- function(shapefile_data, curve_table, type = "separat
   ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
+    #Round data values
+    rounded_col <- round(data[[col]], 2)
+    
     #Find corresponding values from the reference table
-    data[[col]] <- ifelse(data[[col]] %in% names(score_lookup),
-                          score_lookup[as.character(data[[col]])],
+    data[[col]] <- ifelse(rounded_col %in% names(score_lookup),
+                          score_lookup[as.character(rounded_col)],
                           0)
   }
   ##Check for ranges and process:
   data <- process_ranges(data)
+  # Make sure numeric
+  data <- data %>%
+    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
   #
   #Rename columns by note "_score"
   new_names <- names(data)  # start with current names
@@ -622,7 +668,7 @@ assign_sal_spawn_scores <- function(shapefile_data, curve_table, type = "separat
   }
   
   names(data) <- new_names
-  #
+ #
   ##Output
   print(head(data))
   return(data)
@@ -670,14 +716,20 @@ assign_temperature_scores <- function(shapefile_data, curve_table, type = "separ
   ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
+    #Round data values
+    rounded_col <- round(data[[col]], 2)
     #Find corresponding values from the reference table
-    data[[col]] <- ifelse(data[[col]] %in% names(score_lookup),
-                          score_lookup[as.character(data[[col]])],
+    data[[col]] <- ifelse(rounded_col %in% names(score_lookup),
+                          score_lookup[as.character(rounded_col)],
                           0)
   }
   #
   ##Check for ranges and process:
   data <- process_ranges(data)
+  # Make sure numeric
+  data <- data %>%
+    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
+  #
   #
   #Rename columns by note "_score"
   new_names <- names(data)  # start with current names
@@ -690,6 +742,7 @@ assign_temperature_scores <- function(shapefile_data, curve_table, type = "separ
   }
   
   names(data) <- new_names
+
   ##Output
   print(head(data))
   return(data)
@@ -737,14 +790,20 @@ assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = 
   ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
+    #Round data values
+    rounded_col <- round(data[[col]], 2)
     #Find corresponding values from the reference table
-    data[[col]] <- ifelse(data[[col]] %in% names(score_lookup),
-                          score_lookup[as.character(data[[col]])],
+    data[[col]] <- ifelse(rounded_col %in% names(score_lookup),
+                          score_lookup[as.character(rounded_col)],
                           0)
   }
   #
   ##Check for ranges and process:
   data <- process_ranges(data)
+  # Make sure numeric
+  data <- data %>%
+    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
+  #
   #
   #Rename columns by note "_score"
   new_names <- names(data)  # start with current names
@@ -816,7 +875,6 @@ assign_threshold_scores <- function(shapefile_data, type = "separate") {
 ##Flow optimal scores
 assign_flow_scores <- function(shapefile_data, curve_table, col_pattern, type = c("separate", "ensemble")) {
   #
-  browser()
   type <- match.arg(type)
   #
   # Named vector for faster lookup
@@ -853,9 +911,11 @@ assign_flow_scores <- function(shapefile_data, curve_table, col_pattern, type = 
   ##Scoring of values:
   # Iterate over each identified column
   for (col in data_columns) {
+    #Round data values
+    rounded_col <- round(data[[col]], 2)
     #Find corresponding values from the reference table
-    data[[col]] <- ifelse(data[[col]] %in% names(score_lookup),
-                          score_lookup[as.character(data[[col]])],
+    data[[col]] <- ifelse(rounded_col %in% names(score_lookup),
+                          score_lookup[as.character(rounded_col)],
                           0)
   }
   #
