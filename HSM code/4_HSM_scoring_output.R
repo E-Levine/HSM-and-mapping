@@ -1,4 +1,4 @@
-###Code for HSM scoring and output
+###Code for HSM scoring and output - averaging then score of average
 ##Requires shapefile of area with data layers applied
 ##Currently working with files output from Arc
 #
@@ -11,9 +11,12 @@ if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
                sf, raster, terra, fst,
                leaflet, tmap, openxlsx, writexl,
+               ggrepel, extrafont,
                classInt, BAMMtools, #Jenks
                install = TRUE) #Mapping and figures
-#
+#Run once to get Arial:
+#font_import(prompt = FALSE)
+loadfonts(device = "win")
 #
 #source("HSM code/Functions/HSM_Creation_Functions.R")
 HSMfunc <- new.env()
@@ -48,6 +51,11 @@ SS_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
   join_type = "left"
 )
 #
+SS_v1_salMonMean <- HSMfunc$read_data_files_csv(Site_Code, 
+                                                Version, 
+                                                data_subdir = "Salinity_Monthly_Means_2020_2024") %>%
+  as.data.frame()
+#
 SS_v1_data <- left_join(SS_v1_data, 
           HSMfunc$row_average(
             data = SS_v1_salMonMean,
@@ -67,6 +75,7 @@ SS_v1_data <- left_join(SS_v1_data,
                           ),
                         by = "PGID"))
 #
+#
 # Annual minimum salinity
 SS_v1_salMonMin <- HSMfunc$add_excel_columns_sf(
   existing_sf = SS_v1_data,
@@ -77,6 +86,12 @@ SS_v1_salMonMin <- HSMfunc$add_excel_columns_sf(
   join_type = "left"
 )
 #
+SS_v1_salMonMin <- HSMfunc$read_data_files_csv(Site_Code, 
+                                                Version, 
+                                                data_subdir = "Salinity_Monthly_Mins_2020_2024") %>%
+  as.data.frame()
+
+#
 (SS_v1_data <- left_join(SS_v1_data,
                          HSMfunc$row_average(
                            data = SS_v1_salMonMin,
@@ -85,6 +100,7 @@ SS_v1_salMonMin <- HSMfunc$add_excel_columns_sf(
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
+#
 #
 # May-Oct range salinity
 SS_v1_salMonRange <- HSMfunc$add_excel_columns_sf(
@@ -95,6 +111,11 @@ SS_v1_salMonRange <- HSMfunc$add_excel_columns_sf(
   sheet = 1,
   join_type = "left"
 )
+#
+SS_v1_salMonRange <- HSMfunc$read_data_files_csv(Site_Code, 
+                                               Version, 
+                                               data_subdir = "Salinity_Monthly_Range_2020_2024") %>%
+  as.data.frame()
 #
 # Average min max score within each month:
 SS_v1_salMonRange <- SS_v1_salMonRange %>%
@@ -116,6 +137,7 @@ SS_v1_salMonRange <- SS_v1_salMonRange %>%
                          ),
                          by = "PGID"))
 #
+#
 # Annual mean temperature
 SS_v1_temMonMean <- HSMfunc$add_excel_columns_sf(
   existing_sf = SS_v1_data,
@@ -126,14 +148,19 @@ SS_v1_temMonMean <- HSMfunc$add_excel_columns_sf(
   join_type = "left"
 )
 #
-SS_v1_data <- left_join(SS_v1_data, 
+SS_v1_temMonMean <- HSMfunc$read_data_files_csv(Site_Code, 
+                                                 Version, 
+                                                 data_subdir = "Temperature, water_Monthly_Means_2020_2024") %>%
+  as.data.frame()
+#
+(SS_v1_data <- left_join(SS_v1_data, 
                         HSMfunc$row_average(
                           data = SS_v1_temMonMean,
                           cols = contains("ens"),
                           new_column_name = "TAnnueE",
                           keep_columns = c("PGID")
                         ),
-                        by = "PGID")
+                        by = "PGID"))
 #
 # May-Oct mean temperature
 (SS_v1_data <- left_join(SS_v1_data,
@@ -145,6 +172,7 @@ SS_v1_data <- left_join(SS_v1_data,
                          ),
                          by = "PGID"))
 #
+#
 # Annual T > 35 temperature
 SS_v1_temMonT35 <- HSMfunc$add_excel_columns_sf(
   existing_sf = SS_v1_data,
@@ -155,14 +183,20 @@ SS_v1_temMonT35 <- HSMfunc$add_excel_columns_sf(
   join_type = "left"
 )
 #
-SS_v1_data <- left_join(SS_v1_data, 
+SS_v1_temMonT35 <- HSMfunc$read_data_files_csv(Site_Code, 
+                                                Version, 
+                                                data_subdir = "Temperature, water_Monthly_ThresholdA35_2020_2024") %>%
+  as.data.frame()
+#
+(SS_v1_data <- left_join(SS_v1_data, 
                         HSMfunc$row_average(
                           data = SS_v1_temMonT35,
-                          cols = contains("Threshold"),
+                          cols = contains("ens"),
                           new_column_name = "TAnnueT35",
                           keep_columns = c("PGID")
                         ),
-                        by = "PGID")
+                        by = "PGID"))
+#
 #
 # May-Oct T < 20 temperature
 SS_v1_temMonB20 <- HSMfunc$add_excel_columns_sf(
@@ -173,6 +207,12 @@ SS_v1_temMonB20 <- HSMfunc$add_excel_columns_sf(
   sheet = 1,
   join_type = "left"
 )
+#
+SS_v1_temMonB20 <- HSMfunc$read_data_files_csv(Site_Code, 
+                                               Version, 
+                                               data_subdir = "Temperature, water_Monthly_ThresholdB20_2020_2024") %>%
+  as.data.frame()
+#
 #SS_v1_temMonB20$ens_Jun_Threshold <- as.numeric(SS_v1_temMonB20$ens_Jun_Threshold)
 #SS_v1_temMonB20$ens_Sep_Threshold <- as.numeric(SS_v1_temMonB20$ens_Sep_Threshold)
 #SS_v1_temMonB20$ens_Oct_Threshold <- as.numeric(SS_v1_temMonB20$ens_Oct_Threshold)
@@ -180,13 +220,13 @@ SS_v1_temMonB20 <- HSMfunc$add_excel_columns_sf(
 SS_v1_data <- left_join(SS_v1_data, 
                         HSMfunc$row_average(
                           data = SS_v1_temMonB20,
-                          cols = contains("Threshold"),
+                          cols = contains("ens"),
                           new_column_name = "TSpwneT20",
                           keep_columns = c("PGID")
                         ),
                         by = "PGID")
 #
-# OUtlier1 flow
+# Outlier1 flow
 (SS_v1_outlier1 <- HSMfunc$add_excel_columns_sf(
   existing_sf = SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_outlier1.xlsx"),
@@ -195,23 +235,13 @@ SS_v1_data <- left_join(SS_v1_data,
   sheet = 1,
   join_type = "left"
 ))
-## Flow rework:
-library(data.table)
-
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_outlier1"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_outlier1 <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                        flow_temp)
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnui1), 
+SS_v1_outlier1 <- HSMfunc$read_data_files_csv(Site_Code, 
+                                              Version, 
+                                              data_subdir = "SS_flow_outlier1") %>%
+  as.data.frame()
+#
+(SS_v1_data <- left_join(SS_v1_data, 
                         HSMfunc$row_average(
                           data = SS_v1_outlier1,
                           cols = contains("Out"),
@@ -229,21 +259,13 @@ SS_v1_outlier1 <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   sheet = 1,
   join_type = "left"
 ))
-## Flow not reading in properly:
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_outlier2"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_outlier2 <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                            flow_temp)
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnui2), 
+SS_v1_outlier2 <- HSMfunc$read_data_files_csv(Site_Code, 
+                                              Version, 
+                                              data_subdir = "SS_flow_outlier2") %>%
+  as.data.frame()
+#
+(SS_v1_data <- left_join(SS_v1_data, 
                          HSMfunc$row_average(
                            data = SS_v1_outlier2,
                            cols = contains("Out"),
@@ -262,20 +284,12 @@ SS_v1_outlier2 <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   join_type = "left"
 ))
 #
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_optimal_adult"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_adop <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                            flow_temp)
+SS_v1_adop <- HSMfunc$read_data_files_csv(Site_Code, 
+                                              Version, 
+                                              data_subdir = "SS_flow_optimal_adult") %>%
+  as.data.frame()
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnuiAO), 
+(SS_v1_data <- left_join(SS_v1_data, 
                          HSMfunc$row_average(
                            data = SS_v1_adop,
                            cols = contains("Optimal"),
@@ -283,6 +297,7 @@ SS_v1_adop <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
+#
 # Larvae optimal flow
 (SS_v1_laop <- HSMfunc$add_excel_columns_sf(
   existing_sf = SS_v1_data,
@@ -293,20 +308,12 @@ SS_v1_adop <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   join_type = "left"
 ))
 #
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_optimal_larvae"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_laop <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                        flow_temp)
+SS_v1_laop <- HSMfunc$read_data_files_csv(Site_Code, 
+                                          Version, 
+                                          data_subdir = "SS_flow_optimal_larvae") %>%
+  as.data.frame()
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnuiLO), 
+(SS_v1_data <- left_join(SS_v1_data, 
                          HSMfunc$row_average(
                            data = SS_v1_laop,
                            cols = contains("Optimal"),
@@ -325,20 +332,12 @@ SS_v1_laop <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   join_type = "left"
 ))
 #
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_super_adult"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_adsup <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                        flow_temp)
+SS_v1_adsup <- HSMfunc$read_data_files_csv(Site_Code, 
+                                          Version, 
+                                          data_subdir = "SS_flow_super_adult") %>%
+  as.data.frame()
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnuiAP), 
+(SS_v1_data <- left_join(SS_v1_data, 
                          HSMfunc$row_average(
                            data = SS_v1_adsup,
                            cols = contains("Days"),
@@ -357,20 +356,12 @@ SS_v1_adsup <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   join_type = "left"
 ))
 #
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_sub_adult"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_adsub <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                         flow_temp)
+SS_v1_adsub <- HSMfunc$read_data_files_csv(Site_Code, 
+                                           Version, 
+                                           data_subdir = "SS_flow_sub_adult") %>%
+  as.data.frame()
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnuiAB), 
+(SS_v1_data <- left_join(SS_v1_data, 
                          HSMfunc$row_average(
                            data = SS_v1_adsub,
                            cols = contains("Days"),
@@ -389,20 +380,12 @@ SS_v1_adsub <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   join_type = "left"
 ))
 #
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_super_larvae"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_lasup <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                         flow_temp)
+SS_v1_lasup <- HSMfunc$read_data_files_csv(Site_Code, 
+                                           Version, 
+                                           data_subdir = "SS_flow_super_larvae") %>%
+  as.data.frame()
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnuiLP), 
+(SS_v1_data <- left_join(SS_v1_data, 
                          HSMfunc$row_average(
                            data = SS_v1_lasup,
                            cols = contains("Days"),
@@ -421,20 +404,12 @@ SS_v1_lasup <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X),
   join_type = "left"
 ))
 #
-files <- list.files(
-  paste0(Site_Code,"_",Version,"/Output/Data files/SS_flow_sub_larvae"),
-  pattern = "\\.csv$",
-  full.names = TRUE
-)
-flow_temp <- data.table::rbindlist(
-  lapply(files, data.table::fread),
-  use.names = TRUE,
-  fill = TRUE
-)
-SS_v1_lasub <- left_join(SS_v1_data %>% dplyr::select(PGID:Long_DD_X), 
-                         flow_temp)
+SS_v1_lasub <- HSMfunc$read_data_files_csv(Site_Code, 
+                                           Version, 
+                                           data_subdir = "SS_flow_sub_larvae") %>%
+  as.data.frame()
 #
-(SS_v1_data <- left_join(SS_v1_data %>% dplyr::select(-FAnnuiLB), 
+(SS_v1_data <- left_join(SS_v1_data, 
                          HSMfunc$row_average(
                            data = SS_v1_lasub,
                            cols = contains("Days"),
@@ -463,6 +438,9 @@ Oybuffer_scores <- HSMfunc$assign_oybuffer_scores(temp)
 #
 #
 ##Seagrass scores
+# Add in Discontinous option
+Seagrass <- rbind(Seagrass,
+      c(0.1, "Discontinuous"))
 Seagrass_scores <- HSMfunc$assign_seagrass_scores(temp)
 #
 #
@@ -511,6 +489,22 @@ Flow_scores <- left_join(Optimal_flow_t, st_drop_geometry(Above_flow_t)) %>%
 #
 #
 #
+# Figure formatting ----
+#
+basetheme <- theme_bw()+
+  theme(axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"), 
+        axis.text = element_text(size = 11, family = "Arial"), 
+        axis.text.x = element_text(margin = unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+        axis.text.y = element_text(margin = unit(c(0, 0.25, 0, 0), "cm")),
+        axis.ticks = element_line(color = "black", linewidth = 0.1),
+        axis.ticks.length = unit(-0.15, "cm"),
+        panel.grid = element_blank(),
+        panel.border = element_blank(), 
+        axis.line = element_line(color = "black", linewidth = 0.1))
+
+#
+#
+#
 # Model wrap-up ----
 ###Add scores back to data
 assign(paste0(Site_Code, "_", Version, "_scores_data"), HSMfunc$join_score_dataframes(temp))
@@ -548,8 +542,14 @@ HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>% st_drop_geom
 breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
 #Determine natural Jenks breaks (thirds)
 set.seed(54321)
-vals <- sample(HSM_data$HSM, min(20000, length(HSM_data$HSM)))
+vals <- sample(HSM_data$HSM, min(20000, length(HSM_data$HSM))) #Sample then calculate breaks
 jenks_breaks <- classInt::classIntervals(vals, n = 3, style = "jenks")$brks#getJenksBreaks(var = HSM_data$HSM, k = 4)
+#Clean breaks then make sure they cover full data range:
+jenks_breaks <- sort(unique(
+  signif(jenks_breaks, 6)
+))
+jenks_breaks[c(1, length(jenks_breaks))] <-
+  range(HSM_data$HSM, na.rm = TRUE)
 # Assign groups using cut()
 HSM_data_grps <- HSM_data %>%
   mutate(
@@ -609,17 +609,34 @@ summary(HSM_data_grps$HSMgrp)
 summary(HSM_data_grps$HSMgyr)
 summary(HSM_data_grps$HSMjb)
 #Jenks breaks summary:
-levels(cut(HSM_data$HSM, breaks = jenks_breaks, include.lowest = TRUE))
-jenks.tests(classIntervals(HSM_data$HSM, n = 3, style = "fixed", fixedBreaks = jenks_breaks))
+table(
+  cut(HSM_data$HSM, breaks = jenks_breaks, include.lowest = TRUE),
+  useNA = "ifany"
+)
+jenks.tests(classIntervals(HSM_data$HSM, style = "fixed", fixedBreaks = jenks_breaks))
 #
-hist(HSM_data$HSM, col = "gray90", main = "Jenks Breakpoints Overlay", xlab = "HSM score")
-abline(v = jenks_breaks, col = "red", lwd = 2, lty = 2)
-text(x = jenks_breaks, y = 5, labels = round(jenks_breaks, 2), pos = 4, col = "red")
+#hist(HSM_data$HSM, col = "gray90", main = "Jenks Breakpoints Overlay", xlab = "HSM score")
+#abline(v = jenks_breaks, col = "red", lwd = 2, lty = 2)
+#text(x = jenks_breaks, y = 59500, labels = round(jenks_breaks, 2), pos = 4, col = "red", cex = 1.15)
+ggplot(HSM_data, aes(x = HSM)) +
+  geom_histogram(fill = "gray90", color = "black", bins = 30) +
+  geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)), 
+                  aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
+                  nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                  segment.color = NA)+
+  #annotate("text", x = jenks_breaks, y = 0, label = round(jenks_breaks, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
+  labs(
+    title = "Jenks Breakpoints Overlay",
+    x = "HSM score",
+    y = "Count"
+  ) +
+  basetheme + scale_y_continuous(expand = c(0,0))
 ### SAVE PLOT: SiteCode_version_HSMjb_hist - ~850 * auto
 #
 summary(HSM_data_grps$HSM_q4)
 #
-temp_cuts <- temp %>%
+(temp_cuts <- HSM_data_grps %>%
   group_by(HSM_q4) %>%
   summarise(
     n = n(),
@@ -627,21 +644,24 @@ temp_cuts <- temp %>%
     max = max(HSM, na.rm = TRUE),
     mean = mean(HSM, na.rm = TRUE),
     .groups = "drop"
-  )
+  ))
 #
 ggplot(HSM_data, aes(HSM)) +
   geom_histogram(bins = 40, fill = "grey80", color = "grey40") +
-  geom_vline(
-    data = temp_cuts,
-    aes(xintercept = min),
-    linetype = "dashed"
-  ) +
+  geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
+  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)), 
+                           aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
+                           nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                           segment.color = NA)+
+  #annotate("text", x = temp_cuts$min, y = 0, label = round(temp_cuts$min, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
   labs(
-    title = "HSM Distribution with Quartile Bins",
-    x = "HSM",
+    title = "Quartile Bins Overlay",
+    x = "HSM score",
     y = "Count"
   ) +
-  theme_minimal()
+  basetheme + scale_y_continuous(expand = c(0,0))
+#
+### SAVE PLOT: SiteCode_version_HSMq4_hist - ~850 * auto
 #
 HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grps) %>% st_zm() %>% 
   dplyr::select(any_of(c("PGID", "Lat_DD_Y", "Long_DD_X", "State_Ref", "Ref_Region", "County", "Section")), contains("HSM"))
