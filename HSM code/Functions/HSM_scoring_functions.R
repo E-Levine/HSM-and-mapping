@@ -1199,11 +1199,18 @@ plot_model_map <- function(sf_data,
   ## ---- base theme ----
   base_theme <- ggplot2::theme_classic() +
     ggplot2::theme(
-      panel.border = ggplot2::element_rect(color = "black", fill = NA),
-      axis.text = ggplot2::element_text(size = 16),
+      axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"),
+      axis.text = ggplot2::element_text(size = 12, family = "Arial", color = "black"),
+      axis.text.x = element_text(margin = unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+      axis.text.y = element_text(margin = unit(c(0, 0.25, 0, 0), "cm")),
+      axis.ticks = element_line(color = "black", linewidth = 0.1),
+      axis.ticks.length = unit(-0.15, "cm"),
+      panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
       plot.margin = grid::unit(c(0, 0, 0, 0), "cm"),
-      plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5)),
-      plot.caption = ggplot2::element_text(face = "italic", size = 9)
+      plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
+      plot.caption = ggplot2::element_text(face = "italic", size = 9),
+      legend.title = element_text(size = 12, family = "Arial"),
+      legend.text = element_text(size = 10, family = "Arial")
     )
   ## ---- plot ----
   base_plot <- ggplot2::ggplot() + base_theme

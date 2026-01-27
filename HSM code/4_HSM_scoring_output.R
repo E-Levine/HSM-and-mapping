@@ -675,5 +675,6 @@ HSM_spdf <- left_join(get(paste0(Site_Code,"_", Version, "_data")), HSM_data_grp
 ##Output data file and shape file: currently required temp and HSM_data_grps
 HSMfunc$save_model_output(output_type = "all")
 #
-HSMfunc$plot_model_map(HSM_spdf, "HSMgrp") #SiteCode_Version_HSM_scores
-HSMfunc$plot_model_map(HSM_spdf, "HSMjb") #SiteCode_Version_HSM_jb
+HSMfunc$plot_model_map(HSM_spdf, "HSMgrp") #SiteCode_Version_HSM_scores Output/Map files
+HSMfunc$plot_model_map(HSM_spdf, "HSMjb") #SiteCode_Version_HSM_jb Output/Map files
+HSMfunc$plot_model_map(HSM_spdf, "HSM_q4") #SiteCode_Version_HSM_q4 Output/Map files
