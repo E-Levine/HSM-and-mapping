@@ -47,11 +47,16 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area  
-Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area, Alt_Grid = Alt_Grid)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
 #Df of grid data
 Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
+#Check areas:
+ggpubr::ggarrange(
+  ggplot() + geom_sf(data = Site_area, fill = "#6699CC"),
+  ggplot() + geom_sf(data = Site_Grid, fill = "#6699CC")
+)
 #Map of stations
 ggplot()+
   geom_sf(data = Site_area, fill = "#6699CC")+
@@ -75,7 +80,7 @@ ggplot()+
 Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID, MGID), "Spatial")
 grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) 
 plot(grid) 
-#Get extent in meters to create raster: (raster only required for tps - skip to 83)
+#Get extent in meters to create raster: (raster only required for tps - skip to 93)
 Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
 #Create base raster using meters: 
 raster_t_m <- rast(resolution = c(20, 20),
@@ -107,11 +112,11 @@ if(color_temp == "warm") {
 #
 #library(lubridate)
 WQ_summ <- WQ$summarize_data(WQ_data %>% drop_na(Value), 
-                          Time_period = "YearMonth", Summ_method = "Threshold",
-                          Threshold_parameters = c("below", 20), Month_range = c(5, 10))
+                          Time_period = "YearMonth", Summ_method = "Means")
+                          #Threshold_parameters = c("below", 20), Month_range = c(5, 10))
 #
 head(WQ_summ)
-stat <- c("ThresholdB20") #used for file naming: Means, Mins, ThresholdA35, etc.
+stat <- c("Means") #used for file naming: Means, Mins, ThresholdA35, etc.
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,"_", stat,".xlsx"), format_headers = TRUE)
 #
 #
@@ -167,7 +172,7 @@ grouped_plot_interpolations(final_data$plots)
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
 final_data <- WQ$ensemble_weighting("ensemble", c("idw", "ok"), 
-                                 result_Threshold, weighting = c(0.50, 0.50), 
+                                 result_Mean, weighting = c(0.50, 0.50), 
                                  Site_Grid)
 #saveRDS(final_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.rds"))
 #rm(final_data); gc()
