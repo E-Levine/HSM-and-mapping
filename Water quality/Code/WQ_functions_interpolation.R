@@ -2424,6 +2424,33 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
   ##End summary output
 } 
 #
+# Function to save large data files as CSV files
+write_csv_chunks <- function(
+    df,
+    out_dir,
+    prefix = "data",
+    chunk_size = 1e6
+) {
+  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  n <- nrow(df)
+  idx <- ceiling(seq_len(n) / chunk_size)
+  
+  split_df <- split(df, idx)
+  
+  purrr::iwalk(split_df, function(x, i) {
+    readr::write_csv(
+      x,
+      file.path(out_dir, sprintf("%s_part_%s.csv", prefix, i))
+    )
+  })
+  
+  invisible(length(split_df))
+}
+#
+#
+#
+#
 #### Helpers ####
 #
 chunked_intersection <- function(polygons, site, chunk_size = 1000) {
