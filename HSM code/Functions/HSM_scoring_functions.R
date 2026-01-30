@@ -531,14 +531,36 @@ process_ranges <- function(df){
 #
 #
 ##Salinity scores
-assign_salinity_scores <- function(shapefile_data, curve_table, type = "separate") {
+assign_salinity_scores <- function(shapefile_data, 
+                                   curve_table, 
+                                   column_type = c("averaged", "individual"), 
+                                   type = "separate", 
+                                   individual_key = NULL) {
+  #
+  column_type <- match.arg(column_type)
   #
   table_name <- deparse(substitute(curve_table))
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
+  
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(-contains("spwn")) %>%
-    mutate_if(is.numeric, round, digits = 2) 
+  if(column_type == "averaged"){
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, starts_with("S")) %>% 
+      dplyr::select(PGID, matches(".*(o|i|e)$")) %>% 
+      dplyr::select(-contains("spwn")) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else if(column_type == "individual"){
+    if (is.null(individual_key)) {
+      stop("When column_type = 'individual', individual_key must be provided.")
+    }
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, contains(individual_key)) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else {
+    stop("column_type must be specified as previously 'averaged' or 'individual' columns")
+  }
+  
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster look up
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
@@ -604,14 +626,36 @@ assign_salinity_scores <- function(shapefile_data, curve_table, type = "separate
 }
 #
 ##Spawning period
-assign_sal_spawn_scores <- function(shapefile_data, curve_table, type = "separate") {
+assign_sal_spawn_scores <- function(shapefile_data, 
+                                    curve_table, 
+                                    column_type = c("averaged", "individual"), 
+                                    type = "separate",
+                                    individual_key = NULL) {
+  #
+  column_type <- match.arg(column_type)
   #
   table_name <- deparse(substitute(curve_table))
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
+  
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("S")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(PGID, contains("Spwn")) %>%
-    mutate_if(is.numeric, round, digits = 2)
+  if(column_type == "averaged"){
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, starts_with("S")) %>% 
+      dplyr::select(PGID, matches(".*(o|i|e)$")) %>% 
+      dplyr::select(PGID, contains("Spwn")) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else if(column_type == "individual"){
+    if (is.null(individual_key)) {
+      stop("When column_type = 'individual', individual_key must be provided.")
+    }
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, contains(individual_key)) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else {
+    stop("column_type must be specified as previously 'averaged' or 'individual' columns")
+  }
+  
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
@@ -676,14 +720,37 @@ assign_sal_spawn_scores <- function(shapefile_data, curve_table, type = "separat
 #
 #
 ##Temperature scores
-assign_temperature_scores <- function(shapefile_data, curve_table, type = "separate") {
+assign_temperature_scores <- function(shapefile_data, 
+                                      curve_table, 
+                                      column_type = c("averaged", "individual"), 
+                                      type = "separate",
+                                      individual_key = NULL) {
+  #
+  column_type <- match.arg(column_type)
   #
   table_name <- deparse(substitute(curve_table))
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
+  
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(-matches(".*Spwn.*")) %>% dplyr::select(-matches("T[AB]\\d{1,3}")) %>%
-    mutate_if(is.numeric, round, digits = 2)
+  if(column_type == "averaged"){
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, starts_with("T")) %>% 
+      dplyr::select(PGID, matches(".*(o|i|e)$")) %>% 
+      dplyr::select(-matches(".*Spwn.*")) %>% 
+      dplyr::select(-matches("T[AB]\\d{1,3}")) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else if(column_type == "individual"){
+    if (is.null(individual_key)) {
+      stop("When column_type = 'individual', individual_key must be provided.")
+    }
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, contains(individual_key)) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else {
+    stop("column_type must be specified as previously 'averaged' or 'individual' columns")
+  }
+  
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
@@ -749,15 +816,37 @@ assign_temperature_scores <- function(shapefile_data, curve_table, type = "separ
 }
 #
 #Spawning period
-assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = "separate") {
+assign_temperature_spawn_scores <- function(shapefile_data, 
+                                            curve_table, 
+                                            column_type = c("averaged", "individual"), 
+                                            type = "separate",
+                                            individual_key = NULL) {
+  #
+  column_type <- match.arg(column_type)
   #
   table_name <- deparse(substitute(curve_table))
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
+  
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% 
-    dplyr::select(PGID, contains("Spwn")) %>% dplyr::select(-contains("SpwnT")) %>% #Keep spwn but not spwn threshold
-    mutate_if(is.numeric, round, digits = 2)
+  if(column_type == "averaged"){
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, starts_with("T")) %>% 
+      dplyr::select(PGID, matches(".*(o|i|e)$")) %>% 
+      dplyr::select(PGID, contains("Spwn")) %>% 
+      dplyr::select(-contains("SpwnT")) %>% #Keep spwn but not spwn threshold
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else if(column_type == "individual"){
+    if (is.null(individual_key)) {
+      stop("When column_type = 'individual', individual_key must be provided.")
+    }
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, contains(individual_key)) %>%
+      dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  } else {
+    stop("column_type must be specified as previously 'averaged' or 'individual' columns")
+  }
+  
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
@@ -823,10 +912,27 @@ assign_temperature_spawn_scores <- function(shapefile_data, curve_table, type = 
 #
 #
 #Threshold period - number = proportion above.below the threshold - score is inverse of values
-assign_threshold_scores <- function(shapefile_data, type = "separate") {
+assign_threshold_scores <- function(shapefile_data, 
+                                    column_type = c("averaged", "individual"),
+                                    type = "separate",
+                                    individual_key = NULL) {
+  #
+  column_type <- match.arg(column_type)
   #  
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, matches(".*(o|i|e)T.\\d{1,3}$"))#dplyr::select(PGID, starts_with("T")) %>% dplyr::select(PGID, matches(".*(o|i|e)$")) %>% dplyr::select(PGID, matches(".*SpwnT.*|T[AB]\\d{1,3}"))
+  if(column_type == "averaged"){
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, matches(".*(o|i|e)T.\\d{1,3}$"))
+  } else if(column_type == "individual"){
+    if (is.null(individual_key)) {
+      stop("When column_type = 'individual', individual_key must be provided.")
+    }
+    data <- shapefile_data %>% 
+      dplyr::select(PGID, contains(individual_key)) 
+  } else {
+    stop("column_type must be specified as previously 'averaged' or 'individual' columns")
+  }
+  
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #
   #
@@ -873,15 +979,22 @@ assign_threshold_scores <- function(shapefile_data, type = "separate") {
 #
 #
 ##Flow optimal scores
-assign_flow_scores <- function(shapefile_data, curve_table, col_pattern, type = c("separate", "ensemble")) {
+assign_flow_scores <- function(shapefile_data, 
+                               curve_table, 
+                               col_pattern, 
+                               type = c("separate", "ensemble")) {
   #
   type <- match.arg(type)
   #
   # Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
+  
   #Identify columns of salinity, not spawning:
-  data <- shapefile_data %>% dplyr::select(PGID, starts_with("F")) %>% dplyr::select(PGID, matches(col_pattern)) %>%
-    mutate_if(is.numeric, round, digits = 2) 
+  data <- shapefile_data %>% 
+    dplyr::select(PGID, starts_with("F")) %>% 
+    dplyr::select(PGID, matches(col_pattern)) %>%
+    dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
+  
   data_columns <- setdiff(names(data), c("PGID", "geometry"))
   #Named vector for faster look up
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
