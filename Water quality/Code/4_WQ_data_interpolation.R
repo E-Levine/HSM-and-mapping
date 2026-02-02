@@ -112,11 +112,11 @@ if(color_temp == "warm") {
 #
 #library(lubridate)
 WQ_summ <- WQ$summarize_data(WQ_data %>% drop_na(Value), 
-                          Time_period = "YearMonth", Summ_method = "Means")
-                          #Threshold_parameters = c("below", 20), Month_range = c(5, 10))
+                          Time_period = "YearMonth", Summ_method = "Threshold",
+                          Threshold_parameters = c("below", 20), Month_range = c(5, 10)) # 
 #
 head(WQ_summ)
-stat <- c("Means") #used for file naming: Means, Mins, ThresholdA35, etc.
+stat <- c("ThresholdB20") #used for file naming: Means, Mins, ThresholdA35, etc.
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,"_", stat,".xlsx"), format_headers = TRUE)
 #
 #
@@ -154,11 +154,11 @@ ok_data <- WQ$perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Par
 #
 ####Joining and comparing####
 #
-#Outputs df of 'results_[Param]'; use Range_values = Yes if both Min and Max included
+#Outputs df of 'results_[Param]'; use RangeValues = Yes if both Min and Max included
 WQ$join_interpolation(Site_Grid_df)
 #Once idw, ok saved separately and join_interpolation finishes:
-#rm(idw_data, ok_data, Site_Grid_spdf, Site_data_spdf, Site_Grid_df); gc()
-#
+#rm(idw_data, ok_data, Site_data_spdf); gc()
+#rm(Site_Grid_spdf, Site_Grid_df) #Only rm if saving clean/reduced workspace and/or not continuing to work
 #
 #Generates plots for each model and output of all models together - run for each parameter
 plotting <- WQ$plot_interpolations2(result_Mean, Site_Grid, simplify_tolerance = 0.01)
@@ -172,14 +172,14 @@ grouped_plot_interpolations(final_data$plots)
 #weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
 #Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
 final_data <- WQ$ensemble_weighting("ensemble", c("idw", "ok"), 
-                                 result_Mean, weighting = c(0.50, 0.50), 
+                                 result_Threshold, weighting = c(0.50, 0.50), 
                                  Site_Grid)
 #saveRDS(final_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.rds"))
 #rm(final_data); gc()
 #final_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.rds"))
 #
 #Other option: qs and strip data from plots before saving:
-#library(qs); qsave(final_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"), preset = "fast")
+#library(qs); qsave(final_data$spatialData, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"), preset = "fast")
 #final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"))
 #
 ####Save model####
@@ -204,29 +204,6 @@ ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_n
 #library(qs)
 #final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"),
 #                    nthreads = parallel::detectCores())
-write_csv_chunks <- function(
-    df,
-    out_dir,
-    prefix = "data",
-    chunk_size = 1e6
-) {
-  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
-  
-  n <- nrow(df)
-  idx <- ceiling(seq_len(n) / chunk_size)
-  
-  split_df <- split(df, idx)
-  
-  purrr::iwalk(split_df, function(x, i) {
-    readr::write_csv(
-      x,
-      file.path(out_dir, sprintf("%s_part_%s.csv", prefix, i))
-    )
-  })
-  
-  invisible(length(split_df))
-}
-#
 naming <- paste0(Param_name, "_", Param_name_2, "_", stat,
                  "_", Start_year, "_", End_year)
 naming
@@ -237,11 +214,11 @@ temp_data <- st_drop_geometry(final_data$spatialData) %>%
   dplyr::select(PGID, Lat_DD_Y, Long_DD_X, contains("idw"), contains("ok"), contains("ens"))
 head(temp_data)
 #
-write_csv_chunks(
+WQ$write_csv_chunks(
   df = temp_data,
   out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                    #File name
                    naming),
   prefix = paste(naming)
 )
-#
+#rm(naming, temp_data, final_data, list = ls(pattern = "result_"), Site_data_spdf)
