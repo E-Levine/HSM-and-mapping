@@ -759,6 +759,75 @@ head(HSM_data_grps)
 #
 #### Summary and mapping ####
 #
+## Parameter summary:
+(Scoring_summ <- HSM_data %>% 
+  # Select columns
+  dplyr::select(PGID, contains("SC")) %>%
+  # Get summary info
+  summarise(across(where(is.numeric), list(
+    mean = \(x) mean(x, na.rm = TRUE),
+    sd = \(x) sd(x, na.rm = T),
+    min = \(x) min(x, na.rm = T),
+    max = \(x) max(x, na.rm = T)))) %>%
+  # Reformat summary data
+  pivot_longer(cols = everything(),
+               names_to = "Column", 
+               values_to = "Score") %>%
+  tidyr::separate(
+    Column,
+    into = c("Parameter", "SummaryStat"),
+    sep = "_"
+  ) %>%
+  pivot_wider(names_from = "SummaryStat", 
+              values_from = "Score"))
+#
+write_xlsx(Scoring_summ, 
+           paste0(Site_Code, "_", Version,"/Output/Scoring_summary_",Sys.Date(),".xlsx"), 
+           format_headers = TRUE)
+# 
+(Suit_summ <- HSM_data %>% 
+  dplyr::select(PGID, contains("SC")) %>%
+  # Reorganize data to add Suitability Group info:
+  pivot_longer(
+    cols = -PGID,
+    names_to = "Parameter",
+    values_to = "Value"
+  ) %>%
+  mutate(
+    Group = case_when(
+      Value >= 0.6 & Value <= 1   ~ "High",
+      Value >= 0.4 & Value < 0.6  ~ "Moderate",
+      Value >= 0   & Value < 0.4  ~ "Low",
+      TRUE                        ~ NA_character_
+    )
+  ) %>%
+  # Get counts and percentages per group*column
+  count(Parameter, Group) %>%
+  group_by(Parameter) %>%
+  mutate(
+    Percent = 100 * n / sum(n)
+  ) %>%
+  ungroup() %>%
+  # Nicer output format
+  pivot_wider(
+    names_from = Group,
+    values_from = c(n, Percent),
+    names_glue = "{Group}_{.value}",
+    values_fill = list(n = 0, Percent = 0)
+  ) %>%
+  dplyr::select(
+    Parameter,
+    High_n, High_Percent,
+    Moderate_n, Moderate_Percent,
+    Low_n, Low_Percent
+  ))
+#
+write_xlsx(Suit_summ, 
+           paste0(Site_Code, "_", Version,"/Output/Suitability_summary_",Sys.Date(),".xlsx"), 
+           format_headers = TRUE)
+#
+## Model summary:
+#
 summary(HSM_data_grps$HSMgrp)
 summary(HSM_data_grps$HSMgyr)
 summary(HSM_data_grps$HSMjb)
