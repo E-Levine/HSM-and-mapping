@@ -61,6 +61,49 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
                                                 data_subdir = "Salinity_Monthly_Means_2020_2024") %>%
   as.data.frame())
 #
+# Base data:
+ASalE <- SL_v1_salMonMean %>% 
+       st_drop_geometry() %>%
+       dplyr::select(PGID, contains("ens")) %>%
+       dplyr::rename_with(
+         ~ sub("^[^_]+_([^_]+)_.*$", "\\1", .x),
+         -PGID
+       ) 
+
+bind_rows(
+  # By month:
+  ASalE %>% 
+    # Summarize
+    summarise(across(where(is.numeric), list(
+      mean = \(x) mean(x, na.rm = TRUE),
+      sd = \(x) sd(x, na.rm = T),
+      min = \(x) min(x, na.rm = T),
+      max = \(x) max(x, na.rm = T)))) %>%
+    # Reformat summary data
+    pivot_longer(cols = everything(),
+                 names_to = "Month", 
+                 values_to = "Score") %>%
+    tidyr::separate(
+      Month,
+      into = c("AnnualESal", "SummaryStat"),
+      sep = "_"
+      ) %>%
+    pivot_wider(names_from = "SummaryStat", 
+                values_from = "Score"),
+  # Overall 
+  ASalE %>%
+    dplyr::select(-PGID) %>%
+    pivot_longer(
+      cols = everything(),
+      values_to = "Value"
+      ) %>%
+    summarise(
+      AnnualESal = "Overall",
+      mean = mean(Value, na.rm = TRUE),
+      sd   = sd(Value, na.rm = TRUE),
+      min  = min(Value, na.rm = TRUE),
+      max  = max(Value, na.rm = TRUE)))
+
 #
 #
 #
@@ -82,6 +125,48 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
                                                data_subdir = "Salinity_Monthly_Mins_2020_2024") %>%
   as.data.frame())
 #
+# Base data:
+ASalI <- SL_v1_salMonMin %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, contains("ens")) %>%
+  dplyr::rename_with(
+    ~ sub("^[^_]+_([^_]+)_.*$", "\\1", .x),
+    -PGID
+  ) 
+
+bind_rows(
+  # By month:
+  ASalI %>% 
+    # Summarize
+    summarise(across(where(is.numeric), list(
+      mean = \(x) mean(x, na.rm = TRUE),
+      sd = \(x) sd(x, na.rm = T),
+      min = \(x) min(x, na.rm = T),
+      max = \(x) max(x, na.rm = T)))) %>%
+    # Reformat summary data
+    pivot_longer(cols = everything(),
+                 names_to = "Month", 
+                 values_to = "Score") %>%
+    tidyr::separate(
+      Month,
+      into = c("AnnualISal", "SummaryStat"),
+      sep = "_"
+    ) %>%
+    pivot_wider(names_from = "SummaryStat", 
+                values_from = "Score"),
+  # Overall 
+  ASalI %>%
+    dplyr::select(-PGID) %>%
+    pivot_longer(
+      cols = everything(),
+      values_to = "Value"
+    ) %>%
+    summarise(
+      AnnualISal = "Overall",
+      mean = mean(Value, na.rm = TRUE),
+      sd   = sd(Value, na.rm = TRUE),
+      min  = min(Value, na.rm = TRUE),
+      max  = max(Value, na.rm = TRUE)))
 #
 #
 #
@@ -101,6 +186,52 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
                                                  data_subdir = "Salinity_Monthly_Range_2020_2024") %>%
   as.data.frame())
 #
+# Base data:
+ASalR <- SL_v1_salMonRange %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, contains("ens")) %>%
+  dplyr::rename_with(
+    ~ ifelse(
+      grepl("^[^_]+_[^_]+_[^_]+_.*$", .x),
+      sub("^[^_]+_([^_]+_[^_]+)_.*$", "\\1", .x),
+      sub("^[^_]+_", "", .x)
+    ),
+    -PGID
+  ) 
+
+bind_rows(
+  # By month:
+  ASalR %>% 
+    # Summarize
+    summarise(across(where(is.numeric), list(
+      mean = \(x) mean(x, na.rm = TRUE),
+      sd = \(x) sd(x, na.rm = T),
+      min = \(x) min(x, na.rm = T),
+      max = \(x) max(x, na.rm = T)))) %>%
+    # Reformat summary data
+    pivot_longer(cols = everything(),
+                 names_to = "Month", 
+                 values_to = "Score") %>%
+    tidyr::separate(
+      Month,
+      into = c("SpwnRSal", "SummaryStat"),
+      sep = "_(?=[^_]+$)"
+    ) %>%
+    pivot_wider(names_from = "SummaryStat", 
+                values_from = "Score"),
+  # Overall 
+  ASalR %>%
+    dplyr::select(-PGID) %>%
+    pivot_longer(
+      cols = everything(),
+      values_to = "Value"
+    ) %>%
+    summarise(
+      SpwnRSal = "Overall",
+      mean = mean(Value, na.rm = TRUE),
+      sd   = sd(Value, na.rm = TRUE),
+      min  = min(Value, na.rm = TRUE),
+      max  = max(Value, na.rm = TRUE)))
 #
 #
 #
@@ -120,6 +251,48 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
                                                 data_subdir = "Temperature, water_Monthly_Means_2020_2024") %>%
   as.data.frame())
 #
+# Base data:
+ATemE <- SL_v1_temMonMean %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, contains("ens")) %>%
+  dplyr::rename_with(
+    ~ sub("^[^_]+_([^_]+)_.*$", "\\1", .x),
+    -PGID
+  ) 
+
+bind_rows(
+  # By month:
+  ATemE %>% 
+    # Summarize
+    summarise(across(where(is.numeric), list(
+      mean = \(x) mean(x, na.rm = TRUE),
+      sd = \(x) sd(x, na.rm = T),
+      min = \(x) min(x, na.rm = T),
+      max = \(x) max(x, na.rm = T)))) %>%
+    # Reformat summary data
+    pivot_longer(cols = everything(),
+                 names_to = "Month", 
+                 values_to = "Score") %>%
+    tidyr::separate(
+      Month,
+      into = c("AnnualETem", "SummaryStat"),
+      sep = "_"
+    ) %>%
+    pivot_wider(names_from = "SummaryStat", 
+                values_from = "Score"),
+  # Overall 
+  ATemE %>%
+    dplyr::select(-PGID) %>%
+    pivot_longer(
+      cols = everything(),
+      values_to = "Value"
+    ) %>%
+    summarise(
+      AnnualETem = "Overall",
+      mean = mean(Value, na.rm = TRUE),
+      sd   = sd(Value, na.rm = TRUE),
+      min  = min(Value, na.rm = TRUE),
+      max  = max(Value, na.rm = TRUE)))
 #
 #
 #
@@ -139,6 +312,48 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
                                                data_subdir = "Temperature, water_Monthly_ThresholdA35_2020_2024") %>%
   as.data.frame())
 #
+# Base data:
+ATemA35 <- SL_v1_temMonT35 %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, contains("ens")) %>%
+  dplyr::rename_with(
+    ~ sub("^[^_]+_([^_]+)_.*$", "\\1", .x),
+    -PGID
+  ) 
+
+bind_rows(
+  # By month:
+  ATemA35 %>% 
+    # Summarize
+    summarise(across(where(is.numeric), list(
+      mean = \(x) mean(x, na.rm = TRUE),
+      sd = \(x) sd(x, na.rm = T),
+      min = \(x) min(x, na.rm = T),
+      max = \(x) max(x, na.rm = T)))) %>%
+    # Reformat summary data
+    pivot_longer(cols = everything(),
+                 names_to = "Month", 
+                 values_to = "Score") %>%
+    tidyr::separate(
+      Month,
+      into = c("AnnualA35Tem", "SummaryStat"),
+      sep = "_"
+    ) %>%
+    pivot_wider(names_from = "SummaryStat", 
+                values_from = "Score"),
+  # Overall 
+  ATemA35 %>%
+    dplyr::select(-PGID) %>%
+    pivot_longer(
+      cols = everything(),
+      values_to = "Value"
+    ) %>%
+    summarise(
+      AnnualA35Tem = "Overall",
+      mean = mean(Value, na.rm = TRUE),
+      sd   = sd(Value, na.rm = TRUE),
+      min  = min(Value, na.rm = TRUE),
+      max  = max(Value, na.rm = TRUE)))
 #
 #
 #
@@ -161,6 +376,48 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
 #SS_v1_temMonB20$ens_Sep_Threshold <- as.numeric(SS_v1_temMonB20$ens_Sep_Threshold)
 #SS_v1_temMonB20$ens_Oct_Threshold <- as.numeric(SS_v1_temMonB20$ens_Oct_Threshold)
 #
+# Base data:
+STemB20 <- SL_v1_temMonT35 %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, contains("ens")) %>%
+  dplyr::rename_with(
+    ~ sub("^[^_]+_([^_]+)_.*$", "\\1", .x),
+    -PGID
+  ) 
+
+bind_rows(
+  # By month:
+  STemB20 %>% 
+    # Summarize
+    summarise(across(where(is.numeric), list(
+      mean = \(x) mean(x, na.rm = TRUE),
+      sd = \(x) sd(x, na.rm = T),
+      min = \(x) min(x, na.rm = T),
+      max = \(x) max(x, na.rm = T)))) %>%
+    # Reformat summary data
+    pivot_longer(cols = everything(),
+                 names_to = "Month", 
+                 values_to = "Score") %>%
+    tidyr::separate(
+      Month,
+      into = c("SpwnB20Tem", "SummaryStat"),
+      sep = "_"
+    ) %>%
+    pivot_wider(names_from = "SummaryStat", 
+                values_from = "Score"),
+  # Overall 
+  STemB20 %>%
+    dplyr::select(-PGID) %>%
+    pivot_longer(
+      cols = everything(),
+      values_to = "Value"
+    ) %>%
+    summarise(
+      SpwnB20Tem = "Overall",
+      mean = mean(Value, na.rm = TRUE),
+      sd   = sd(Value, na.rm = TRUE),
+      min  = min(Value, na.rm = TRUE),
+      max  = max(Value, na.rm = TRUE)))
 #
 #
 #
@@ -639,7 +896,7 @@ Out2_flow_t <- HSMfunc$assign_flow_scores(SL_v1_data, `Outlier2 flow`, col_patte
 #
 basetheme <- theme_bw()+
   theme(axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"), 
-        axis.text = element_text(size = 11, family = "Arial"), 
+        axis.text = element_text(size = 11, family = "Arial", color = "black"), 
         axis.text.x = element_text(margin = unit(c(0.25, 0.5, 0, 0.5), "cm")), 
         axis.text.y = element_text(margin = unit(c(0, 0.25, 0, 0), "cm")),
         axis.ticks = element_line(color = "black", linewidth = 0.1),
@@ -828,6 +1085,19 @@ write_xlsx(Suit_summ,
 #
 ## Model summary:
 #
+ggplot(HSM_data, aes(x = round(HSM,1))) +
+  geom_histogram(fill = "gray50", color = "black", binwidth = 0.1, boundary = 0) +
+  labs(
+    title = "HSM scores",
+    x = "Suitability score",
+    y = "Count"
+  ) +
+  basetheme + 
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0, 1))+
+  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))
+### SAVE PLOT: SiteCode_version_HSMscores_hist - ~850 * auto
+#
 summary(HSM_data_grps$HSMgrp)
 summary(HSM_data_grps$HSMgyr)
 summary(HSM_data_grps$HSMjb)
@@ -842,9 +1112,9 @@ jenks.tests(classIntervals(HSM_data$HSM, style = "fixed", fixedBreaks = jenks_br
 #abline(v = jenks_breaks, col = "red", lwd = 2, lty = 2)
 #text(x = jenks_breaks, y = 59500, labels = round(jenks_breaks, 2), pos = 4, col = "red", cex = 1.15)
 ggplot(HSM_data, aes(x = HSM)) +
-  geom_histogram(fill = "gray90", color = "black", bins = 30) +
+  geom_histogram(fill = "gray50", color = "black", bins = 30, boundary = 0) +
   geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)), 
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-15000), 
                            aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
@@ -854,7 +1124,10 @@ ggplot(HSM_data, aes(x = HSM)) +
     x = "HSM score",
     y = "Count"
   ) +
-  basetheme + scale_y_continuous(expand = c(0,0))
+  basetheme + 
+  scale_y_continuous(expand = c(0,0), limits = c(0, 60000)) +
+  scale_x_continuous(expand = c(0.005,0), limits = c(0,1))+
+  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))
 ### SAVE PLOT: SiteCode_version_HSMjb_hist - ~850 * auto
 #
 summary(HSM_data_grps$HSM_q4)
@@ -870,9 +1143,9 @@ summary(HSM_data_grps$HSM_q4)
     ))
 #
 ggplot(HSM_data, aes(HSM)) +
-  geom_histogram(bins = 40, fill = "grey80", color = "grey40") +
+  geom_histogram(bins = 30, fill = "grey50", color = "black") +
   geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)), 
+  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-15000), 
                            aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
@@ -882,7 +1155,10 @@ ggplot(HSM_data, aes(HSM)) +
     x = "HSM score",
     y = "Count"
   ) +
-  basetheme + scale_y_continuous(expand = c(0,0))
+  basetheme + 
+  scale_y_continuous(expand = c(0,0), limits = c(0, 60000)) +
+  scale_x_continuous(expand = c(0.005,0), limits = c(0,1))+
+  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))
 #
 ### SAVE PLOT: SiteCode_version_HSMq4_hist - ~850 * auto
 #
