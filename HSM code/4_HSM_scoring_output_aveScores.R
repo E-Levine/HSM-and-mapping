@@ -905,6 +905,11 @@ basetheme <- theme_bw()+
         panel.border = element_blank(), 
         axis.line = element_line(color = "black", linewidth = 0.1))
 
+papertheme <- theme(
+  axis.text = element_text(size = 13),
+  axis.title = element_text(size = 14),
+  plot.title =  element_blank(), plot.margin = margin(t = 10, r=10)
+)
 #
 #
 #
@@ -960,16 +965,15 @@ HSM_data_grps <- HSM_data %>%
   mutate(
     # HSM 0.1 groups
     HSMgrp = case_when(
-      HSMround == 0 ~ "0",
-      HSMround < 0.1 ~ "(0,0.1)",
-      HSMround < 0.2 ~ "[0.1,0.2)",
-      HSMround < 0.3 ~ "[0.2,0.3)",
-      HSMround < 0.4 ~ "[0.3,0.4)",
-      HSMround < 0.5 ~ "[0.4,0.5)",
-      HSMround < 0.6 ~ "[0.5,0.6)",
-      HSMround < 0.7 ~ "[0.6,0.7)",
-      HSMround < 0.8 ~ "[0.7,0.8)",
-      HSMround < 0.9 ~ "[0.8,0.9)",
+      HSMround < 0.1 & HSMround >= 0 ~ "[0,0.1)",
+      HSMround < 0.2 & HSMround >= 0.1 ~ "[0.1,0.2)",
+      HSMround < 0.3 & HSMround >= 0.2 ~ "[0.2,0.3)",
+      HSMround < 0.4 & HSMround >= 0.3 ~ "[0.3,0.4)",
+      HSMround < 0.5 & HSMround >= 0.4 ~ "[0.4,0.5)",
+      HSMround < 0.6 & HSMround >= 0.5 ~ "[0.5,0.6)",
+      HSMround < 0.7 & HSMround >= 0.6 ~ "[0.6,0.7)",
+      HSMround < 0.8 & HSMround >= 0.7 ~ "[0.7,0.8)",
+      HSMround < 0.9 & HSMround >= 0.8 ~ "[0.8,0.9)",
       TRUE           ~ "[0.9,1]"
     ),
     # Aggregated bins
@@ -995,7 +999,7 @@ HSM_data_grps <- HSM_data %>%
     HSMgrp = factor(
       HSMgrp,
       levels = c(
-        "0", "(0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
+        "[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
         "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)",
         "[0.8,0.9)", "[0.9,1]"
       )
@@ -1085,8 +1089,13 @@ write_xlsx(Suit_summ,
 #
 ## Model summary:
 #
-ggplot(HSM_data, aes(x = round(HSM,1))) +
-  geom_histogram(fill = "gray50", color = "black", binwidth = 0.1, boundary = 0) +
+HSM_data_grps %>% 
+  #mutate(HSM_r = round(HSMround, 1)) %>%
+  group_by(HSMgrp) %>%
+  summarise(n())
+
+ggplot(HSM_data_grps, aes(x = HSMgrp)) +
+  geom_histogram(stat = "count", fill = "gray50", color = "black") +
   labs(
     title = "HSM scores",
     x = "Suitability score",
@@ -1094,9 +1103,10 @@ ggplot(HSM_data, aes(x = round(HSM,1))) +
   ) +
   basetheme + 
   scale_y_continuous(expand = c(0,0))+
-  scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0, 1))+
-  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))
-### SAVE PLOT: SiteCode_version_HSMscores_hist - ~850 * auto
+  scale_x_discrete(expand = c(0.005,0))+
+  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
+  papertheme + theme(axis.text.x = element_text(size = 11, angle = 20))
+### SAVE PLOT: SiteCode_version_HSMscores_hist - ~850 * auto 600 paper
 #
 summary(HSM_data_grps$HSMgrp)
 summary(HSM_data_grps$HSMgyr)
@@ -1126,9 +1136,10 @@ ggplot(HSM_data, aes(x = HSM)) +
   ) +
   basetheme + 
   scale_y_continuous(expand = c(0,0), limits = c(0, 60000)) +
-  scale_x_continuous(expand = c(0.005,0), limits = c(0,1))+
-  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))
-### SAVE PLOT: SiteCode_version_HSMjb_hist - ~850 * auto
+  scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0, 1))+
+  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
+  papertheme
+### SAVE PLOT: SiteCode_version_HSMjb_hist - ~850 * auto 500 paper
 #
 summary(HSM_data_grps$HSM_q4)
 #
@@ -1143,7 +1154,7 @@ summary(HSM_data_grps$HSM_q4)
     ))
 #
 ggplot(HSM_data, aes(HSM)) +
-  geom_histogram(bins = 30, fill = "grey50", color = "black") +
+  geom_histogram(bins = 30, fill = "grey50", color = "black", boundary = 0) +
   geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
   ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-15000), 
                            aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
@@ -1157,8 +1168,9 @@ ggplot(HSM_data, aes(HSM)) +
   ) +
   basetheme + 
   scale_y_continuous(expand = c(0,0), limits = c(0, 60000)) +
-  scale_x_continuous(expand = c(0.005,0), limits = c(0,1))+
-  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))
+  scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0,1))+
+  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))+
+  papertheme
 #
 ### SAVE PLOT: SiteCode_version_HSMq4_hist - ~850 * auto
 #
