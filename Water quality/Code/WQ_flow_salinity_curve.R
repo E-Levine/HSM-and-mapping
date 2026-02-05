@@ -136,6 +136,20 @@ WQ$ggplot_hyperbolic_fit(Model_data, models$models, "SSSal1_USGS-02323592", "Mea
 #
 ### Parameter values and saving ####
 #
+#Number of days of data per year
+flow_ave %>% 
+  # Filter data to date range
+  dplyr::filter(Date >= as.Date("2020-01-01") & Date <= as.Date("2024-12-31")) %>%
+  # Add Years and Stations
+  dplyr::mutate(
+    Year = lubridate::year(Date)) %>%
+  # Group by Year
+  dplyr::group_by(Year) %>%
+  # Get total number
+  dplyr::summarise(
+    TotalDays = dplyr::n_distinct(Date)
+    ) %>%
+  pivot_wider(names_from = Year, values_from = TotalDays)
 ## Determine mean number of days in year within range 
 #min and max Dates to include
 #
@@ -219,7 +233,7 @@ WQ$save_flow_output(adult,
 #
 #source("Code/WQ_functions.R")
 WQ2 <- new.env()
-source("Code/WQ_functions.R", local = WQ2)
+source("Code/WQ_functions_interpolation.R", local = WQ2)
 #WQ$load_site_grid()
 
 Site_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
@@ -228,9 +242,9 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area
-State_Grid <- c("H4") #E2, H4
-Alt_Grid <- c(NA)
-Site_Grid <- WQ2$load_site_grid(State_Grid, Site_area)
+State_Grid <- c("E2") #E2, H4
+Alt_Grid <- c("F2")
+Site_Grid <- WQ2$load_site_grid(State_Grid, Site_area, Alt_Grid = Alt_Grid)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
 #Map of stations
@@ -238,14 +252,18 @@ ggplot()+
   geom_sf(data = Site_area, fill = "#99CCFF")+
   #geom_sf(data = Site_Grid, fill = NA)+
   geom_sf(data = FL_outline)+
-  geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType), size = 3.5)+
+  #Individual station points if grouping:
+  #geom_point(data = salinity_raw, aes(Longitude, Latitude),  color = "#666666", shape = 8, size = 4)+
+  geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType, shape = DataType), size = 4)+
   theme_classic()+
-  scale_color_manual(values = c("#009E73", "#D55E00"))+
+  scale_color_manual(values = c("#333333", "#D55E00"))+
+  scale_shape_manual(values = c(16, 15))+
   theme(panel.border = element_rect(color = "black", fill = NA), 
-        axis.title = element_text(size = 18), axis.text =  element_text(size = 16))+
-  coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.05, st_bbox(Site_area)["xmax"]+0.05),
+        axis.title = element_text(size = 12, color = "black"), 
+        axis.text =  element_text(size = 10, color = "black"))+
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.05, st_bbox(Site_area)["xmax"]+0.15),
            ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.05))
-#
+#Save 800*auto, Output/Map files/Flow_sal_loggers
 Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID), "Spatial")
 #
 ## Get logger as spatial:
@@ -298,7 +316,7 @@ WQ$plot_flow_interp(AOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".tiff", sep = ""), 
-       dpi = 600)
+       dpi = 400)
 #
 #
 #
@@ -317,7 +335,7 @@ WQ$plot_flow_interp(LOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".tiff", sep = ""), 
-       dpi = 600,
+       dpi = 400,
        device = ragg::agg_tiff,
        width = 8,
        height = 7,
@@ -348,7 +366,7 @@ p <- WQ$plot_flow_interp(AnonSub_idw_data, "meanDays")
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".tiff", sep = ""), 
-       dpi = 600,
+       dpi = 450,
        device = ragg::agg_tiff,
        width = 8,
        height = 8,
@@ -360,7 +378,7 @@ p <- WQ$plot_flow_interp(AnonSuper_idw_data, "meanDays")
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".tiff", sep = ""), 
-       dpi = 600,
+       dpi = 450,
        device = ragg::agg_tiff,
        width = 8,
        height = 8,
@@ -393,7 +411,7 @@ p <- WQ$plot_flow_interp(LnonSub_idw_data, "meanDays")
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".tiff", sep = ""), 
-       dpi = 600,
+       dpi = 450,
        device = ragg::agg_tiff,
        width = 8,
        height = 8,
@@ -402,12 +420,12 @@ ggsave(plot = p,
 #
 p <- WQ$plot_flow_interp(LnonSuper_idw_data, "meanDays")
 p_fast <- p +
-  ggrastr::rasterise(geom_sf(), dpi = 600)
+  ggrastr::rasterise(geom_sf(), dpi = 450)
 #
 ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".tiff", sep = ""), 
-       dpi = 600,
+       dpi = 450,
        device = ragg::agg_tiff,
        width = 8,
        height = 8,
@@ -465,14 +483,14 @@ ggsave(plot = p_fast,
 #
 ## Save output
 #fileName: SiteCode_fileName
-WQ$save_flow_interp_output(AOP_idw_data, "flow_optimal_adult")
-WQ$save_flow_interp_output(AnonSub_idw_data, "flow_sub_adult")
+WQ$save_flow_interp_output(AOP_idw_data, "flow_optimal_adult") #meanOptimal
+WQ$save_flow_interp_output(AnonSub_idw_data, "flow_sub_adult") #meanDays
 WQ$save_flow_interp_output(AnonSuper_idw_data, "flow_super_adult")
-WQ$save_flow_interp_output(LOP_idw_data, "flow_optimal_larvae")
-WQ$save_flow_interp_output(LnonSub_idw_data, "flow_sub_larvae")
+WQ$save_flow_interp_output(LOP_idw_data, "flow_optimal_larvae") #meanOptimal
+WQ$save_flow_interp_output(LnonSub_idw_data, "flow_sub_larvae") #meanDays
 WQ$save_flow_interp_output(LnonSuper_idw_data, "flow_super_larvae")
-WQ$save_flow_interp_output(Outlier_idw_data, "flow_outlier1")
-WQ$save_flow_interp_output(Outlier2_idw_data, "flow_outlier2")
+WQ$save_flow_interp_output(Outlier_idw_data, "flow_outlier1") #meanOut1
+WQ$save_flow_interp_output(Outlier2_idw_data, "flow_outlier2") #meanOut2
 #
 #
 ## Saving Excel data files: had issue with remove geometry and file size
@@ -499,22 +517,22 @@ write_csv_chunks <- function(
   invisible(length(split_df))
 }
 #
-temp_data <- st_drop_geometry(Outlier_idw_data) %>% 
+(temp_data <- st_drop_geometry(Outlier2_idw_data) %>% 
   as.data.frame() %>%
   dplyr::rename("Long_DD_X" = Longitude, "Lat_DD_Y" = Latitude) %>%
   mutate(Long_DD_X = as.numeric(Long_DD_X),
          Lat_DD_Y = as.numeric(Lat_DD_Y),
-         meanOut1 = as.numeric(meanOut1),
+         meanOut2 = as.numeric(meanOut2),
          dplyr::across(
            where(is.character),
            ~ na_if(trimws(.x), "")
-         ))
+         )))
 write_csv_chunks(
   df = temp_data,
   out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                    #File name
-                   paste0(Site_code, "_", paste("flow_outlier1"))),
-  prefix = "flow_outlier1"
+                   paste0(Site_code, "_", paste("flow_outlier2"))),
+  prefix = "flow_outlier2"
 )
 #
 #
