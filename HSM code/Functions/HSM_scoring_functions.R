@@ -543,6 +543,9 @@ assign_salinity_scores <- function(shapefile_data,
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   
+  # Determine if geometry column exists
+  has_geom <- "geometry" %in% names(shapefile_data)
+  
   #Identify columns of salinity, not spawning:
   if(column_type == "averaged"){
     data <- shapefile_data %>% 
@@ -561,7 +564,10 @@ assign_salinity_scores <- function(shapefile_data,
     stop("column_type must be specified as previously 'averaged' or 'individual' columns")
   }
   
-  data_columns <- setdiff(names(data), c("PGID", "geometry"))
+  exclude_cols <- "PGID"
+  if (has_geom) exclude_cols <- c(exclude_cols, "geometry")
+  
+  data_columns <- setdiff(names(data), exclude_cols)
   #Named vector for faster look up
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
@@ -578,7 +584,15 @@ assign_salinity_scores <- function(shapefile_data,
         base_name <- substr(group[1], 1, nchar(group[1])-1)
         new_name <- paste0(base_name, "E")
         # Average the columns in the group
-        averaged_data[[new_name]] <- round(rowMeans(st_drop_geometry(data)[group], na.rm = TRUE),2)
+        temp_data <- if (has_geom) {
+          sf::st_drop_geometry(data)
+        } else {
+          data
+        }
+        
+        averaged_data[[new_name]] <- round(
+          rowMeans(temp_data[group], na.rm = TRUE), 2
+        )
       } else {
         # If only one column, just copy it
         base_name <- substr(group[1], 1, nchar(group[1])-1)
@@ -606,14 +620,15 @@ assign_salinity_scores <- function(shapefile_data,
   
   # Make sure numeric
   data <- data %>%
-    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
+    mutate(across(-all_of(exclude_cols), 
+                  ~ suppressWarnings(as.numeric(as.character(.)))))
   #
   #Rename columns by note "_score"
   new_names <- names(data)  # start with current names
   
   for (i in seq_along(new_names)) {
     col <- new_names[i]
-    if (!(col %in% c("PGID", "geometry"))) {
+    if (!(col %in% exclude_cols)) {
       new_names[i] <- paste0(col, "SC", helper)
     }
   }
@@ -638,6 +653,9 @@ assign_sal_spawn_scores <- function(shapefile_data,
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   
+  # Determine if geometry column exists
+  has_geom <- "geometry" %in% names(shapefile_data)
+  
   #Identify columns of salinity, not spawning:
   if(column_type == "averaged"){
     data <- shapefile_data %>% 
@@ -656,7 +674,10 @@ assign_sal_spawn_scores <- function(shapefile_data,
     stop("column_type must be specified as previously 'averaged' or 'individual' columns")
   }
   
-  data_columns <- setdiff(names(data), c("PGID", "geometry"))
+  exclude_cols <- "PGID"
+  if (has_geom) exclude_cols <- c(exclude_cols, "geometry")
+  
+  data_columns <- setdiff(names(data), exclude_cols)
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
@@ -672,7 +693,15 @@ assign_sal_spawn_scores <- function(shapefile_data,
         base_name <- substr(group[1], 1, nchar(group[1])-1)
         new_name <- paste0(base_name, "E")
         # Average the columns in the group
-        averaged_data[[new_name]] <- round(rowMeans(st_drop_geometry(data)[group], na.rm = TRUE),2)
+        temp_data <- if (has_geom) {
+          sf::st_drop_geometry(data)
+        } else {
+          data
+        }
+        
+        averaged_data[[new_name]] <- round(
+          rowMeans(temp_data[group], na.rm = TRUE), 2
+        )
       } else {
         # If only one column, just copy it
         base_name <- substr(group[1], 1, nchar(group[1])-1)
@@ -699,14 +728,15 @@ assign_sal_spawn_scores <- function(shapefile_data,
   data <- process_ranges(data)
   # Make sure numeric
   data <- data %>%
-    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
+    mutate(across(-all_of(exclude_cols), 
+                  ~ suppressWarnings(as.numeric(as.character(.)))))
   #
   #Rename columns by note "_score"
   new_names <- names(data)  # start with current names
   
   for (i in seq_along(new_names)) {
     col <- new_names[i]
-    if (!(col %in% c("PGID", "geometry"))) {
+    if (!(col %in% exclude_cols)) {
       new_names[i] <- paste0(col, "SC", helper)
     }
   }
@@ -732,6 +762,9 @@ assign_temperature_scores <- function(shapefile_data,
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   
+  # Determine if geometry column exists
+  has_geom <- "geometry" %in% names(shapefile_data)
+  
   #Identify columns of salinity, not spawning:
   if(column_type == "averaged"){
     data <- shapefile_data %>% 
@@ -751,7 +784,11 @@ assign_temperature_scores <- function(shapefile_data,
     stop("column_type must be specified as previously 'averaged' or 'individual' columns")
   }
   
-  data_columns <- setdiff(names(data), c("PGID", "geometry"))
+  exclude_cols <- "PGID"
+  if (has_geom) exclude_cols <- c(exclude_cols, "geometry")
+  
+  data_columns <- setdiff(names(data), exclude_cols)
+  
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
@@ -767,7 +804,15 @@ assign_temperature_scores <- function(shapefile_data,
         base_name <- substr(group[1], 1, nchar(group[1])-1)
         new_name <- paste0(base_name, "E")
         # Average the columns in the group
-        averaged_data[[new_name]] <- round(rowMeans(st_drop_geometry(data)[group], na.rm = TRUE),2)
+        temp_data <- if (has_geom) {
+          sf::st_drop_geometry(data)
+        } else {
+          data
+        }
+        
+        averaged_data[[new_name]] <- round(
+          rowMeans(temp_data[group], na.rm = TRUE), 2
+        )
       } else {
         # If only one column, just copy it
         base_name <- substr(group[1], 1, nchar(group[1])-1)
@@ -795,7 +840,8 @@ assign_temperature_scores <- function(shapefile_data,
   data <- process_ranges(data)
   # Make sure numeric
   data <- data %>%
-    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
+    mutate(across(-all_of(exclude_cols), 
+                  ~ suppressWarnings(as.numeric(as.character(.)))))
   #
   #
   #Rename columns by note "_score"
@@ -803,7 +849,7 @@ assign_temperature_scores <- function(shapefile_data,
   
   for (i in seq_along(new_names)) {
     col <- new_names[i]
-    if (!(col %in% c("PGID", "geometry"))) {
+    if (!(col %in% exclude_cols)) {
       new_names[i] <- paste0(col, "SC", helper)
     }
   }
@@ -828,6 +874,9 @@ assign_temperature_spawn_scores <- function(shapefile_data,
   helper <- ifelse(grepl("larvae", table_name, ignore.case = TRUE), "L", "")
   Score_tab <- curve_table
   
+  # Determine if geometry column exists
+  has_geom <- "geometry" %in% names(shapefile_data)
+  
   #Identify columns of salinity, not spawning:
   if(column_type == "averaged"){
     data <- shapefile_data %>% 
@@ -847,7 +896,11 @@ assign_temperature_spawn_scores <- function(shapefile_data,
     stop("column_type must be specified as previously 'averaged' or 'individual' columns")
   }
   
-  data_columns <- setdiff(names(data), c("PGID", "geometry"))
+  exclude_cols <- "PGID"
+  if (has_geom) exclude_cols <- c(exclude_cols, "geometry")
+  
+  data_columns <- setdiff(names(data), exclude_cols)
+  
   #Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
@@ -863,7 +916,15 @@ assign_temperature_spawn_scores <- function(shapefile_data,
         base_name <- substr(group[1], 1, nchar(group[1])-1)
         new_name <- paste0(base_name, "E")
         # Average the columns in the group
-        averaged_data[[new_name]] <- round(rowMeans(st_drop_geometry(data)[group], na.rm = TRUE),2)
+        temp_data <- if (has_geom) {
+          sf::st_drop_geometry(data)
+        } else {
+          data
+        }
+        
+        averaged_data[[new_name]] <- round(
+          rowMeans(temp_data[group], na.rm = TRUE), 2
+        )
       } else {
         # If only one column, just copy it
         base_name <- substr(group[1], 1, nchar(group[1])-1)
@@ -891,7 +952,8 @@ assign_temperature_spawn_scores <- function(shapefile_data,
   data <- process_ranges(data)
   # Make sure numeric
   data <- data %>%
-    mutate(across(-c(PGID, geometry), ~ suppressWarnings(as.numeric(as.character(.)))))
+    mutate(across(-all_of(exclude_cols), 
+                  ~ suppressWarnings(as.numeric(as.character(.)))))
   #
   #
   #Rename columns by note "_score"
@@ -899,7 +961,7 @@ assign_temperature_spawn_scores <- function(shapefile_data,
   
   for (i in seq_along(new_names)) {
     col <- new_names[i]
-    if (!(col %in% c("PGID", "geometry"))) {
+    if (!(col %in% exclude_cols)) {
       new_names[i] <- paste0(col, "SC", helper)
     }
   }
@@ -918,6 +980,8 @@ assign_threshold_scores <- function(shapefile_data,
                                     individual_key = NULL) {
   #
   column_type <- match.arg(column_type)
+  # Determine if geometry column exists
+  has_geom <- "geometry" %in% names(shapefile_data)
   #  
   #Identify columns of salinity, not spawning:
   if(column_type == "averaged"){
@@ -933,7 +997,10 @@ assign_threshold_scores <- function(shapefile_data,
     stop("column_type must be specified as previously 'averaged' or 'individual' columns")
   }
   
-  data_columns <- setdiff(names(data), c("PGID", "geometry"))
+  exclude_cols <- "PGID"
+  if (has_geom) exclude_cols <- c(exclude_cols, "geometry")
+  
+  data_columns <- setdiff(names(data), exclude_cols)
   #
   #
   #If ensemble, get average interpolated value
@@ -948,7 +1015,15 @@ assign_threshold_scores <- function(shapefile_data,
         base_name <- substr(group[1], 1, nchar(group[1])-1)
         new_name <- paste0(base_name, "E")
         # Average the columns in the group
-        averaged_data[[new_name]] <- round(rowMeans(st_drop_geometry(data)[group], na.rm = TRUE),2)
+        temp_data <- if (has_geom) {
+          sf::st_drop_geometry(data)
+        } else {
+          data
+        }
+        
+        averaged_data[[new_name]] <- round(
+          rowMeans(temp_data[group], na.rm = TRUE), 2
+        )
       } else {
         # If only one column, just copy it
         base_name <- substr(group[1], 1, nchar(group[1])-1)
@@ -960,13 +1035,13 @@ assign_threshold_scores <- function(shapefile_data,
     data_columns <- names(data)[-1]  # Update data_columns to reflect the new averaged columns
   }
   #Re-scale values
-  data <- data %>% mutate(across(-c(PGID, geometry), ~1-.x))
+  data <- data %>% mutate(across(-all_of(exclude_cols), ~1-.x))
   #Rename columns by note "_score"
   new_names <- names(data)  # start with current names
   
   for (i in seq_along(new_names)) {
     col <- new_names[i]
-    if (!(col %in% c("PGID", "geometry"))) {
+    if (!(col %in% exclude_cols)) {
       new_names[i] <- paste0(col, "SC")
     }
   }
@@ -988,6 +1063,8 @@ assign_flow_scores <- function(shapefile_data,
   #
   # Named vector for faster lookup
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
+  # Determine if geometry column exists
+  has_geom <- "geometry" %in% names(shapefile_data)
   
   #Identify columns of salinity, not spawning:
   data <- shapefile_data %>% 
@@ -995,7 +1072,10 @@ assign_flow_scores <- function(shapefile_data,
     dplyr::select(PGID, matches(col_pattern)) %>%
     dplyr::mutate(dplyr::across(where(is.numeric), \(x) round(x, digits = 2))) 
   
-  data_columns <- setdiff(names(data), c("PGID", "geometry"))
+  exclude_cols <- "PGID"
+  if (has_geom) exclude_cols <- c(exclude_cols, "geometry")
+  
+  data_columns <- setdiff(names(data), exclude_cols)
   #Named vector for faster look up
   score_lookup <- setNames(curve_table$Value, curve_table$Param)
   #
@@ -1011,7 +1091,15 @@ assign_flow_scores <- function(shapefile_data,
       new_name <- paste0(base_name, "E")     
       if (length(group) > 1) {
         # Average the columns in the group
-        averaged_data[[new_name]] <- round(rowMeans(st_drop_geometry(data)[group], na.rm = TRUE),2)
+        temp_data <- if (has_geom) {
+          sf::st_drop_geometry(data)
+        } else {
+          data
+        }
+        
+        averaged_data[[new_name]] <- round(
+          rowMeans(temp_data[group], na.rm = TRUE), 2
+        )
       } else {
         # If only one column, just copy it
         averaged_data[[new_name]] <- data[[group[1]]]
@@ -1040,7 +1128,7 @@ assign_flow_scores <- function(shapefile_data,
   
   for (i in seq_along(new_names)) {
     col <- new_names[i]
-    if (!(col %in% c("PGID", "geometry"))) {
+    if (!(col %in% exclude_cols)) {
       new_names[i] <- paste0(col, "SC")
     }
   }
