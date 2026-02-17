@@ -1440,3 +1440,96 @@ plot_model_map <- function(sf_data,
   return(p)
   #
 }
+#
+#
+#
+# Function to load in "data" CSV created from save_model_output function:
+load_model_data <- function(SiteCode,
+                            VerNum,
+                            as_sf = FALSE,
+                            x_col = NULL,
+                            y_col = NULL,
+                            crs = 4326) {
+  
+  # Build path ----
+  CSV_data_path <- paste0(SiteCode, "_", VerNum,
+                          "/Output/Data files/",
+                          SiteCode, "_", VerNum,
+                          "_model_data.csv")
+  
+  # Check file exists ----
+  if (!file.exists(CSV_data_path)) {
+    stop(paste0("File not found: ", CSV_data_path))
+  }
+  
+  # Read file ----
+  data <- data.table::fread(CSV_data_path)
+  message(paste0("Loaded data from: ", CSV_data_path))
+  
+  # Optional: convert to sf ----
+  if (as_sf) {
+    
+    if (is.null(x_col) || is.null(y_col)) {
+      stop("To return sf object, provide x_col and y_col.")
+    }
+    
+    if (!all(c(x_col, y_col) %in% names(data))) {
+      stop("Specified coordinate columns not found in data.")
+    }
+    
+    data <- sf::st_as_sf(data,
+                         coords = c(x_col, y_col),
+                         crs = crs,
+                         remove = FALSE)
+    
+    message("Converted to sf object.")
+  }
+  
+  return(data)
+}
+#
+#
+# Function to load in "data" CSV created from save_model_output function:
+load_model_scores <- function(SiteCode,
+                            VerNum,
+                            as_sf = FALSE,
+                            x_col = NULL,
+                            y_col = NULL,
+                            crs = 4326) {
+  
+  # Build path ----
+  CSV_scores_path <- paste0(SiteCode, "_", VerNum,
+                          "/Output/Data files/",
+                          SiteCode, "_", VerNum,
+                          "_model_scores.csv")
+  
+  # Check file exists ----
+  if (!file.exists(CSV_scores_path)) {
+    stop(paste0("File not found: ", CSV_scores_path))
+  }
+  
+  # Read file ----
+  data <- data.table::fread(CSV_scores_path)
+  message(paste0("Loaded data from: ", CSV_scores_path))
+  
+  # Optional: convert to sf ----
+  if (as_sf) {
+    
+    if (is.null(x_col) || is.null(y_col)) {
+      stop("To return sf object, provide x_col and y_col.")
+    }
+    
+    if (!all(c(x_col, y_col) %in% names(data))) {
+      stop("Specified coordinate columns not found in data.")
+    }
+    
+    data <- sf::st_as_sf(data,
+                         coords = c(x_col, y_col),
+                         crs = crs,
+                         remove = FALSE)
+    
+    message("Converted to sf object.")
+  }
+  
+  return(data)
+}

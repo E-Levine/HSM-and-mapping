@@ -38,7 +38,15 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
                                  pattern = "\\.xlsx$"))
 #
 #
+# Data setup, updates ----
 #
+# Load model files with updated data:
+HSMfunc$load_model_files(shp_filename = "datalayers_260217")
+# Remove data that isn't being updated:
+# Load previous data to update. Data includes interpolation data:
+# Remove data needing updates, final scoring columns:
+# Combine original data and updated data into one object:
+# Re-score data as needed and recalculate model composite score
 #
 #
 # Add and clean interp data ----
