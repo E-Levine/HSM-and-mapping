@@ -1200,18 +1200,57 @@ join_score_dataframes <- function(shp_df, join_by = "PGID", env = .GlobalEnv, ve
 ###Calculate total HSM score
 calculate_totals <- function(data_scores){
   #Oyster score
-  oyster_total <- data_scores %>% st_drop_geometry() %>%
+  decay <- 0.2
+  n_years <- 5
+  oyster_total <- data_scores %>%
+    st_drop_geometry() %>%
     dplyr::select(PGID, contains("Oyst") & ends_with("SC")) %>%
-    mutate(across(contains("2024"), ~ .*1),
-           across(contains("2023"), ~ .*0.8),
-           across(contains("2022"), ~ .*0.6),
-           across(contains("2021"), ~ .*0.4),
-           across(contains("2020"), ~ .*0.2)) %>%
-    mutate(OystTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
-    mutate(OystCO = ncol(dplyr::select(., -c(PGID, OystTO)))) %>% 
-    dplyr::select(PGID, OystTO, OystCO) %>%
-    mutate(OystAV = OystTO/OystCO) %>%
-    mutate(row_id = row_number())
+    # pivot to get years
+    pivot_longer(
+      cols = -PGID,
+      names_to = "variable",
+      values_to = "value") %>%
+    mutate(
+      year = str_extract(variable,"20\\d{2}|\\d{2}"),
+      year = if_else(nchar(year) == 2,
+                     paste0("20", year),
+                     year),
+      year = as.numeric(year)) %>%
+    filter(!is.na(year)) %>%
+    mutate(
+      year_rank = dense_rank(desc(year))) %>%
+    filter(year_rank <= n_years) %>%
+    # weight years to only keep 5 most recent
+    mutate(
+      weight = 1 - decay * (year_rank - 1),
+      value = value * weight) %>%
+    # Pivot back
+    dplyr::select(PGID, variable, value) %>%
+    pivot_wider(
+      names_from = variable,
+      values_from = value
+    ) %>%
+    # Summarize 
+    mutate(
+      OystTO = rowSums(dplyr::select(., -PGID), na.rm = TRUE),
+      OystCO = rowSums(!is.na(dplyr::select(., -PGID))),
+      OystAV = OystTO / OystCO,
+      row_id = row_number()
+    ) %>%
+    dplyr::select(PGID, OystTO, OystCO, OystAV, row_id)
+    
+    #data_scores %>% st_drop_geometry() %>%
+    #dplyr::select(PGID, contains("Oyst") & ends_with("SC")) %>%
+    #mutate(across(contains("2024"), ~ .*1),
+    #       across(contains("2023"), ~ .*0.8),
+    #       across(contains("2022"), ~ .*0.6),
+    #       across(contains("2021"), ~ .*0.4),
+    #       across(contains("2020"), ~ .*0.2)) %>%
+    #mutate(OystTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
+    #mutate(OystCO = ncol(dplyr::select(., -c(PGID, OystTO)))) %>% 
+    #dplyr::select(PGID, OystTO, OystCO) %>%
+    #mutate(OystAV = OystTO/OystCO) %>%
+    #mutate(row_id = row_number())
   #
   #Buffer score
   buffer_total <- data_scores %>% st_drop_geometry() %>%
@@ -1321,12 +1360,12 @@ save_model_output <- function(data = NULL, #good for single output, but not need
   #
   # Paths ----
   CSV_data_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", 
-                          SiteCode, "_", VerNum, "_model_data.csv")
+                          SiteCode, "_", VerNum, "_model_data_",Sys.Date(),".csv")
   CSV_scores_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", 
-                            SiteCode, "_", VerNum, "_model_scores.csv")
+                            SiteCode, "_", VerNum, "_model_scores_",Sys.Date(),".csv")
   shapefile_temp <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/temp.shp")
   shapefile_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/", 
-                           SiteCode, "_", VerNum, "_HSM_model.shp")
+                           SiteCode, "_", VerNum, "_HSM_model_",Sys.Date(),".shp")
   #
   # ---- Save CSV for "data" ----
   if(output_type %in% c("data", "all")) {

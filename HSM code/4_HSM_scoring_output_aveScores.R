@@ -42,12 +42,20 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
 #
 # Load model files with updated data:
 HSMfunc$load_model_files(shp_filename = "datalayers_260217")
-# Remove data that isn't being updated:
-# Load previous data to update. Data includes interpolation data:
-# Remove data needing updates, final scoring columns:
-# Combine original data and updated data into one object:
-# Re-score data as needed and recalculate model composite score
-#
+# Limit to PGID and data being updated:
+glimpse(SS_v1_data)
+(SS_v1_2data <- SS_v1_data %>% dplyr::select(PGID, 
+                                             rename("Oyst2026" = Oyst26), 
+                                             Buff26))
+# Load previous data scores to update. Scores to include interpolation data:
+model_data <- HSMfunc$load_model_scores(Site_Code, Version)
+# Remove scores needing updates, final scoring columns:
+(model_data_2 <- model_data %>% 
+  dplyr::select(-c(Buff23SC, Oyst20SC, BuffAV, OystAV)))
+# Re-score data as needed -- skip to "Assign scores" and run required scoring code
+# Combine original scores and updated scores, recalculate model composite score:
+model_scores <- model_data_2
+# -- skip to "Model scoring"
 #
 # Add and clean interp data ----
 #
@@ -587,7 +595,7 @@ rm(datafiles)
 ### Polygon data 
 #
 ##Oysters
-temp <- get(paste0(Site_Code, "_", Version, "_data"))
+temp <- get(paste0(Site_Code, "_", Version, "_2data"))
 Oyster_scores <- HSMfunc$assign_oyster_scores(temp)
 #
 #Oyster reef buffer scores
@@ -932,7 +940,7 @@ papertheme <- theme(
 ### Add scores to data
 assign(paste0(Site_Code, "_", Version, "_scores_data"), HSMfunc$join_score_dataframes(temp))
 #
-## df of jusct scores (no raw data values)
+## df of just scores (no raw data values)
 assign(paste0(Site_Code, "_", Version, "_scores_only"),  get(paste0(Site_Code, "_", Version, "_scores_data")) %>% 
          dplyr::select(PGID, Lat_DD_Y, Long_DD_X, ends_with("SC"), ends_with("SCL")))
 #
@@ -1116,7 +1124,7 @@ ggplot(HSM_data_grps, aes(x = HSMgrp)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 120000))+
+  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme + theme(axis.text.x = element_text(size = 11, angle = 20))
@@ -1158,7 +1166,7 @@ ggplot(HSM_data, aes(x = HSM)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 60000)) +
+  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 60000)) +
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0, 1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme
@@ -1192,7 +1200,7 @@ ggplot(HSM_data, aes(HSM)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 60000)) +
+  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 60000)) +
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0,1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))+
   papertheme
