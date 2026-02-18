@@ -24,7 +24,7 @@ source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
 Site_Code <- c("SS") #two-letter site code
-Version <- c("v1") #Model version
+Version <- c("v0") #Model version
 #
 #
 # Data setup ----
@@ -43,19 +43,20 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
 # Load model files with updated data:
 HSMfunc$load_model_files(shp_filename = "datalayers_260217")
 # Limit to PGID and data being updated:
-glimpse(SS_v1_data)
-(SS_v1_2data <- SS_v1_data %>% dplyr::select(PGID, 
-                                             rename("Oyst2026" = Oyst26), 
-                                             Buff26))
+glimpse(SS_v0_data)
+#t <- left_join(SS_v0_data %>% dplyr::select(PGID:Long_DD_X_, Oyst26, Buff26), 
+#             as.data.frame(SS_vori_data %>% st_drop_geometry())) #Combine original data with new data, then skip to scoring
+#SS_v0_data <- t %>% dplyr::select(-c(Oyst20, Buff23))
+(SS_v0_2data <- SS_v0_data %>% dplyr::select(PGID, Oyst26, Buff26))
 # Load previous data scores to update. Scores to include interpolation data:
-model_data <- HSMfunc$load_model_scores(Site_Code, Version)
+model_data <- HSMfunc$load_model_data(Site_Code, Version)
 # Remove scores needing updates, final scoring columns:
 (model_data_2 <- model_data %>% 
   dplyr::select(-c(Buff23SC, Oyst20SC, BuffAV, OystAV)))
 # Re-score data as needed -- skip to "Assign scores" and run required scoring code
 # Combine original scores and updated scores, recalculate model composite score:
 model_scores <- model_data_2
-# -- skip to "Model scoring"
+# -- skip to "Model scoring". Run 941-1039 at least, then 1220
 #
 # Add and clean interp data ----
 #
@@ -595,7 +596,8 @@ rm(datafiles)
 ### Polygon data 
 #
 ##Oysters
-temp <- get(paste0(Site_Code, "_", Version, "_2data"))
+temp <- get(paste0(Site_Code, "_", Version, "_data"))
+#
 Oyster_scores <- HSMfunc$assign_oyster_scores(temp)
 #
 #Oyster reef buffer scores
