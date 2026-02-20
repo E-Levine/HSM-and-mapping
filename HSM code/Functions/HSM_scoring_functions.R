@@ -986,7 +986,7 @@ assign_threshold_scores <- function(shapefile_data,
   #Identify columns of salinity, not spawning:
   if(column_type == "averaged"){
     data <- shapefile_data %>% 
-      dplyr::select(PGID, matches(".*(o|i|e)T.\\d{1,3}$"))
+      dplyr::select(PGID, matches(".*(o|i|e)T\\.\\d{1,3}$|.*T\\d{1,3}[A-Za-z]$"))
   } else if(column_type == "individual"){
     if (is.null(individual_key)) {
       stop("When column_type = 'individual', individual_key must be provided.")
@@ -1225,32 +1225,23 @@ calculate_totals <- function(data_scores){
       weight = 1 - decay * (year_rank - 1),
       value = value * weight) %>%
     # Pivot back
-    dplyr::select(PGID, variable, value) %>%
-    pivot_wider(
-      names_from = variable,
-      values_from = value
-    ) %>%
-    # Summarize 
-    mutate(
-      OystTO = rowSums(dplyr::select(., -PGID), na.rm = TRUE),
-      OystCO = rowSums(!is.na(dplyr::select(., -PGID))),
-      OystAV = OystTO / OystCO,
-      row_id = row_number()
-    ) %>%
-    dplyr::select(PGID, OystTO, OystCO, OystAV, row_id)
-    
-    #data_scores %>% st_drop_geometry() %>%
-    #dplyr::select(PGID, contains("Oyst") & ends_with("SC")) %>%
-    #mutate(across(contains("2024"), ~ .*1),
-    #       across(contains("2023"), ~ .*0.8),
-    #       across(contains("2022"), ~ .*0.6),
-    #       across(contains("2021"), ~ .*0.4),
-    #       across(contains("2020"), ~ .*0.2)) %>%
-    #mutate(OystTO = as.numeric(rowSums(dplyr::select(., -PGID), na.rm = TRUE))) %>% 
-    #mutate(OystCO = ncol(dplyr::select(., -c(PGID, OystTO)))) %>% 
-    #dplyr::select(PGID, OystTO, OystCO) %>%
-    #mutate(OystAV = OystTO/OystCO) %>%
-    #mutate(row_id = row_number())
+    {
+      max_possible <- sum(unique(.$weight))    
+      # Pivot back
+      dplyr::select(., PGID, variable, value) %>% 
+      pivot_wider( 
+        names_from = variable,
+        values_from = value
+        ) %>%
+        # Summarize 
+        mutate(
+          OystTO = rowSums(dplyr::select(., -PGID), na.rm = TRUE),
+          OystCO = max_possible,
+          OystAV = OystTO / OystCO,
+          row_id = row_number()
+          ) %>%
+        dplyr::select(PGID, OystTO, OystCO, OystAV, row_id)
+    }
   #
   #Buffer score
   buffer_total <- data_scores %>% st_drop_geometry() %>%

@@ -43,11 +43,12 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
 # Load model files with updated data:
 HSMfunc$load_model_files(shp_filename = "datalayers_260217")
 # Limit to PGID and data being updated:
-glimpse(SS_v0_data)
-#t <- left_join(SS_v0_data %>% dplyr::select(PGID:Long_DD_X_, Oyst26, Buff26), 
-#             as.data.frame(SS_vori_data %>% st_drop_geometry())) #Combine original data with new data, then skip to scoring
-#SS_v0_data <- t %>% dplyr::select(-c(Oyst20, Buff23))
-(SS_v0_2data <- SS_v0_data %>% dplyr::select(PGID, Oyst26, Buff26))
+glimpse(WC_v1_data)
+#Combine original data with new data, then skip to scoring
+#t <- st_join(SS_v0_data %>% dplyr::select(PGID:Long_DD_X_, Oyst26, Buff26), 
+#             SS_vori_data%>% dplyr::select(-c(Oyst20, Buff23))) 
+#SS_v0_data <- t
+(WC_v1_2data <- WC_v1_data %>% dplyr::select(PGID, Oyst26, Buff26))
 # Load previous data scores to update. Scores to include interpolation data:
 model_data <- HSMfunc$load_model_data(Site_Code, Version)
 # Remove scores needing updates, final scoring columns:
@@ -55,7 +56,7 @@ model_data <- HSMfunc$load_model_data(Site_Code, Version)
   dplyr::select(-c(Buff23SC, Oyst20SC, BuffAV, OystAV)))
 # Re-score data as needed -- skip to "Assign scores" and run required scoring code
 # Combine original scores and updated scores, recalculate model composite score:
-model_scores <- model_data_2
+model_scores <- model_data_2 %>% dplyr::select(-c(contains("AV"), contains("HSM")))
 # -- skip to "Model scoring". Run 941-1039 at least, then 1220
 #
 # Add and clean interp data ----
@@ -597,7 +598,6 @@ rm(datafiles)
 #
 ##Oysters
 temp <- get(paste0(Site_Code, "_", Version, "_data"))
-#
 Oyster_scores <- HSMfunc$assign_oyster_scores(temp)
 #
 #Oyster reef buffer scores
@@ -617,7 +617,36 @@ Channel_scores <- HSMfunc$assign_buffer_scores(temp)
 #
 #
 #
-### Interpolations multiple columns needing averaging:
+### Interpolations from Arc:
+# Annual means
+Salinity_scores <- HSMfunc$assign_salinity_scores(temp %>% dplyr::select(-c(SII, SIO)), Salinity_adult, 
+                                                       column_type = "averaged", type = "emsemble")
+# Spawning means
+Salinity_spawn_scores_t <- HSMfunc$assign_sal_spawn_scores(temp %>% dplyr::select(-c(SspwnRII, SspwnRIO, SspwnRAI, SspwnRAO)), Salinity_adult, 
+                                                           column_type = "averaged", type = "emsemble")
+Salinity_spawn_scores <- left_join(Salinity_spawn_scores_t, 
+                                   HSMfunc$assign_sal_spawn_scores(temp %>% dplyr::select(-c(SspwnRII, SspwnRIO, SspwnRAI, SspwnRAO)), Salinity_larvae, 
+                                                                   column_type = "averaged", type = "emsemble") %>% 
+                                     st_drop_geometry()) 
+#
+# Annual means
+Temperature_scores <- HSMfunc$assign_temperature_scores(temp, Temperature_adult, 
+                                                        column_type = "averaged", type = "emsemble")
+#Spawning period
+Temperature_spawn_scores_t <- HSMfunc$assign_temperature_spawn_scores(temp, Temperature_adult, 
+                                                                      column_type = "averaged", type = "emsemble")
+Temperature_spawn_scores <- left_join(Temperature_spawn_scores_t, 
+                                      HSMfunc$assign_temperature_spawn_scores(temp, Temperature_larvae, 
+                                                                              column_type = "averaged", type = "emsemble") %>% 
+                                        st_drop_geometry()) 
+# Threshold period - number = proportion above.below the threshold - score is inverse of values
+Temperture_thres_scores <- HSMfunc$assign_threshold_scores(temp, column_type = "averaged", type = "emsemble")
+#
+#
+#
+#
+#
+### Interpolations from R, multiple columns needing averaging:
 #
 # Salinity - all year Mean
 Salinity_scores_mean <- HSMfunc$assign_salinity_scores(SS_v1_salMonMean, Salinity_adult, 
@@ -963,11 +992,20 @@ if(model_data == "all"){
 #
 HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>% 
   st_drop_geometry() %>% 
-  mutate(CurveCO = sum(grepl("AV$", names(st_drop_geometry(get(paste0(Site_Code, "_", Version, "_data_clean"))))))) %>% 
-  mutate(HSM = case_when(ChnlTO == 1 ~ (OystAV + BuffAV + SgrsAV + SAV + TAV + FAV)/CurveCO,
-                         ChnlTO == 0 ~ 0, 
-                         TRUE ~ NA_real_)) %>%
-  mutate(HSMround = round(HSM, 2))
+  {
+    av_data <- dplyr::select(., ends_with("AV"))
+    
+    # Keep only AV columns with at least one real (non-NA/NaN) value
+    valid_av <- av_data[, colSums(!is.na(av_data)) > 0, drop = FALSE]
+    
+    CurveCO_val <- ncol(valid_av)
+    
+    mutate(.,
+           HSM = case_when(ChnlTO == 1 ~ rowSums(valid_av, na.rm = TRUE)/CurveCO_val,
+                           ChnlTO == 0 ~ 0, 
+                           TRUE ~ NA_real_)) %>%
+      mutate(HSMround = round(HSM, 2))
+  }
 #
 # Define the breaks for grouping (0 to 1 by 0.1)
 breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
