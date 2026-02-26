@@ -1,4 +1,6 @@
 # HSM-and-mapping
+[!Status](https://img.shields.io/badge/Project-In%20Progress-orange)
+<br>
 Project for creating and updating habitat suitability models based on Florida StateGrid pico system. Models are created according to the StateGrid(s) in which the desired area is located and within the predefined area established by the user. Please refer to "Reference files" to determine proper StateGrid and how to set area boundaries. 
 <br> *Project is under development.*
 <br>
@@ -28,7 +30,7 @@ Folder for storing all data layers used within the model. Due to file size, data
 - Navigation channels
 - Shellfish harvest areas 
 - Aquaculture lease designations
-- Continuous data: Salinity, temperture
+- Continuous data: Salinity, temperature, flow
 
 ## Model set up
 Progress through the numbered code files to set up the file organization and initial parameter information, establish habitat suitability scoring curves, and assemble the model data. Sections of code and their use are outlined below.
@@ -45,7 +47,9 @@ Location: Water quality; Project: Water quality
   * Raw data files can be cleaned and limited to specified date ranges before being transformed into spatial data. 
   * Methods of water quality station selection include: buffering, n closest stations, bounding boxes, and by station name.
   * Once data points have been gathered and compiled, water quality data can be interpolated to cover the area of interest as determined by the KML file. Interpolation methods include inverse distance weighted, nearest neighbor, thin plate spline, and ordinary kriging. An additional option of an ensemble model using a combination of models is provided. Interpolation methods and output can be found in 
-- Interpolation (uses 4_WQ_data_interpolation.R)
+- Flow-salinity curves (uses 4_WQ_flow_salinity_cuvre.R)
+  * Flow data should either be previously gathered by the user or USGS site numbers identified to pull data.
+- Interpolation (uses 5_WQ_data_interpolation.R)
   * Cleaned water quality data can be used to interpolate data to the entire site area based on station locations. Before interpolation is applied, data should be summarized by time frame and by statistic using the 'summarize_data' function.
   * Functions for inverse distance weighting, nearest neighbor, thin plate spline, and ordinary kriging can be used independently or in combination. In combination, an ensemble model can also be produced using user-specified weighting. 
   * Plots, data, and shapefiles for selected models can be saved locally, and summary information for models are added to the "model_setup" summary file in the Site_version Data folder.
@@ -60,4 +64,7 @@ Location: HSM code; Project: HSM_and_mapping
 
 ### 3_HSM_Creation  
 Location: HSM_Code; Project: HSM_and_mapping
-- *In progress*
+- Once data has been gathered and curves have been established, use "3_HSM_Creation" to load the setup information and assign site and section designations to model grid area.
+- Data polygon layers can be assigned to model grid area using ...
+- This process can be used in place of spatial joins from other GIS software programs. 
+*In progress*
