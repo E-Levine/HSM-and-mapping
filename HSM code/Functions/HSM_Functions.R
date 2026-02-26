@@ -107,6 +107,12 @@ create_folders <- function(Site_Code, Version) {
 #### File separation
 #
 KML_separation <- function(Status_of_KML, one_file = NA){
+  # Check for stringr, install if missing, then load
+  if (!requireNamespace("stringr", quietly = TRUE)) {
+    install.packages("stringr")
+  }
+  library(stringr)
+  #
   if(interactive()){
     result<- select.list(c("Yes", "No"), title = paste0("\nCan KML files be saved locally to the '",Site_Code,"_",Version,"' folder?"))
     if(result == "No"){
