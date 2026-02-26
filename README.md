@@ -1,5 +1,5 @@
 # HSM-and-mapping
-[!Status](https://img.shields.io/badge/Project-In%20Progress-orange)
+https://img.shields.io/badge/Project-In%20Progress-orange
 <br>
 Project for creating and updating habitat suitability models based on Florida StateGrid pico system. Models are created according to the StateGrid(s) in which the desired area is located and within the predefined area established by the user. Please refer to "Reference files" to determine proper StateGrid and how to set area boundaries. 
 <br> *Project is under development.*
@@ -48,7 +48,12 @@ Location: Water quality; Project: Water quality
   * Methods of water quality station selection include: buffering, n closest stations, bounding boxes, and by station name.
   * Once data points have been gathered and compiled, water quality data can be interpolated to cover the area of interest as determined by the KML file. Interpolation methods include inverse distance weighted, nearest neighbor, thin plate spline, and ordinary kriging. An additional option of an ensemble model using a combination of models is provided. Interpolation methods and output can be found in 
 - Flow-salinity curves (uses 4_WQ_flow_salinity_cuvre.R)
-  * Flow data should either be previously gathered by the user or USGS site numbers identified to pull data.
+  * Flow data should either be previously gathered by the user or USGS site numbers identified to pull data. USGS data for flow or salinity/conductance should be gathered and saved in separate files.
+  * Logger station IDs and locations should be updated in the Data/Raw-data/Flow_logger_locations.xlsx file before cleaning and summarizing data.
+  * USGS flow and salinity data can be gathered and saved for future use. Stations can be clustered and averaged to limit excess points or combine data if needed using cluster_points().
+  * Once loggers have been identified and raw data downloaded, data can be cleaned and total daily flow and mean daily salinity calculated per logger or logger cluster group.
+  * Mean monthly values are determined to and logger locations can be mapped to determine if all relationships are needed.
+  * 
 - Interpolation (uses 5_WQ_data_interpolation.R)
   * Cleaned water quality data can be used to interpolate data to the entire site area based on station locations. Before interpolation is applied, data should be summarized by time frame and by statistic using the 'summarize_data' function.
   * Functions for inverse distance weighting, nearest neighbor, thin plate spline, and ordinary kriging can be used independently or in combination. In combination, an ensemble model can also be produced using user-specified weighting. 
