@@ -16,6 +16,7 @@ clean_save_usgs_data <- function(rawDF, startDate, endDate, dataType){
       parameter_code == "00060" ~ "FLOW_d", 
       parameter_code == "00061" ~ "FLOW_i", 
       parameter_code == "00480" ~ "Salinity",
+      parameter_code == "00095" ~ "Conductance",
       TRUE ~ NA_character_))
   #
   # Check for data
@@ -23,13 +24,15 @@ clean_save_usgs_data <- function(rawDF, startDate, endDate, dataType){
   #
   start_ym <- format(start, "%Y%m")  # e.g., "202301"
   end_ym <- format(end, "%Y%m")      # e.g., "202312"
+  #
+  # Set up for flow file:
   data_path <- paste0("Data/Raw-data/", Site_code, "_logger_", Type, "_", start_ym, "_", end_ym,".xlsx")
-  #Create wb with data:
+  # Create wb with data:
   sheetName = paste0("logger_", Type)
   new_wb <- openxlsx::createWorkbook()
   openxlsx::addWorksheet(new_wb, sheetName)  # Add fresh sheet
   openxlsx::writeData(new_wb, sheet = sheetName, x = data) 
-  #Save wb
+  # Save wb
   openxlsx::saveWorkbook(new_wb, data_path, overwrite = TRUE)
   cat("Logger data successfully saved to:\n",
       "- Sheet '",sheetName,"' (", nrow(data), " rows)\n",
@@ -378,17 +381,44 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
               data_lookup = data_lookup))
 }
 #
-# Remove unneeded models:
-remove_models <- function(results, models_to_remove) {
+# Update models:
+filter_models <- function(results, models, mode = c("keep", "remove")) {
   #
-  stopifnot(is.list(results), all(c("models", "data_lookup") %in% names(results)))
-  # Filter the results list to remove specified models
-  keep <- !names(results$models) %in% models_to_remove
-  
-  # If Model_data exists in the global environment, filter it as well
+  stopifnot(
+    is.list(results),
+    all(c("models", "data_lookup") %in% names(results))
+  )
+  #
+  mode <- match.arg(mode)
+  # Get model names
+  model_names <- names(results$models)
+  # Keep or remove models 
+  if (mode == "keep") {
+    valid_models <- intersect(models, model_names)
+    
+    if (length(valid_models) == 0) {
+      stop("None of the specified models were found in results$models.")
+    }
+    
+    if (length(valid_models) < length(models)) {
+      warning("Some requested models were not found and were ignored.")
+    }
+    
+    keep_names <- valid_models
+    
+  } else {  # mode == "remove"
+    
+    invalid_models <- setdiff(models, model_names)
+    if (length(invalid_models) > 0) {
+      warning("Some models to remove were not found and were ignored.")
+    }
+    
+    keep_names <- setdiff(model_names, models)
+  }
+  # Output filtered data
   list(
-    models      = results$models[keep],
-    data_lookup = results$data_lookup[names(results$data_lookup) %in% names(results$models)[keep]]
+    models      = results$models[keep_names],
+    data_lookup = results$data_lookup[names(results$data_lookup) %in% keep_names]
   )
 }
 #
