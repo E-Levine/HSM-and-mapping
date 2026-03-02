@@ -23,11 +23,11 @@ source("Code/WQ_functions_interpolation.R", local = WQ)
 #modeling <- new.env()
 #load("SSv1_TMean_working.RData", envir = modeling)
 #
-Site_code <- c("SS")       #Two letter estuary code
+Site_code <- c("WI")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
 State_Grid <- c("E2")      #Two-letter StateGrid ID
 Alt_Grid <- c("F2")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("SSHSM") #Project code given to data, found in file name
+Project_code <- c("WIHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
@@ -66,7 +66,8 @@ ggplot()+
   theme_classic()+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 18, color = "black", family = "Arial"), 
-        axis.text =  element_text(size = 16, color = "black", family = "Arial"))+
+        axis.text =  element_text(size = 16, color = "black", family = "Arial"),
+        axis.text.x = element_text(angle = 30, hjust = 1))+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #

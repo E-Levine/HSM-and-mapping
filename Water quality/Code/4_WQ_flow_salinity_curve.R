@@ -207,7 +207,7 @@ larvae <- rbind(
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
 names(models$models)
 WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models, 
-                         "USGS-02313272_USGS-02313700", 
+                         names(models$models)[11], 
                          "Mean_Flow", "Mean_Salinity", 
                          Salinity_min = 11.98, Salinity_max = 38.95)
 #
@@ -249,11 +249,13 @@ Larvae_optimal <- WQ$automate_optimal_df(larvae, flow_ave, "2020-01-01", "2024-1
 Adult_nonoptimal <- WQ$automate_nonoptimal_df(adult, flow_ave, "2020-01-01", "2024-12-31", "Adult", "both")
 Larvae_nonoptimal <- WQ$automate_nonoptimal_df(larvae, flow_ave, "2020-01-01", "2024-12-31", "Larvae", "both")
 #
+Adult_optimal$Mean; Adult_nonoptimal$Mean; Larvae_optimal$Mean; Larvae_nonoptimal$Mean
 #
 #
 # Count number of days in month more than 1.5 SD from monthly mean
 outlier_flow <- WQ$count_outlier_flow_days(flow_ave, "2020-01-01", "2024-12-31", "Flow") 
 #
+outlier_flow
 #
 #
 # Save data and/or figure created
@@ -507,7 +509,7 @@ p <- WQ$plot_flow_interp(Outlier_idw_data, "meanOut1")
 p_fast <- p +
   ggrastr::rasterise(geom_sf(), dpi = 450)
 #
-ggsave(plot = p_fast,
+ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), 
        dpi = 450,
@@ -521,7 +523,7 @@ p <- WQ$plot_flow_interp(Outlier2_idw_data, "meanOut2")
 p_fast <- p +
   ggrastr::rasterise(geom_sf(), dpi = 450)
 #
-ggsave(plot = p_fast, 
+ggsave(plot = p, 
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), 
        dpi = 450,
@@ -543,7 +545,7 @@ WQ$save_flow_interp_output(AnonSub_idw_data, "flow_sub_adult") #meanDays
 WQ$save_flow_interp_output(AnonSuper_idw_data, "flow_super_adult")
 WQ$save_flow_interp_output(LOP_idw_data, "flow_optimal_larvae") #meanOptimal
 WQ$save_flow_interp_output(LnonSub_idw_data, "flow_sub_larvae") #meanDays
-WQ$save_flow_interp_output(LnonSuper_idw_data, "flow_super_larvae")
+WQ$save_flow_interp_output(LnonSuper_idw_data, "flow_super_larvae") #meanDays
 WQ$save_flow_interp_output(Outlier_idw_data, "flow_outlier1") #meanOut1
 WQ$save_flow_interp_output(Outlier2_idw_data, "flow_outlier2") #meanOut2
 #
@@ -572,12 +574,12 @@ write_csv_chunks <- function(
   invisible(length(split_df))
 }
 #
-(temp_data <- st_drop_geometry(Outlier2_idw_data) %>% 
+(temp_data <- st_drop_geometry(AOP_idw_data) %>% #UPDATE WITH NEW DATA
   as.data.frame() %>%
   dplyr::rename("Long_DD_X" = Longitude, "Lat_DD_Y" = Latitude) %>%
   mutate(Long_DD_X = as.numeric(Long_DD_X),
          Lat_DD_Y = as.numeric(Lat_DD_Y),
-         meanOut2 = as.numeric(meanOut2),
+         meanOptimal = as.numeric(meanOptimal), #UPDATE WITH NEW DATA
          dplyr::across(
            where(is.character),
            ~ na_if(trimws(.x), "")
@@ -586,8 +588,8 @@ write_csv_chunks(
   df = temp_data,
   out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                    #File name
-                   paste0(Site_code, "_", paste("flow_outlier2"))),
-  prefix = "flow_outlier2"
+                   paste0(Site_code, "_", paste("flow_optimal_adult"))), #UPDATE WITH NEW DATA
+  prefix = "flow_optimal_adult" #UPDATE WITH NEW DATA
 )
 #
 #
