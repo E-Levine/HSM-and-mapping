@@ -54,10 +54,16 @@ basetheme <- theme_classic()+
   theme(
   panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
   axis.title = element_blank(),#element_text(size = 14, color = "black"), 
-  axis.text =  element_text(size = 15, color = "black"),
+  axis.text =  element_text(size = 15, color = "black", family = "Arial"),
   axis.text.x = element_text(angle = 30, vjust = 0.5)
 )
 #
+legendtheme <- theme(
+  legend.title = element_text(size = 14, color = "black", family = "Arial"),
+  legend.text = element_text(size = 13, color = "black", family = "Arial"),
+  legend.background = element_blank(),
+  legend.key = element_blank()
+  )
 #
 #
 # Area map ----
@@ -71,7 +77,7 @@ basetheme <- theme_classic()+
             size = 5, fontface = "bold", family = "Arial", 
             color = "black", bg.color = "white")+
   annotate("text", label = "Atlantic\nOcean", x = -80.12, y = 27.25, # PDATE AS NEEDED
-           fontface = "italic", size = 5)+
+           fontface = "italic", size = 5, family = "Arial")+
   basetheme +
    theme(panel.background = element_rect(fill = "#CCFFFF"))+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.05, st_bbox(Site_area)["xmax"]+0.10),
@@ -91,7 +97,7 @@ ggsave(
 #
 # Create bounding box polygon of your site (for clearer highlight if desired)
 site_bbox <- st_as_sfc(st_bbox(Site_area))
-bbox_buffer <- st_buffer(site_bbox, dist = 0.07)
+bbox_buffer <- st_buffer(site_bbox, dist = 5000)
 (p2 <- ggplot() +
     geom_sf(data = FL_outline, fill = "grey90", color = "black", linewidth = 0.3) +
     geom_sf(data = bbox_buffer, 
@@ -99,7 +105,8 @@ bbox_buffer <- st_buffer(site_bbox, dist = 0.07)
             color = "#CC0033",
             linewidth = 1)+
     theme_void()+
-    theme(panel.border =  element_rect(fill = "white", color = "black", linewidth = 0.35)))
+    theme(panel.border =  element_rect(fill = "white", color = "black", linewidth = 0.35),
+          panel.background = element_rect(fill = "white")))
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_location_map.png"),
@@ -111,11 +118,77 @@ ggsave(
 )
 #
 #
-# Data layers ----
+# Polygon layer scores ----
 #
-ggplot()+
-  geom_sf(data = HSM_scores, aes(fill = OystAV, color = OystAV))+
-  basetheme+
-  scale_fill_viridis_c() + scale_color_viridis_c()
-
+# Oyster habitat
+(p3 <- ggplot()+
+  geom_sf(data = HSM_scores, aes(color = OystAV)) +
+  basetheme + legendtheme +
+  scale_color_viridis_c()+
+  labs(color = "Oyster habitat") + # UPDATE AS NEEDED
+  theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_habitat.png"),
+  plot = p3,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+# Oyster buffers
+(p4 <- ggplot()+
+    geom_sf(data = HSM_scores, aes(color = BuffAV)) +
+    basetheme + legendtheme +
+    scale_color_viridis_c()+
+    labs(color = "Oyster buffer") + # UPDATE AS NEEDED
+    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_buffer.png"),
+  plot = p4,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+# Seagrass
+(p5 <- ggplot()+
+    geom_sf(data = HSM_scores, aes(color = SgrsAV)) +
+    basetheme + legendtheme +
+    scale_color_viridis_c()+
+    labs(color = "Segrass habitat") + # UPDATE AS NEEDED
+    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Segrass.png"),
+  plot = p5,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+# Channels
+(p5 <- ggplot()+
+    geom_sf(data = HSM_scores, aes(color = ChnlTO)) +
+    basetheme + legendtheme +
+    scale_color_viridis_c()+
+    labs(color = "Channels") + # UPDATE AS NEEDED
+    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Channels.png"),
+  plot = p5,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
 #
