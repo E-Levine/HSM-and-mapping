@@ -950,8 +950,8 @@ Out2_flow_t <- HSMfunc$assign_flow_scores(SS_v1_data, `Outlier2 flow`, col_patte
 basetheme <- theme_bw()+
   theme(axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"), 
         axis.text = element_text(size = 11, family = "Arial", color = "black"), 
-        axis.text.x = element_text(margin = unit(c(0.25, 0.5, 0, 0.5), "cm")), 
-        axis.text.y = element_text(margin = unit(c(0, 0.25, 0, 0), "cm")),
+        axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")),#unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+        axis.text.y = element_text(margin = margin(t=0, r=0.25, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
         axis.ticks = element_line(color = "black", linewidth = 0.1),
         axis.ticks.length = unit(-0.15, "cm"),
         panel.grid = element_blank(),
@@ -1171,7 +1171,7 @@ ggplot(HSM_data_grps, aes(x = HSMgrp)) +
 ### SAVE PLOT: SiteCode_version_HSMscores_hist - ~850 * auto 600 paper
 #
 summary(HSM_data_grps$HSMgrp)
-summary(HSM_data_grps$HSMgyr)
+hsummary(HSM_data_grps$HSMgyr)
 summary(HSM_data_grps$HSMjb)
 #Jenks breaks summary:
 table(
