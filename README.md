@@ -74,3 +74,12 @@ Location: HSM_Code; Project: HSM_and_mapping
 - Data polygon layers can be assigned to model grid area using ...
 - This process can be used in place of spatial joins from other GIS software programs. 
 *In progress*
+
+### 4_HSM_scoring_output
+Location: HSM_Code; Project: HSM_and_mapping
+- Code outlined to load scoring curve data and assign scores to model data.
+- Two options for scoring are provided:
+  - base file: Averages values for each data type then assigns suitability score to averaged value.
+  - "aveScores" file: Scores each column of data then averages the scores to get a final data type score.
+- Final composite scores is calculated from averaged data type scores.
+- Code is provided to output maps for HSM groupings (0.1 bins), HSM Jenks breaks, and HSM quartile breaks.
