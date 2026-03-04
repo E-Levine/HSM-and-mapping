@@ -1417,7 +1417,17 @@ plot_model_map <- function(sf_data,
                            title = NULL,
                            force_scale = c("auto", "continuous", "discrete")) {
   #
+  # Data and version checks 
   stopifnot(inherits(sf_data, "sf"))
+  #
+  if (!requireNamespace("ggplot2", quietly = TRUE)) {
+    stop("Package 'ggplot2' is required but not installed.")
+  }
+  #
+  if (packageVersion("ggplot2") < "4.0.2") {
+    stop("ggplot2 >= 4.0.2 is required. Please update using install.packages('ggplot2').")
+  }
+  #
   #
   force_scale <- match.arg(force_scale)
   #
@@ -1432,8 +1442,8 @@ plot_model_map <- function(sf_data,
     ggplot2::theme(
       axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"),
       axis.text = ggplot2::element_text(size = 12, family = "Arial", color = "black"),
-      axis.text.x = element_text(margin = unit(c(0.25, 0.5, 0, 0.5), "cm")), 
-      axis.text.y = element_text(margin = unit(c(0, 0.25, 0, 0), "cm")),
+      axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+      axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
       axis.ticks = element_line(color = "black", linewidth = 0.1),
       axis.ticks.length = unit(-0.15, "cm"),
       panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
