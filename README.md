@@ -77,9 +77,25 @@ Location: HSM_Code; Project: HSM_and_mapping
 
 ### 4_HSM_scoring_output
 Location: HSM_Code; Project: HSM_and_mapping
-- Code outlined to load scoring curve data and assign scores to model data.
+- Code provided to load scoring curve data and assign scores to model data.
 - Two options for scoring are provided:
   - base file: Averages values for each data type then assigns suitability score to averaged value.
   - "aveScores" file: Scores each column of data then averages the scores to get a final data type score.
 - Final composite scores is calculated from averaged data type scores.
 - Code is provided to output maps for HSM groupings (0.1 bins), HSM Jenks breaks, and HSM quartile breaks.
+
+### 5_HSM_Mapping
+Location: HSM_Code; Project: HSM_and_mapping
+- Code is provided to output maps showing area for HSM models:
+  - Location map with specified reference locations
+  - Inset map showing area in relation to the state of Florida
+- Code to map model scores for each data type is also provided: 
+  - Oyster habitat
+  - Oyster reef buffers
+  - Seagrass habitat
+  - Navigational channels
+  - Salinity 
+  - Water temperature
+- Code is provided to output maps of the composite model scores as well as the composite model scores according to Jenks breaks and quartile breaks.
+- Individual map file output sizes can be modified.
+- Plot formatting is coded to be consistent among plots.
