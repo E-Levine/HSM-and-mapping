@@ -29,7 +29,7 @@ Version <- c("v1") #Model version
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_model"
-model_scores_date <- c("2026-02-05")#c("2026-03-04")
+model_scores_date <- c("2026-02-05")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -248,7 +248,8 @@ ggsave(
     basetheme + legendtheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
     labs(color = "HSM score", fill = "HSM score") + # UPDATE AS NEEDED
-    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
+   guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE)))
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Composite.png"),
@@ -261,12 +262,15 @@ ggsave(
 #
 #
 ## Jenks breaks
+#Make sure in proper order:
+HSM_scores <- HSM_scores %>% mutate(HSMjb = factor(HSMjb, levels = c("Low", "Medium", "High")))
 (p9 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = HSMjb, fill = HSMjb)) +
     basetheme + legendtheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
     labs(color = "Jenks breaks", fill = "Jenks breaks") + # UPDATE AS NEEDED
-    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
+    guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE)))
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_JenksBreaks.png"),
@@ -284,7 +288,8 @@ ggsave(
     basetheme + legendtheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
     labs(color = "Quartile breaks", fill = "Quartile breaks") + # UPDATE AS NEEDED
-    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
+    guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE)))
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_QuartileBreaks.png"),
