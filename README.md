@@ -1,4 +1,6 @@
 # HSM-and-mapping
+![Status](https://img.shields.io/badge/Project-In%20Progress-orange)
+<br>
 Project for creating and updating habitat suitability models based on Florida StateGrid pico system. Models are created according to the StateGrid(s) in which the desired area is located and within the predefined area established by the user. Please refer to "Reference files" to determine proper StateGrid and how to set area boundaries. 
 <br> *Project is under development.*
 <br>
@@ -9,7 +11,7 @@ All files other than R code and R project files will be saved locally due to the
 - Determine two-letter site code and section names to be used for whole area of interest for the project and subregions within the area.
 - Identify the appropriate StateGrid and add the required pico-grid folder to the "Reference files/Grids" folder.
 - Create or locate the necessary KML files (refer to "Site_Section_KML_creation_SOP" found in the Reference documentation for file creation). If the KML files are already separated, copy the files to the "Reference files/KML" folder. If the KML file needs to be separated, copy the [SiteCode_version]_all file to the "Reference files/KML/PreProcessing" folder.
-- Determine data layers to include in model. Add required layers to the "Data layers" folder. Make sure the date of publication is appended to the folder name using a 4-digit year and 2-digit month ("_202402"). This will allow for the usage of multiple layers of the same data type and will aid in build a local library of data layers to be shared among projects.
+- Determine data layers to include in model. Add required data for each layer to the "Data layers" folder. Make sure the date of publication is appended to the folder name using a 4-digit year and 2-digit month ("_202402"). This will allow for the usage of multiple layers of the same data type and will aid in building a local library of data layers to be shared among projects.
 - Update the "Setup_data" file (located in the "Reference files" folder) as needed for the model and based on the data being used. Refer to the *Set up data* section for more guidance.
 
 ### Set up data
@@ -20,15 +22,16 @@ A base "Setup_data" Excel file is located within the "Reference files" folder. T
 - Parameter_Order: Priority order for data layers used within the model. Used to assign parameter order for model weighting. Parameters to included should be assigned a priority number and data to exclude should be prioritized as "NA". "Column_name" should reflect the column of data to reference for assigning suitability scores.
 - Parameter_Levels: Levels/variable names possible for specified parameters and their associated data column name.  
 
-### Data layers
+### Data layers folder
 Folder for storing all data layers used within the model. Due to file size, data should be stored locally. A text file is included to note data sources. Names or values listed below are currently accounted for in the code and set up file. Anything not listed has not been used in models created by the code owner(s). <br>
+
 *Current data layers*: <br>
-- Oysters in Florida (current)
-- Seagrass habitat in Florida
-- Navigation channels
-- Shellfish harvest areas 
+- Oysters in Florida - FWC GIS layer
+- Seagrass habitat in Florida - FWC GIS layer
+- Navigational channels - FWC GIS layer
+- Shellfish harvest areas
 - Aquaculture lease designations
-- Continuous data: Salinity, temperture
+- Continuous data: Salinity, temperature, flow
 
 ## Model set up
 Progress through the numbered code files to set up the file organization and initial parameter information, establish habitat suitability scoring curves, and assemble the model data. Sections of code and their use are outlined below.
@@ -43,13 +46,20 @@ Location: Water quality; Project: Water quality
 - Data selection and cleaning (uses 1_WQ_data_compilation.R, 2_WQ_data_selection.R, 3_WQ_data_combination.R)
   * Refer to "Water Quality Data SOP" located in the "Reference files" folder for steps on water quality data retrieval, data cleaning, and data combination. Associated code can be found in Water quality/Code.
   * Raw data files can be cleaned and limited to specified date ranges before being transformed into spatial data. 
-  * Methods of water quality station selection include: buffering, n closest stations, bounding boxes, and by station name.
-  * Once data points have been gathered and compiled, water quality data can be interpolated to cover the area of interest as determined by the KML file. Interpolation methods include inverse distance weighted, nearest neighbor, thin plate spline, and ordinary kriging. An additional option of an ensemble model using a combination of models is provided. Interpolation methods and output can be found in 
-- Interpolation (uses 4_WQ_data_interpolation.R)
+  * Methods of water quality station selection include: buffering, *n* closest stations, bounding boxes, and by station name.
+  * Once data points have been gathered and compiled, water quality data can be interpolated to cover the area of interest as determined by the KML file. Interpolation methods include inverse distance weighted, nearest neighbor, thin plate spline, and ordinary kriging. An additional option of an ensemble model using a combination of models is provided. Additional information about interpolation methods and output can be found in the "Interpolation methods" document located in the "Reference files" folder. 
+- Flow-salinity curves (uses 4_WQ_flow_salinity_cuvre.R)
+  * Flow data should either be previously gathered by the user or the user should identify the USGS site numbers form which to pull data. If USGS data for flow and salinity/conductance are both used, they should be gathered and saved in separate files.
+  * Logger station IDs and locations should be updated in the Data/Raw-data/Flow_logger_locations.xlsx file before cleaning and summarizing data.
+  * Code if provided to gathered and save USGS flow and salinity data for future use. Stations can be clustered and averaged to limit excess points or combine data if needed using cluster_points().
+  * Once loggers have been identified and raw data downloaded, data can be cleaned and total daily flow and mean daily salinity calculated per logger or logger cluster group.
+  * Mean monthly values are determined and logger locations can be mapped to determine if all relationships are needed.
+  * Flow-salinity curves are identified to determine mean optimal, sub optimal, above optimal, and outlier days of flow for ideal salinity range.
+  * Calculated days are then interpolated over the model area for flow model assessments. 
+- Interpolation (uses 5_WQ_data_interpolation.R)
   * Cleaned water quality data can be used to interpolate data to the entire site area based on station locations. Before interpolation is applied, data should be summarized by time frame and by statistic using the 'summarize_data' function.
   * Functions for inverse distance weighting, nearest neighbor, thin plate spline, and ordinary kriging can be used independently or in combination. In combination, an ensemble model can also be produced using user-specified weighting. 
-  * Plots, data, and shapefiles for selected models can be saved locally, and summary information for models are added to the "model_setup" summary file in the Site_version Data folder.
-  * Refer to "Interpolation Methods" document located in the "Reference files" folder for additional information on interpolation methods.  
+  * Plots, data, and shapefiles for selected models can be saved locally, and summary information for models are added to the "model_setup" summary file in the Site_version Data folder. 
 
 ### 2_Developing_HSM_curves
 Location: HSM code; Project: HSM_and_mapping
@@ -60,4 +70,32 @@ Location: HSM code; Project: HSM_and_mapping
 
 ### 3_HSM_Creation  
 Location: HSM_Code; Project: HSM_and_mapping
-- *In progress*
+- Once data has been gathered and curves have been established, use "3_HSM_Creation" to load the setup information and assign site and section designations to model grid area.
+- Data polygon layers can be assigned to model grid area using ... *In progress*
+- This process will be established to be used in place of spatial joins from other GIS software programs. 
+*In progress*
+
+### 4_HSM_scoring_output
+Location: HSM_Code; Project: HSM_and_mapping
+- Code is provided to load scoring curve data and assign scores to model data.
+- Two options for scoring are provided:
+  - base file: Averages values for each data type then assigns suitability score to averaged value.
+  - "aveScores" file: Scores each column of data then averages the scores to get a final data type score.
+- Final composite scores is calculated from averaged data type scores.
+- Code is provided to output maps for HSM groupings (0.1 bins), HSM Jenks breaks, and HSM quartile breaks.
+
+### 5_HSM_Mapping
+Location: HSM_Code; Project: HSM_and_mapping
+- Code is provided to output maps showing area for HSM models:
+  - Location map with specified reference locations
+  - Inset map showing area in relation to the state of Florida
+- Code to map model scores for each data type is also provided: 
+  - Oyster habitat
+  - Oyster reef buffers
+  - Seagrass habitat
+  - Navigational channels
+  - Salinity 
+  - Water temperature
+- Code is provided to output maps of the composite model scores as well as the composite model scores according to Jenks breaks and quartile breaks.
+- Individual map file output sizes can be modified.
+- Plot formatting is coded to be consistent among plots.

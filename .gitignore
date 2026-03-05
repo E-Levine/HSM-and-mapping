@@ -75,6 +75,7 @@ Reference\ files/Grids/*/*
 Reference\ files/Grids/*
 
 Water\ quality/**/*.xlsx
+!Water\ quality/Data/Raw-data/Flow_logger_locations.xlsx
 Water\ quality/Maps/*widget.html
 Water\ quality/Maps/*.jpeg
 Water\ quality/Maps/*.jpg
