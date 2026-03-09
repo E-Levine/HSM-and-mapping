@@ -1,0 +1,2496 @@
+#Functions for water quality interpolation steps
+#
+####Variogram functions####
+#
+#
+###All functions from automap package. See automap package for author/citation information.
+#
+# This function automatically fits a variogram to input_data
+autofitVariogram <- function(formula, input_data, model = c("Sph", "Exp", "Gau", "Ste"), kappa = c(0.05, seq(0.2, 2, 0.1), 5, 10), fix.values = c(NA,NA,NA),
+                             verbose = FALSE, GLS.model = NA, start_vals = c(NA,NA,NA), miscFitOptions = list(),...) {
+  # Check for anisotropy parameters
+  if('alpha' %in% names(list(...))) warning('Anisotropic variogram model fitting not supported, see the documentation of autofitVariogram for more details.')
+  
+  # Take the misc fit options and overwrite the defaults by the user specified ones
+  miscFitOptionsDefaults = list(merge.small.bins = TRUE, min.np.bin = 5)
+  miscFitOptions = modifyList(miscFitOptionsDefaults, miscFitOptions)
+  
+  # Create boundaries
+  if (is(input_data, "Spatial")) {
+    longlat = !is.projected(input_data)
+    if(is.na(longlat)) longlat = FALSE
+    diagonal = spDists(t(bbox(data_m)), longlat = longlat)[1,2]                # 0.35 times the length of the central axis through the area
+  } else {
+    longlat = st_is_longlat(input_data)
+    if (is.na(longlat)) longlat = FALSE
+    bb = st_bbox(input_data)
+    diagonal = sqrt(((bb$xmax-bb$xmin)^2)+((bb$ymax-bb$ymin)^2))
+  }
+  
+  
+  boundaries = c(2,4,6,9,12,15,25,35,50,65,80,100) * diagonal * 0.35/100         # Boundaries for the bins in km
+  
+  
+  # If you specify a variogram model in GLS.model the Generalized least squares sample variogram is constructed
+  if(!is(GLS.model, "variogramModel")) {
+    experimental_variogram = variogram(formula, input_data,boundaries = boundaries, ...)
+  } else {
+    if(verbose) cat("Calculating GLS sample variogram\n")
+    g = gstat(NULL, "bla", formula, input_data, model = GLS.model, set = list(gls=1))
+    experimental_variogram = variogram(g, boundaries = boundaries, ...)
+  }
+  
+  # request by Jon Skoien
+  if(miscFitOptions[["merge.small.bins"]]) {
+    if(verbose) cat("Checking if any bins have less than 5 points, merging bins when necessary...\n\n")
+    while(TRUE) {
+      if(length(experimental_variogram$np[experimental_variogram$np < miscFitOptions[["min.np.bin"]]]) == 0 | length(boundaries) == 1) break
+      boundaries = boundaries[2:length(boundaries)]			
+      if(!is(GLS.model, "variogramModel")) {
+        experimental_variogram = variogram(formula, input_data, boundaries = boundaries, ...)
+      } else {
+        experimental_variogram = variogram(g, boundaries = boundaries, ...)
+      }
+    }	
+  }
+  
+  # set initial values
+  if(is.na(start_vals[1])) {  # Nugget
+    initial_nugget = min(experimental_variogram$gamma)
+  } else {
+    initial_nugget = start_vals[1]
+  }
+  if(is.na(start_vals[2])) { # Range
+    initial_range = 0.1 * diagonal   # 0.10 times the length of the central axis through the area
+  } else {
+    initial_range = start_vals[2]
+  }
+  if(is.na(start_vals[3])) { # Sill
+    initial_sill = mean(c(max(experimental_variogram$gamma), median(experimental_variogram$gamma)))
+  } else {
+    initial_sill = start_vals[3]
+  }
+  
+  # Determine what should be automatically fitted and what should be fixed
+  # Nugget
+  if(!is.na(fix.values[1]))
+  {
+    fit_nugget = FALSE
+    initial_nugget = fix.values[1]
+  } else
+    fit_nugget = TRUE
+  
+  # Range
+  if(!is.na(fix.values[2]))
+  {
+    fit_range = FALSE
+    initial_range = fix.values[2]
+  } else
+    fit_range = TRUE
+  
+  # Partial sill
+  if(!is.na(fix.values[3]))
+  {
+    fit_sill = FALSE
+    initial_sill = fix.values[3]
+  } else
+    fit_sill = TRUE
+  
+  getModel = function(psill, model, range, kappa, nugget, fit_range, fit_sill, fit_nugget, verbose)
+  {
+    if(verbose) debug.level = 1 else debug.level = 0
+    if(model == "Pow") {
+      warning("Using the power model is at your own risk, read the docs of autofitVariogram for more details.")
+      if(is.na(start_vals[1])) nugget = 0
+      if(is.na(start_vals[2])) range = 1    # If a power mode, range == 1 is a better start value
+      if(is.na(start_vals[3])) sill = 1
+    }
+    obj = try(fit.variogram(experimental_variogram,
+                            model = vgm(psill=psill, model=model, range=range,
+                                        nugget=nugget,kappa = kappa),
+                            fit.ranges = c(fit_range), fit.sills = c(fit_nugget, fit_sill),
+                            debug.level = 0), 
+              TRUE)
+    if("try-error" %in% class(obj)) {
+      #print(traceback())
+      warning("An error has occured during variogram fitting. Used:\n", 
+              "\tnugget:\t", nugget, 
+              "\n\tmodel:\t", model, 
+              "\n\tpsill:\t", psill,
+              "\n\trange:\t", range,
+              "\n\tkappa:\t",ifelse(kappa == 0, NA, kappa),
+              "\n  as initial guess. This particular variogram fit is not taken into account. \nGstat error:\n", obj)
+      return(NULL)
+    } else return(obj)
+  }
+  
+  
+  # Automatically testing different models, the one with the smallest sums-of-squares is chosen
+  test_models = model
+  SSerr_list = c()
+  vgm_list = list()
+  counter = 1
+  
+  for(m in test_models) {
+    if(m != "Mat" && m != "Ste") {        # If not Matern and not Stein
+      model_fit = getModel(initial_sill - initial_nugget, m, initial_range, kappa = 0, initial_nugget, fit_range, fit_sill, fit_nugget, verbose = verbose)
+      if(!is.null(model_fit)) {	# skip models that failed
+        vgm_list[[counter]] = model_fit
+        SSerr_list = c(SSerr_list, attr(model_fit, "SSErr"))}
+      counter = counter + 1
+    } else {                 # Else loop also over kappa values
+      for(k in kappa) {
+        model_fit = getModel(initial_sill - initial_nugget, m, initial_range, k, initial_nugget, fit_range, fit_sill, fit_nugget, verbose = verbose)
+        if(!is.null(model_fit)) {
+          vgm_list[[counter]] = model_fit
+          SSerr_list = c(SSerr_list, attr(model_fit, "SSErr"))}
+        counter = counter + 1
+      }
+    }
+  }
+  
+  # Check for negative values in sill or range coming from fit.variogram
+  # and NULL values in vgm_list, and remove those with a warning
+  strange_entries = sapply(vgm_list, function(v) any(c(v$psill, v$range) < 0) | is.null(v))
+  if(any(strange_entries)) {
+    if(verbose) {
+      print(vgm_list[strange_entries])
+      cat("^^^ ABOVE MODELS WERE REMOVED ^^^\n\n")
+    }
+    warning("Some models where removed for being either NULL or having a negative sill/range/nugget, \n\tset verbose == TRUE for more information")
+    SSerr_list = SSerr_list[!strange_entries]
+    vgm_list = vgm_list[!strange_entries]
+  }
+  
+  if(verbose) {
+    cat("Selected:\n")
+    print(vgm_list[[which.min(SSerr_list)]])
+    cat("\nTested models, best first:\n")
+    tested = data.frame("Tested models" = sapply(vgm_list, function(x) as.character(x[2,1])), 
+                        kappa = sapply(vgm_list, function(x) as.character(x[2,4])), 
+                        "SSerror" = SSerr_list)
+    tested = tested[order(tested$SSerror),]
+    print(tested)
+  }
+  
+  result = list(exp_var = experimental_variogram, var_model = vgm_list[[which.min(SSerr_list)]], sserr = min(SSerr_list))
+  class(result) = c("autofitVariogram","list")    
+  
+  return(result)
+}
+#
+#
+plot.autofitVariogram = function(x, plotit = TRUE, ...){ 
+  shift = 0.03
+  labels = as.character(x$exp_var$np)
+  vario = xyplot(gamma ~ dist, data = x$exp_var, panel = autokrige.vgm.panel,
+                 labels = labels, shift = shift, model = x$var_model,# subscripts = TRUE,
+                 direction = c(x$exp_var$dir.hor[1], x$exp_var$dir.ver[1]),
+                 ylim = c(min(0, 1.04 * min(x$exp_var$gamma)), 1.04 * max(x$exp_var$gamma)),
+                 xlim = c(0, 1.04 * max(x$exp_var$dist)), xlab = "Distance", ylab = "Semi-variance",
+                 main = "Experimental variogram and fitted variogram model", mode = "direct",...)
+  if (plotit) print(vario) else vario
+}
+#
+#
+# Provides a summary function for the autofitVariogram object
+summary.autofitVariogram <- function(object, ...) {
+  cat("Experimental variogram:\n")
+  print(object$exp_var, ...)
+  cat("\nFitted variogram model:\n")
+  print(object$var_model, ...)
+  cat("Sums of squares betw. var. model and sample var.")
+  print(object$sserr)
+}
+#
+#
+##END OF VARIOGRAM FUNCTIONS
+#
+####Data summarization functions####
+#
+#Load WQ data file
+load_WQ_data <- function(){
+  if(Folder == "compiled" && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nCan the data be saved locally to the project version folder?")
+    files <- list.files(path = "Data/Compiled-data/", 
+                        pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
+    WQ_data <- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+      dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
+                    Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
+    
+    #Check if Latitude and Longitude columns exist and are not all NA
+    lat_exists <- "Latitude" %in% colnames(WQ_data) && any(!is.na(WQ_data$Latitude))
+    long_exists <- "Longitude" %in% colnames(WQ_data) && any(!is.na(WQ_data$Longitude))
+    
+    if(!(lat_exists && long_exists)){
+      #Try to find a geometry column (common names: geometry, geom, Shape, WKT, etc.)
+      geom_col <- grep("geometry|geom|shape|wkt", tolower(colnames(WQ_data)), value = TRUE)
+      if(length(geom_col) > 0){
+        #Use first geometry column found
+        geom_col <- geom_col[1]
+        #Convert to sf object assuming WKT format
+        sf_points <- tryCatch({
+          st_as_sfc(WQ_data[[geom_col]], crs = 4326)
+        }, error = function(e) NULL)
+        if(!is.null(sf_points)){
+          coords <- st_coordinates(sf_points)
+          WQ_data$Longitude <- coords[,1]
+          WQ_data$Latitude <- coords[,2]
+        } else {
+          message("Geometry column found but could not parse coordinates.")
+        }
+      } else {
+        message("No geometry column found and Latitude/Longitude missing.")
+      }
+    }
+    
+    WQ_data <<- WQ_data
+    #
+    if(result == "Yes"){
+      write_xlsx(WQ_data, paste0("../",Site_code, "_", Version,"/Data/", Site_code, "_cleaned_WQ_data.xlsx"), format_headers = TRUE)
+    } else {
+      message("A copy of the data will not be saved to the project folder.")
+    } 
+  } else {
+    paste("Code needs to be updated for 'final' folder location.")
+  }
+}
+
+#
+#
+#Load and clip state grids to estuary area
+#library(sf)
+#library(dplyr)
+load_site_grid <- function(StateGrid, SiteArea, Alt_Grid = NA) {
+  # Input validation
+  if (!is.character(StateGrid) || nchar(StateGrid) == 0) {
+    stop("StateGrid must be a non-empty string.")
+  }
+  if (!inherits(SiteArea, "sf")) {
+    stop("SiteArea must be a valid sf object.")
+  }
+  if (!is.na(Alt_Grid) && (!is.character(Alt_Grid) || nchar(Alt_Grid) == 0)) {
+    stop("Alt_Grid must be a non-empty string or NA.")
+  }
+  # Helper function to load and validate grid
+  load_grid <- function(grid_name) {
+    file_path <- paste0("../Reference files/Grids/Florida_PicoGrid_WGS84_", grid_name, "/Florida_PicoGrid_WGS84_", grid_name, "_clip.shp")
+    if (!file.exists(file_path)) {
+      stop(paste("Shapefile not found:", file_path))
+    }
+    tryCatch({
+      grid <- st_read(file_path, quiet = TRUE)
+      message(paste("Loaded grid:", grid_name))
+      return(grid)
+    }, error = function(e) {
+      stop(paste("Error loading grid", grid_name, ":", e$message))
+    })
+  }
+  
+  # Load primary grid
+  PicoGrid <- load_grid(StateGrid)
+  
+  # Load alternative grid if provided
+  if (!is.na(Alt_Grid)) {
+    Alt_PicoGrid <- load_grid(Alt_Grid)
+  }
+  # Check CRS compatibility (basic: warn if different)
+  if (!is.na(Alt_Grid) && !st_crs(PicoGrid) == st_crs(Alt_PicoGrid)) {
+    warning("Primary and alternative grids have different CRS; intersections may be inaccurate.")
+  }
+  if (!st_crs(PicoGrid) == st_crs(SiteArea)) {
+    warning("Grid and SiteArea have different CRS; transforming SiteArea to match grid CRS.")
+    SiteArea <- st_transform(SiteArea, st_crs(PicoGrid))
+  }
+  # Filter by intersection
+  PicoGrid_clipped <- PicoGrid[lengths(st_intersects(PicoGrid, SiteArea)) > 0, ]
+  if (nrow(PicoGrid_clipped) == 0) {
+    warning("No intersections found for primary grid.")
+  }
+  
+  if (!is.na(Alt_Grid)) {
+    Alt_PicoGrid_clipped <- Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, SiteArea)) > 0, ]
+    if (nrow(Alt_PicoGrid_clipped) == 0) {
+      warning("No intersections found for alternative grid.")
+    }
+    # Combine clipped grids
+    Site_Grid <- bind_rows(PicoGrid_clipped, Alt_PicoGrid_clipped)
+    # Clean up
+    rm(PicoGrid, Alt_PicoGrid, PicoGrid_clipped, Alt_PicoGrid_clipped)
+  } else {
+    Site_Grid <- PicoGrid_clipped 
+    rm(PicoGrid, PicoGrid_clipped)
+  }
+  # Safe renaming: check columns exist
+  required_cols <- c("Long_DD_X", "Lat_DD_Y")
+  if (!all(required_cols %in% colnames(Site_Grid))) {
+    stop("Required columns 'Long_DD_X' and 'Lat_DD_Y' not found in grid data.")
+  }
+  Site_Grid <- Site_Grid %>% rename(Longitude = Long_DD_X, Latitude = Lat_DD_Y)
+  
+  if (nrow(Site_Grid) == 0) {
+    warning("Final Site_Grid is empty; no valid intersections found.")
+  }
+  return(Site_Grid)
+}
+#
+summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter", "YearMonth", "YearQuarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
+  #
+  Time_period <- match.arg(Time_period)
+  Summ_method <- match.arg(Summ_method)
+  # Initialize Start_year and End_year
+  Start_year <- NULL
+  End_year <- NULL
+  ##Set year range:
+  if(grepl("^\\d{4}-\\d{4}$", Year_range)){
+    Start_year <- as.numeric(substr(Year_range, 1, 4))
+    End_year <- as.numeric(substr(Year_range, 6, 9))
+  } else if(nchar(Year_range) == 4){
+    Start_year <- as.numeric(Year_range)
+    End_year <- as.numeric(Year_range)
+  } else if(Year_range == "NA") {
+    Year_range <- NA
+  } else {
+    stop("Year range must be in the format 'YYYY-YYYY' or 'YYYY'.")
+  }
+  ##Set threshold variables:
+  if(Summ_method == "Threshold" && !(Threshold_parameters[1] %in% c("above", "below"))){
+    stop("Threshold_parameters must be one of: above of below \n
+    Threshold_parameters must also contain a numeric value.")
+  }
+  #
+  if(Summ_method == "Threshold" && Threshold_parameters[1] %in% c("above", "below")){
+    threshold_value <<- as.numeric(Threshold_parameters[2])
+  }
+  #
+  #Function to filter and prepare temp_df based on Parameter_name
+  get_temp_df <- function(param_name) {
+    data_frame %>% 
+      #Filter to desired parameter
+      dplyr::filter(str_detect(Parameter, param_name)) %>%
+      #Add in missing group columns
+      mutate(Year = year(as.Date(ActivityStartDate)),
+             Month = lubridate::month(as.Date(ActivityStartDate), label = TRUE)) %>%
+      #Assign quarters, starting at month specified or default start of January
+      {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
+      #Filter to specified months if applicable
+      {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . }
+  }
+  #
+  #Initial filtering
+  temp_df <- get_temp_df(Parameter_name)
+  #List unique Parameter values in temp_df
+  unique_params <- unique(data_frame$Parameter)
+  cat("Current paramter value:\n")
+  print(Parameter_name)
+  cat("\n Unique Parameter values found:\n")
+  print(unique_params)
+  #
+  #Prompt to continue or update Parameter_name:
+  if(interactive()){
+    repeat {
+      user_input <- readline(prompt = "Type 'c' to continue with current Parameter_name, or enter a new Parameter_name to update: \n(Note: Changing the parameter value here will change the 'Param_name' object. \n Enter a new name without quotation marks.)")
+      user_input <- trimws(user_input)
+      if(tolower(user_input) == "c") {
+        # Continue with current Parameter_name
+        cat(paste("Continuing with current parameter:", Parameter_name))
+        break
+      } else if(nchar(user_input) > 0) {
+        # Update Parameter_name and re-filter
+        Parameter_name <- user_input
+        Param_name <<- user_input
+        temp_df <- get_temp_df(Parameter_name)
+        cat("Updated to parameter value:", Parameter_name, "\n")
+        break
+      } else {
+        cat("Invalid input. Please type 'c' or enter a new Parameter_name.\n")
+      }
+    }
+  } else {
+    cat("Non-interactive session detected; continuing with current Parameter_name.\n")
+  }
+  #Continue with grouping and summarizing
+  temp_df <- temp_df %>%
+    #Grouping for evals: station, specified time period
+    group_by(Estuary, Latitude, Longitude, Parameter) %>%
+    {if (Time_period == "Year") group_by(., Year) 
+      else if (Time_period == "Month") group_by(., Month)
+      else if (Time_period == "YearMonth") group_by(., Year, Month)
+      else if (Time_period == "Quarter") group_by(., Quarter)
+      else if (Time_period == "YearQuarter") group_by(., Year, Quarter)
+      else (.)}
+  #
+  ##Summarize data using method specified
+  if(Summ_method == "Means"){
+    summary_data <- station_means(temp_df, Year_range, Start_year, End_year, Time_period)  
+  } else if(Summ_method == "Mins"){
+    summary_data <- station_mins(temp_df, Year_range, Start_year, End_year, Time_period)  
+  } else if(Summ_method == "Maxs"){
+    summary_data <- station_maxs(temp_df, Year_range, Start_year, End_year, Time_period)  
+  } else if(Summ_method == "Range"){
+    summary_data <- station_range(temp_df, values = "No", Year_range, Start_year, End_year, Time_period)  
+  } else if(Summ_method == "Range_values"){
+    summary_data <- station_range(temp_df, values = "Yes", Year_range, Start_year, End_year, Time_period)  
+  } else if(Summ_method == "Threshold"){
+    summary_data <- station_threshold(temp_df, Year_range, Start_year, End_year, Time_period, Threshold_parameters, threshold_value)  
+  } else {
+    stop("Summarization method supplied is incorrectly specified or is not currently suppported.")
+  }
+  #
+  output_data <- summary_data %>% ungroup() %>% 
+    pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range", "Threshold"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
+    pivot_wider(names_from = "Parameter", values_from = "Value") %>% 
+    dplyr::select(any_of(c("Year", "Month", "YearMonth", "Quarter", "YearQuarter")), Longitude, Latitude, Statistic, any_of("n"), all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
+    rename(Working_Param = any_of(Param_name))
+  #
+  message(Param_name," summarized by ", Summ_method, " over ", Time_period)
+  return(output_data)
+  #
+}
+####Sub-functions:
+#
+#Set quarters
+set_quarters <- function(date, start_month) {
+  month_num <- month(date)
+  # Calculate the adjusted month number
+  adjusted_month <- (month_num - start_month + 12) %% 12
+  # Determine the quarter based on the adjusted month
+  return(floor(adjusted_month / 3) + 1)
+}
+#Means of parameter
+station_means <- function(df, Range, StartYr, EndYr, Time_period){
+  temp <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
+    summarise(Mean = mean(Value, na.rm = TRUE), n = sum(!is.na(Value)))
+  return(temp)
+}
+#Minimums of parameter
+station_mins <- function(df, Range, StartYr, EndYr, Time_period){
+  temp <- df %>%  
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
+    summarise(Minimum = min(Value, na.rm = TRUE), n = sum(!is.na(Value)))
+  return(temp)
+}
+#Maximums of parameter
+station_maxs <- function(df, Range, StartYr, EndYr, Time_period){
+  temp <- df %>%  
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
+    summarise(Maximum = max(Value, na.rm = TRUE), n = sum(!is.na(Value)))
+  return(temp)
+}
+#Range of parameter: either the range (values = N) or the min and max (values = Y)
+station_range <- function(df, values, Range, StartYr, EndYr, Time_period){
+  temp <- df %>%  
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} %>%
+    summarise(Maximum = max(Value, na.rm = TRUE),
+              Minimum = min(Value, na.rm = TRUE), 
+              n = sum(!is.na(Value))) %>%
+    {if(values == "Yes") . else mutate(., Range = Maximum - Minimum) %>% dplyr::select(., -Maximum, -Minimum) }
+  return(temp)
+}
+#Threshold of parameter: above or below a value
+station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_parameters, threshold_value){
+  #Filtering and grouping
+  temp_raw <- df %>% 
+    {if(!is.na(Range)) filter(., Year >= StartYr & Year <= EndYr) else . } %>%
+    ungroup() %>% 
+    {if (Time_period == "Year") group_by(., Year, Estuary, Latitude, Longitude, Parameter) 
+      else if (Time_period == "Month") group_by(., Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else (.)} 
+  #Calculate number above/below threshold and total number observations
+  temp <- left_join(temp_raw %>% {if (length(Threshold_parameters) == 2 && Threshold_parameters[1] %in% c("above", "below") && is.numeric(threshold_value)) {
+    if (Threshold_parameters[1] == "above") {
+      filter(., Value > threshold_value)
+    } else if (Threshold_parameters[1] == "below") {
+      filter(., Value < threshold_value)
+    }
+  } else {
+    stop("Invalid Threshold_parameters format. Must specify either 'above' or 'below' and specify the numeric value for the threshold.")
+  }
+  } %>%
+    summarise(Count = n()),
+  temp_raw %>% summarise(Total = n())) %>%
+    #Proportion of samples related to threshold
+    mutate(Threshold = Count/Total)
+  #
+  temp <- rbind(temp, temp_raw %>% anti_join(temp) %>% summarise(Total = n()) %>% mutate(Count = 0, Threshold = 0/Total))
+  return(temp)
+}
+#
+#
+####Interpolation####
+#Updated for Month and Year
+perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter, Individual = NULL) {
+  Param_name <- Parameter
+  #
+  if (is.null(Individual)) {
+    Individual <- "Statistic"
+  }
+  # Validate Individual parameter
+  if (!Individual %in% c("Month", "Year", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
+    stop("Individual must be 'Month', 'Year', or 'Statistic'.")
+  }
+  # Check for Month column if Individual == "Month"| "Year"
+  if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Month' column when Individual = 'Month'.")
+  }
+  if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
+  # Determine what to loop over
+  # Month
+  if (Individual == "Month") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Month, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No months found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Month-Statistic"
+    # Year
+  } else if (Individual == "Year") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Year, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No years found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Year-Statistic"
+  } else {
+    loop_vars <- unique(Site_data_spdf@data$Statistic)
+    loop_name <- "Statistic"
+  }
+  #Progress bar setup
+  total_steps <- if (Individual == "Month" | Individual == "Year") nrow(loop_vars) * 4 + 2 else length(loop_vars) * 4 + 2
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = total_steps,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  StartTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
+  cat("Starting time:", format(Sys.time()), "\n")
+  #
+  tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(Individual != "Month" && any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #Initialize lists to store results
+    idw_results <- list()
+    #idw_nn <- list()    idw_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf and get centroids
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    #
+    for(i in seq_along(1:nrow(loop_vars))) {
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current loop variable (month or statistic)
+      if (Individual == "Month") {
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$Month == loop_vars$Month[i] & 
+                                          Site_data_spdf@data$Statistic == loop_vars$Statistic[i],]
+      } else if (Individual == "Year") {
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$Year == loop_vars$Year[i] & 
+                                          Site_data_spdf@data$Statistic == loop_vars$Statistic[i],]
+      } else {
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$Statistic == loop_vars[i], ]
+      }
+      # Skip if no data for this combination/statistic
+      if (nrow(filtered_data@data) == 0) {
+        warning(paste("No data for", loop_name, paste(loop_vars$Month[i], loop_vars$Statistic[i], sep = "_"), "; skipping."))
+        next
+      }
+      #
+      # IDW interpolation (power=2 by default)
+      idw_model <- suppressMessages(idw(formula = Working_Param ~ 1, locations = filtered_data, newdata = grid, idp = 2))
+      #
+      # Convert to data.frame and rename columns
+      idw_df <- as.data.frame(idw_model) %>% 
+        rename(Longitude = x1, Latitude = x2, Prediction = var1.pred) %>%
+        mutate(Pred_Value = round(Prediction, 2)) %>% #, Statistic = stats[i]) %>% 
+        dplyr::select(-var1.var)
+      #
+      ##PROCESSING:
+      pb$tick(tokens = list(step = "Processing"))
+      Sys.sleep(1/1000)
+      #
+      #Convert to SpatialPointsDataFrame
+      coordinates(idw_df) <- ~Longitude + Latitude
+      proj4string(idw_df) <- proj4string(idw_model)
+      #
+      #Create Voronoi polygons clipped to grid extent
+      voroni_poly <- dismo::voronoi(idw_df, ext = raster::extent(grid))
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #
+      # Convert voronoi polygons to sf
+      voronoi_sf <- st_as_sf(voroni_poly)
+      #
+      #Spatial join: assign Voronoi polygon values to centroids, join centroids with voronoi polygons by spatial intersection
+      centroids_joined <- st_join(centroids_sf, voronoi_sf[, c("Pred_Value")], left = TRUE)
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      #
+      # Rename prediction column to be month-specific
+      if (Individual == "Month") {
+        col_name <- paste0("Pred_Value_", loop_vars$Month[i], "_", loop_vars$Statistic[i])
+      } else if (Individual == "Year") {
+        col_name <- paste0("Pred_Value_", loop_vars$Year[i], "_", loop_vars$Statistic[i])
+      } else {
+        col_name <- paste0("Pred_Value_", loop_vars[i])
+      }
+      centroids_joined <- centroids_joined %>%
+        rename(!!col_name := Pred_Value)#rename(Pred_Value_idw = Pred_Value)
+      #
+      # Store the result
+      key <- if (Individual == "Month") paste(loop_vars$Month[i], loop_vars$Statistic[i], sep = "_") else if (Individual == "Year") paste(loop_vars$Year[i], loop_vars$Statistic[i], sep = "_") else as.character(loop_vars[i])
+      idw_results[[key]] <- centroids_joined
+      #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
+      #site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID") %>%
+      #  mutate(Statistic = stats[i])
+      #idw_Site[[i]] <- site_sf_temp
+      #
+    }
+    # Combine results into one sf object
+    if (length(idw_results) == 0) {
+      warning("No valid interpolations performed.")
+      return(NULL)
+    }
+    
+    # Start with the first result
+    combined_sf <- idw_results[[1]]
+    
+    # Join additional monthly columns
+    for (i in 2:length(idw_results)) {
+      combined_sf <- left_join(combined_sf, st_drop_geometry(idw_results[[i]])[, c("PGID", names(idw_results[[i]])[grep("Pred_Value_", names(idw_results[[i]]))])], by = "PGID")
+    }
+    # Add combined column if Individual == "Month"
+    if (Individual == "Month") {
+      # Group monthly columns by statistic and compute mean per statistic
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        monthly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(monthly_cols) > 0) {
+          # Ensure monthly columns are numeric
+          data_only <- st_drop_geometry(combined_sf)[monthly_cols]
+          if (!all(sapply(data_only, is.numeric))) {
+            stop("Monthly prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(!!paste0("Pred_Value_Combined_",stat) := {
+              temp_df <- st_drop_geometry(dplyr::select(., all_of(monthly_cols)))  # Drop geometry for rowMeans
+              ifelse(
+                rowSums(!is.na(temp_df)) == 0,
+                NA_real_,
+                rowMeans(temp_df, na.rm = TRUE))
+            }
+            )
+        }
+      }
+    }
+    #
+    if (Individual == "Year") {
+      # Group monthly columns by statistic and compute mean per statistic
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        yearly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(yearly_cols) > 0) {
+          # Ensure monthly columns are numeric
+          if (!all(sapply(combined_sf[yearly_cols], is.numeric))) {
+            stop("Yearly prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(!!paste0("Pred_Value_Combined_",stat) := {
+              temp_df <- st_drop_geometry(dplyr::select(., all_of(yearly_cols)))  # Drop geometry for rowMeans
+              ifelse(
+                rowSums(!is.na(temp_df)) == 0,
+                NA_real_,
+                rowMeans(temp_df, na.rm = TRUE))
+            }
+            )
+        }
+      }
+    }
+    # Join back to original site polygons (assuming PGID matches)
+    final_sf <- site_sf %>% 
+      left_join(st_drop_geometry(combined_sf), by = "PGID")
+  })
+  #
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
+  cat("Ending time:", format(Sys.time()), "\n")
+  print(EndTime - StartTime)
+  #
+  pb$terminate()
+  pb_active <- FALSE
+  return(final_sf)
+}
+#
+perform_nn_interpolation <- function(Site_data_spdf, Site_area, Site_Grid, Site_Grid_df, Parameter, WQ_summ, Individual = NULL) {
+  Param_name <- Parameter
+  WQsumm <- WQ_summ
+  # Validate Individual parameter (allow NULL, default to "Statistic")
+  if (is.null(Individual)) {
+    Individual <- "Statistic"
+  }
+  if (!Individual %in% c("Month", "Year", "Statistic")) {
+    stop("Individual must be 'Month', 'Year', 'Statistic', or NULL (defaults to 'Statistic').")
+  }
+  # Check for Month column if Individual == "Month"| "Year"
+  if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Month' column when Individual = 'Month'.")
+  }
+  if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
+  # Determine what to loop over
+  # Month
+  if (Individual == "Month") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Month, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No months found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Month-Statistic"
+    # Year
+  } else if (Individual == "Year") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Year, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    if (nrow(loop_vars) == 0) {
+      warning("No years found in data; falling back to just Statistic interpolation.")
+      return(NULL)
+    }
+    loop_name <- "Year-Statistic"
+  } else {
+    loop_vars <- unique(Site_data_spdf@data$Statistic)
+    loop_name <- "Statistic"
+  }
+  # Create a progress bar
+  total_steps <- if (Individual == "Month" | Individual == "Year") nrow(loop_vars) * 3 + 2 else length(loop_vars) * 3 + 2
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = total_steps,  
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  StartTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
+  cat("Starting time:", format(Sys.time()), "\n")
+  #
+  #
+  tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(Individual == "Statistic" && any(loop_vars == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #
+    # Initiate list
+    nn_results <- list()
+    #Convert Site_Grid_spdf polygons to sf
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    # 
+    # Loop over each statistic
+    for(i in 1:nrow(loop_vars)){
+      ## MODELLING:
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current combination/statistic
+      if (Individual %in% c("Month", "Year")) {
+        time_col <- if (Individual == "Month") "Month" else "Year"
+        WQ_data_stat <- WQsumm %>%
+          filter(.data[[time_col]] == loop_vars[[time_col]][i] & Statistic == loop_vars$Statistic[i])
+      } else {
+        WQ_data_stat <- WQsumm %>% filter(Statistic == loop_vars[i])
+      }
+      
+      # Skip if no data
+      if (nrow(WQ_data_stat) == 0) {
+        warning(paste("No data for", loop_name, paste(loop_vars[[if (Individual %in% c("Month", "Year")) time_col else "Statistic"]][i], loop_vars$Statistic[i], sep = "_"), "; skipping."))
+        next
+      }
+      ## NN: Convert to terra vect and create Voronoi polygons clipped to Site_area
+      vect_data <- vect(WQ_data_stat, geom = c("Longitude", "Latitude"), crs = "+proj=longlat +datum=WGS84 +no_defs")
+      voroni_sf <- st_as_sf(voronoi(x = vect_data, bnd = Site_area))
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Assign predictions to grid
+      nn_joined <- st_join(centroids_sf, voroni_sf[, c("Working_Param")], left = TRUE)
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      # Rename column
+      if (Individual %in% c("Month", "Year")) {
+        col_name <- paste0("Pred_Value_", loop_vars[[time_col]][i], "_", loop_vars$Statistic[i])
+      } else {
+        col_name <- paste0("Pred_Value_", loop_vars[i])
+      }
+      nn_joined <- nn_joined %>% rename(!!col_name := Working_Param)
+      
+      # Store result
+      key <- if (Individual %in% c("Month", "Year")) paste(loop_vars[[time_col]][i], loop_vars$Statistic[i], sep = "_") else as.character(loop_vars[i])
+      nn_results[[key]] <- nn_joined
+    }
+    
+    # Combine results
+    if (length(nn_results) == 0) {
+      warning("No valid interpolations performed.")
+      return(NULL)
+    }
+    
+    combined_sf <- nn_results[[1]]
+    for (i in 2:length(nn_results)) {
+      combined_sf <- left_join(combined_sf, st_drop_geometry(nn_results[[i]])[, c("PGID", names(nn_results[[i]])[grep("Pred_Value_", names(nn_results[[i]]))])], by = "PGID")
+    }
+    
+    # Add combined column if Individual == "Month" or "Year"
+    if (Individual %in% c("Month", "Year")) {
+      time_dim <- if (Individual == "Month") "Month" else "Year"
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        time_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(time_cols) > 0) {
+          data_only <- st_drop_geometry(combined_sf)[time_cols]
+          if (!all(sapply(data_only, is.numeric))) {
+            stop("Prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(
+              !!paste0("Pred_Value_Combined_", stat) := {
+                temp_df <- st_drop_geometry(dplyr::select(., all_of(time_cols)))
+                ifelse(
+                  rowSums(!is.na(temp_df)) == 0,
+                  NA_real_,
+                  rowMeans(temp_df, na.rm = TRUE))
+              }
+            )
+        }
+      }
+    }
+    # Final join
+    final_sf <- site_sf %>% left_join(st_drop_geometry(combined_sf), by = "PGID")
+  })
+  #
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  EndTime <- parse_date_time(format(Sys.time()), orders = "%Y-%m-%d %H:%M:%S")
+  cat("Ending time:", format(Sys.time()), "\n")
+  print(EndTime - StartTime)
+  #
+  pb$terminate()
+  pb_active <- FALSE
+  return(final_sf)
+}
+#
+perform_tps_interpolation <- function(Site_data_spdf, raster_t, Site_area, Site_Grid_spdf, Parameter = Param_name) {
+  Param_name <- Parameter
+  #Determine number of statistics to loop over
+  stats <- unique(Site_data_spdf@data$Statistic)
+  # Create a progress bar
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+                         total = (length(stats) * 3)+2,  
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  cat("Starting time:", format(Sys.time()), "\n")
+  #
+  tryCatch({
+    pb$tick(tokens = list(step = "Set up"))
+    Sys.sleep(1/1000)
+    #Notify if Threshold statistic is present
+    if(any(stats == "Threshold")){
+      cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+    }
+    #Initiate lists 
+    tps_model <- list()
+    tps_Site <- list()
+    #
+    #Convert Site_Grid_spdf polygons to sf, get centroids, area as terra for speed
+    site_sf <- st_as_sf(Site_Grid_spdf)
+    centroids_sf <- st_centroid(site_sf)
+    centroids_sf <- centroids_sf %>% dplyr::select(PGID:MGID)
+    Site_area_vec <- vect(Site_area)
+    #
+    #Loop over each statistic
+    for(i in seq_along(stats)){
+      ##MODELLING:
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      # Filter data for current statistic
+      stat_data <- Site_data_spdf[Site_data_spdf@data$Statistic == stats[i], ]
+      #Convert WQ points to vector and rasterize over grid:
+      Param_vec <- vect(stat_data)
+      crs(Param_vec) <- "EPSG:4326"
+      Param_ras <- rasterize(Param_vec, raster_t, field = "Working_Param")
+      #Extract valid calles and values for TPS
+      vals <- values(Param_ras)
+      valid_idx <- which(!is.na(vals))
+      coords <- xyFromCell(Param_ras, valid_idx)
+      vals_valid <- vals[valid_idx]
+      #coords_valid <- coords[valid_idx, , drop = FALSE]
+      #thin plate spline model
+      tps_fit <- Tps(coords, vals_valid)
+      all_cords <- xyFromCell(raster_t, 1:ncell(raster_t))
+      interp_vals <- predict(tps_fit, all_cords)
+      tps_raster <- raster_t
+      values(tps_raster) <- interp_vals
+      #Crop and mask to site
+      tps_crop <- crop(tps_raster, Site_area_vec)
+      tps_mask <- mask(tps_crop, Site_area_vec)
+      #Extract points, convert to sf
+      pts_mat <- terra::as.points(tps_mask)#rasterToPoints(tps_mask)
+      tps_model[[i]] <- st_as_sf(pts_mat, coords = c("x", "y"), crs = site_crs)
+      tps_model_simp <- st_simplify(tps_model[[i]], dTolerance = 10)
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Get nearest data point for each location
+      nearest_idx <- st_nearest_feature(centroids_sf, tps_model_simp)
+      centroids_joined <- centroids_sf %>%
+        mutate(Statistic = stats[i], Pred_Value_tps = tps_model_simp$lyr.1[nearest_idx])
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finishing up"))
+      Sys.sleep(1/1000)
+      #Rename column based on model type
+      if ("layer" %in% names(centroids_joined)) {
+        centroids_joined <- centroids_joined %>%
+          rename(Pred_Value_tps = layer)
+      } else if ("lyr.1" %in% names(centroids_joined)) {
+        centroids_joined <- centroids_joined %>%
+          rename(Pred_Value_tps = lyr.1)
+      }
+      #
+      #Join centroid predictions back to Site_Grid polygons
+      site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_tps")], by = "PGID") %>%
+        mutate(Statistic = stats[i])
+      tps_Site[[i]] <- site_sf_temp
+      #
+    }
+  })
+  #
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  cat("Ending time:", format(Sys.time()), "\n")
+  #
+  pb$terminate()
+  pb_active <- FALSE
+  return(tps_Site)
+}
+#
+perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Parameter, Individual = NULL) {
+  Param_name <- Parameter
+  #
+  # ---- Validate Individual parameter ----
+  if (!Individual %in% c("Month", "Year", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
+    stop("Individual must be 'Month', 'Year', 'Statistic'.")
+  }
+  # Check for Month column if Individual == "Month"| "Year"
+  if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Month' column when Individual = 'Month'.")
+  }
+  if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
+  # Ensure months in order
+  if (Individual == "Month") {
+    Site_data_spdf@data$Month <- factor(
+      Site_data_spdf@data$Month,
+      levels = month.abb,
+      ordered = TRUE
+    )
+    Site_data_spdf <- Site_data_spdf[
+      !is.na(Site_data_spdf@data$Month),
+    ]
+  }
+  
+  #
+  # ---- Determine loop variables ----
+  # Month
+  if (Individual == "Month") {
+    loop_vars <- Site_data_spdf@data %>% 
+      dplyr::select(Month, Statistic) %>% 
+      dplyr::distinct() %>%
+      dplyr::arrange(Month, Statistic)
+    
+    loop_name <- "Month-Statistic"
+    # Year
+  } else if (Individual == "Year") {
+    loop_vars <- Site_data_spdf@data %>% 
+      dplyr::select(Year, Statistic) %>% 
+      dplyr::distinct() %>%
+      dplyr::arrange(Year, Statistic)
+    
+    loop_name <- "Year-Statistic"
+  } else {
+    loop_vars <- sort(unique(Site_data_spdf@data$Statistic))
+    loop_name <- "Statistic"
+  }
+  #
+  # ---- Minimum observations per group check ----
+  skipped_groups <- NULL  # initialize
+  #
+  if (Individual %in% c("Month", "Year")) {
+    time_col <- Individual
+    min_obs <- 3
+    #
+    obs_counts <- Site_data_spdf@data %>%
+      dplyr::group_by(.data[[time_col]], Statistic) %>%
+      dplyr::summarise(n_obs = dplyr::n(), .groups = "drop")
+    #
+    # Identify groups with insufficient data
+    skipped_groups <- obs_counts %>%
+      dplyr::filter(n_obs < min_obs)
+    #
+    if (nrow(skipped_groups) > 0) {
+      warning("Some groups skipped due to insufficient data (n < 3).")
+      print(skipped_groups)
+    }
+    # Keep only valid groups for modeling
+    loop_vars <- loop_vars %>%
+      dplyr::inner_join(
+        obs_counts %>% dplyr::filter(n_obs >= min_obs),
+        by = c(time_col, "Statistic")
+      )
+  }
+  #
+  if (length(loop_vars) == 0) {
+    warning("No valid groups to process.")
+    return(NULL)
+  }
+  # ---- Progress bar ---- 
+  #
+  # Create a progress bar
+  total_steps <- if (Individual %in% c("Month", "Year")){
+    nrow(loop_vars) * 5 + 2
+  } else {
+    length(loop_vars) * 5 + 2
+  }
+  pb <- progress_bar$new(format = "[:bar] :percent | Step: :step | [:elapsedfull]",
+                         total = total_steps, 
+                         complete = "=", incomplete = "-", current = ">",
+                         clear = FALSE, width = 80, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  StartTime <- Sys.time()
+  cat("Starting time:", format(StartTime), "\n")
+  #
+  pb$tick(tokens = list(step = "Set up"))
+  Sys.sleep(1/1000)
+  #
+  # ---- Precompute static objects ----
+  site_sf <- st_as_sf(Site_Grid_spdf)
+  centroids_sf <- st_centroid(site_sf)
+  #
+  # Projected CRS
+  site_sf_5070 <- st_transform(site_sf, 5070)
+  centroids_5070 <- st_transform(centroids_sf, 5070)
+  #
+  # Grid projection
+  grid_5070 <- spTransform(grid, CRS("EPSG:5070"))
+  #
+  ok_results <- list()
+  #
+  #Notify if Threshold statistic is present
+  if(Individual != "Month"  && "Statistic" %in% names(Site_data_spdf@data) &&
+     any(Site_data_spdf@data$Statistic == "Threshold", na.rm = TRUE)){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
+  }
+  #
+  #
+  # Main loop ----
+  tryCatch({
+    #
+    for (i in seq_len(if (Individual %in% c("Month", "Year")) nrow(loop_vars) else length(loop_vars))) {
+      #
+      pb$tick(tokens = list(step = "Modeling"))
+      Sys.sleep(1/1000)
+      #
+      #Initiate lists ok_results <- list()
+      #
+      # ---- Filter data ----
+      if (Individual %in% c("Month", "Year")) {
+        #
+        time_col <- Individual
+        #
+        filtered_data <- Site_data_spdf[
+          Site_data_spdf@data[[time_col]] == loop_vars[[time_col]][i] &
+            Site_data_spdf@data$Statistic == loop_vars$Statistic[i],
+        ]
+        #
+      } else {
+        filtered_data <- Site_data_spdf[
+          Site_data_spdf@data$Statistic == loop_vars[i],
+        ]
+      }
+      #
+      if (nrow(filtered_data@data) == 0) next
+      #
+      # ---- Prep data ----
+      coords <- coordinates(filtered_data)
+      
+      stat_data_df <- data.frame(
+        Longitude = coords[,1], 
+        Latitude = coords[,2], 
+        filtered_data@data) %>%
+        dplyr::group_by(Longitude, Latitude, Statistic) %>%
+        dplyr::summarize(
+          Working_Param = mean(Working_Param, na.rm = TRUE), 
+          .groups = "drop")
+      
+      stat_data_sf <- st_as_sf(stat_data_df, coords = c("Longitude", "Latitude"), crs = st_crs(filtered_data))
+      data_m <- st_transform(stat_data_sf, 5070)
+      #
+      
+      # ---- OK: model(Parameter) ----
+      # Modify CRS for OK models (Florida fits):
+      ok_fit_m <- autofitVariogram(formula = Working_Param ~ 1, 
+                                   input_data = data_m, 
+                                   model = c("Sph"), 
+                                   miscFitOptions = list(merge.small.bins = FALSE))
+      ok_model_m <- gstat(formula = Working_Param~1, 
+                          locations = data_m, 
+                          model = ok_fit_m$var_model)#, data = st_as_sf(stat_data))
+      ok_pred_m <- predict(ok_model_m, newdata = grid_5070)
+      #
+      # Convert to data frame to rename and add parameters levels as values rounded to 0.1
+      ok_df_m <- as.data.frame(ok_pred_m) %>% 
+        dplyr::rename("Longitude" = coords.x1, 
+                      "Latitude" = coords.x2, 
+                      "Prediction" = var1.pred) %>%
+        dplyr::mutate(Pred_Value = round(Prediction, 2)) %>% 
+        dplyr::select(-var1.var)
+      #
+      ##PROCESSING:
+      pb$tick(tokens = list(step = "Processing"))
+      Sys.sleep(1/1000)
+      #Convert to SpatialPointsDataFrame
+      coordinates(ok_df_m) <- ~Longitude + Latitude
+      proj4string(ok_df_m) <- proj4string(ok_pred_m)
+      
+      #Convert interpolated values to spatial data
+      voroni_poly_m <- dismo::voronoi(ok_df_m, ext = raster::extent(grid_5070))#
+      #
+      ##GRID App:
+      pb$tick(tokens = list(step = "Grid Application"))
+      Sys.sleep(1/1000)
+      #Convert voronoi polygons to sf
+      voronoi_sf_m <- st_as_sf(voroni_poly_m)
+      #voronoi_sf <- st_transform(voronoi_sf_m, 4326)
+      #
+      #Determine overlay of data on SiteGrid
+      centroids_joined <- st_join(centroids_5070, 
+                                  voronoi_sf_m[, c("Pred_Value")], 
+                                  left = TRUE)
+      #
+      ##WRAP UP:
+      pb$tick(tokens = list(step = "Finalize"))
+      Sys.sleep(1/1000)
+      # Rename column
+      if (Individual %in% c("Month", "Year")) {
+        col_name <- paste0("Pred_Value_", 
+                           loop_vars[[time_col]][i], "_", 
+                           loop_vars$Statistic[i])
+      } else {
+        col_name <- paste0("Pred_Value_", 
+                           loop_vars[i])
+      }
+      names(centroids_joined)[names(centroids_joined) == "Pred_Value"] <- col_name #centroids_joined <- centroids_joined %>% rename(!!col_name := Pred_Value)
+      
+      # Store result
+      key <- if (Individual %in% c("Month", "Year")) {
+        paste(loop_vars[[time_col]][i], 
+              loop_vars$Statistic[i], sep = "_") 
+      } else {
+        as.character(loop_vars[i])
+      }
+      
+      ok_results[[key]] <- centroids_joined %>%
+        dplyr::select(PGID, !!col_name)
+      #
+      # clean up
+      rm(stat_data_df, stat_data_sf, ok_fit_m, ok_model_m, ok_pred_m, ok_df_m, voroni_poly_m, voronoi_sf_m)
+      gc(FALSE)
+    }
+    ##WRAP UP:
+    pb$tick(tokens = list(step = "Finishing up"))
+    Sys.sleep(1/1000)
+    #
+    # Combine results
+    if (length(ok_results) == 0) {
+      warning("No valid interpolations performed.")
+      return(NULL)
+    }
+    
+    # Combine results ----
+    combined_sf <- Reduce(function(x, y) {
+      dplyr::left_join(x, y, by = "PGID")
+    }, lapply(ok_results, st_drop_geometry))
+    #
+    # Add combined column if Individual == "Month" or "Year"
+    if (Individual %in% c("Month", "Year")) {
+      time_dim <- Individual 
+      stats <- unique(loop_vars$Statistic)
+      #
+      for (stat in stats) {
+        time_cols <- grep(
+          paste0("Pred_Value_.*_", stat, "$"), 
+          names(combined_sf), 
+          value = TRUE)
+        #
+        if (length(time_cols) > 0) {
+          data_only <- st_drop_geometry(combined_sf)[time_cols]
+          if (!all(sapply(data_only, is.numeric))) {
+            stop("Prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(
+              !!paste0("Pred_Value_Combined_", stat) := {
+                temp_df <- st_drop_geometry(dplyr::select(., all_of(time_cols)))
+                ifelse(
+                  rowSums(!is.na(temp_df)) == 0,
+                  NA_real_,
+                  rowMeans(temp_df, na.rm = TRUE))
+              }
+            )
+        }
+      }
+    }
+  })
+  # Join back to original site polygons (assuming PGID matches)
+  preferred_keys <- c("PGID", "MGID")
+  join_keys <-preferred_keys[
+    preferred_keys %in% names(site_sf_5070) &
+      preferred_keys %in% names(combined_sf)]
+  
+  final_sf <- site_sf_5070 %>% 
+    dplyr::left_join(combined_sf, by = join_keys) %>%
+    st_transform(4326)
+  #
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  EndTime <-Sys.time()
+  cat("Ending time:", format(EndTime), "\n")
+  print(EndTime - StartTime)
+  #
+  pb$terminate()
+  pb_active <- FALSE
+  #
+  return(final_sf)
+}
+#
+extract_time_stat <- function(df) {
+  # Get column names
+  col_names <- colnames(df)
+  
+  # Find columns matching the pattern "Pred_Value_{Month}_{Statistic}"
+  pred_cols <- grep("^Pred_Value_[^_]+(?:_[^_]+)?$", col_names, value = TRUE)
+  
+  if (length(pred_cols) == 0) {
+    warning("No columns matching 'Pred_Value_{...}' pattern in dataframe.")
+    return(list(Months = character(0), Statistics = character(0)))
+  }
+  # Extract Month and Statistic using regex
+  # Pattern: Pred_Value_(Month)_(Statistic)
+  extracted <- str_match(pred_cols, "^Pred_Value_([^_]+)(?:_([^_]+))?$")[, 2:3, drop = FALSE]
+  
+  # Process: If second column is NA, it's Statistic-only; else Month and Statistic
+  times <- ifelse(is.na(extracted[, 2]), NA, extracted[, 1])
+  stats <- ifelse(is.na(extracted[, 2]), extracted[, 1], extracted[, 2])
+  
+  # Get unique Months (excluding NA) and Statistics
+  unique_times <- unique(times[!is.na(times) & times != "Combined"])
+  unique_stats <- unique(stats)
+  return(list(Times = unique_times, Statistics = unique_stats))
+}
+#
+#Use RangeValues to specify if Range is used and Max/Min both included in df ("yes")
+join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
+  
+  # Timing ----
+  StartTime <- Sys.time()
+  cat("Starting time:", format(StartTime), "\n")
+  #
+  # Starting data ----
+  output <- Site_Grid_df
+  #
+  # List of potential input SF objects to check for ----
+  sf_objects <- c("idw_data", "nn_data", "tps_data", "ok_data")
+  existing_objects <- sf_objects[sapply(sf_objects, exists, envir = .GlobalEnv)]
+  
+  if (length(existing_objects) == 0) {
+    stop("Error: None of the model outputs exist in the global environment.")
+  }
+  if (length(existing_objects) == 1) {
+    stop(
+      paste(
+        "Error: Only one model output exists:",
+        existing_objects[1],
+        "Creation of ensemble model not applicable"
+      )
+    )
+  }
+  #
+  # Get the list of statistics/list names, drop geo, maintain month order ----
+  sf_cache <- lapply(
+    mget(existing_objects, envir = .GlobalEnv),
+    sf::st_drop_geometry
+  )
+  all_extracted <- lapply(sf_cache, extract_time_stat)
+  #
+  # Combine across all data frames: unique Months and Statistics overall
+  unique_time_all <- unique(unlist(lapply(all_extracted, `[[`, "Times")))
+  unique_stats_all <- unique(unlist(lapply(all_extracted, `[[`, "Statistics"))) 
+  # Order months - Keep only valid month abbreviations and preserve order
+  if (length(unique_time_all) > 0) {
+    month_levels <- month.abb
+    unique_time_all <- unique_time_all[
+      order(match(unique_time_all, month_levels))
+    ]
+  }
+  # Determine params: combined Month_Statistic if months exist, else just Statistics
+  if (length(unique_time_all) > 0) {
+    # Create all combinations of Month and Statistic
+    combo_df <- expand.grid(
+      Times = unique_time_all, 
+      Statistic = unique_stats_all, 
+      KEEP.OUT.ATTRS = FALSE,
+      stringsAsFactors = FALSE
+    )
+    # Order months
+    combo_df <- combo_df[order(
+      match(combo_df$Times, month.abb), 
+      combo_df$Statistic
+    ), ]
+    
+    params <- paste(combo_df$Times, combo_df$Statistic, sep = "_")
+  } else {
+    # Fall back to just Statistics
+    params <- unique_stats_all
+  }
+  # 
+  # Preallocate results ----
+  all_combined <- vector("list", length(params))
+  names(all_combined) <- params
+  
+  # Iterate over each parameter/combination
+  for (i in seq_along(params)){
+    param_data <- output
+    param_name <- params[i]
+    #
+    # Iterate through each possible SF object
+    for (sf_obj in existing_objects) {
+      sf_data <- sf_cache[[sf_obj]]
+      model_name <- strsplit(sf_obj, "_")[[1]][1]
+      cat("Joining ", sf_obj, " with existing data...\n")
+      #
+      pred_col <- paste0("Pred_Value_", param_name)
+      #
+      if (!pred_col %in% names(sf_data)) {
+        warning(
+          paste0(
+            "Column ", pred_col, " not found in ", sf_obj,
+            ". Keeping existing data unchanged for this parameter."
+          ),
+          call. = FALSE
+        )
+        next
+      }
+      #
+      temp_data <- sf_data %>% #[[i]] %>% as.data.frame() %>% rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>% 
+        dplyr::select(PGID, all_of(pred_col)) %>% #dplyr::select(PGID, Statistic, contains("Pred_Value")) %>% 
+        dplyr::group_by(PGID) %>% 
+        dplyr::summarise(!!paste0(model_name, "_", param_name) := {
+          x <- .data[[pred_col]]
+          if (all(is.na(x))) NA_real_ else max(x, na.rm = TRUE)
+        },
+        .groups = "drop"
+        )
+      #dplyr::rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>%
+      #dplyr::arrange(desc(.data[[pred_col]])) %>% 
+      #dplyr::slice(1) %>%
+      #dplyr::rename(!!paste0(model_name, "_", params[i]) := !!pred_col)
+      
+      param_data <- dplyr::left_join(param_data, temp_data, by = "PGID") #temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data, by = "PGID"))
+    } 
+    all_combined[[i]] <- param_data
+    rm(param_data)
+    
+    if (i %% 5 == 0) gc(FALSE)
+  }
+  #
+  #Combine results for the current parameter
+  #combined_result <- Reduce(function(x, y) 
+  #  dplyr::left_join(x, y, by = intersect(names(x), names(y))), #merge(x, y, by = intersect(names(x), names(y)), all = TRUE), 
+  #  temp_results)
+  #all_combined[[params[i]]] <- combined_result 
+  #
+  # Final merge ---- 
+  # Merge all combined results into one final object
+  final_result <- Reduce(
+    function(x, y) dplyr::left_join(x, y, by = intersect(names(x), names(y))),#merge(x, y, by = intersect(names(x), names(y)), all = TRUE), 
+    all_combined)
+  #
+  # Name result ----
+  # Create a dynamic variable name for the result
+  if(!is.null(RangeValues) && 
+     length(RangeValues) == 1 && 
+     !is.na(RangeValues) && 
+     tolower(RangeValues) == "yes"){
+    statistic <- "Range"
+  } else {
+    # Extract statistic from the last parameter processed
+    pieces <- strsplit(params[length(params)], "_")[[1]]
+    statistic <- tail(pieces, 1)
+  }
+  result_name <- paste0("result_", statistic)
+  #
+  # Assign the combined result to a new variable
+  assign(result_name, final_result, envir = .GlobalEnv)
+  #
+  #
+  # Print note if threshold is being used ----
+  if(any(params == "Threshold")){
+    cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.")
+  }
+  #
+  # Timing ----
+  EndTime <- Sys.time()
+  cat("Ending time:", format(EndTime), "\n")
+  print(EndTime - StartTime)
+}
+#
+#simplify_tolerance - optional parameter to speed up plotting by simplifying   
+#library(sf, ggplot2, dplyr, stringr, data.table)
+plot_interpolations <- function(results_data, Site_Grid, Threshold = "N", simplify_tolerance = 0){
+  #Results is src. not needed Add interpolated data back to Site_grid sf object (Site_Grid_interp <- st_join(Site_Grid, results_data))
+  # Identify columns based on prefix and suffix  interp_cols <- grep("Pred_Value_*", names(results_data), value = TRUE)
+  split_parts <- str_split(colnames(results_data), "_", simplify = FALSE)
+  prefix <- sapply(split_parts, function(x) if (length(x) > 0) x[1] else "")
+  suffix <- sapply(split_parts, function(x) if (length(x) > 0) x[length(x)] else "")
+  # Define filters
+  prefix_match <- prefix %in% c("idw", "nn", "tps", "ok", "ens")
+  special_cols <- colnames(results_data) %in% c("Latitude", "Longitude", "geometry")
+  df_filtered <- results_data[, prefix_match | special_cols, drop = FALSE]
+  # Build groups list only for prefix-matched columns
+  if (any(prefix_match)) {
+    cols_groups <- colnames(results_data)[prefix_match]
+    prefix_groups <- prefix[prefix_match]
+    suffix_groups <- suffix[prefix_match]
+    groups <- lapply(unique(prefix_groups), function(p) {
+      sub_cols <- cols_groups[prefix_groups == p]
+      sub_suffix <- suffix_groups[prefix_groups == p]
+      inner <- lapply(unique(sub_suffix), function(s) sub_cols[sub_suffix == s])
+      names(inner) <- unique(sub_suffix)
+      inner
+    })
+    names(groups) <- unique(prefix_groups)
+  } else {
+    groups <- list()  # Empty if no matches
+  }
+  # Define base theme for reuse (avoids redundancy)
+  base_theme <- theme_classic() +
+    theme(panel.border = element_rect(color = "black", fill = NA), 
+          axis.text = element_text(size = 16),
+          plot.margin = unit(c(0,0,0,0), "cm"), 
+          plot.title = element_text(margin = margin(b = 5)), 
+          plot.caption = element_text(face = "italic", size = 9))
+  #
+  #Initiate list to store plots:
+  plot_list <- list()
+  #
+  df_filtered <- st_as_sf(df_filtered)
+  if (simplify_tolerance > 0) {
+    df_filtered <- st_simplify(df_filtered, dTolerance = simplify_tolerance, preserveTopology = TRUE)
+  }
+  #Create plots
+  safe_scale <- function(values) {
+    # Drop NAs
+    v <- values[!is.na(values)]
+    #
+    if (length(v) == 0) {
+      return(scale_color_viridis_b(direction = -1, guide = "none"))
+    }
+    # If there is only one unique valid value
+    if (length(unique(v)) == 1) {
+      return(scale_color_viridis_b(direction = -1, guide = "none"))
+    }
+    # Normal continuous scale
+    return(scale_color_viridis_b(
+      direction = -1,
+      limits = range(v, na.rm = TRUE)
+    ))
+  }
+  # Pre-calculate color limits for each prefix (for consistent scales)
+  color_limits <- list()
+  for (p in names(groups)) {
+    all_cols <- unlist(groups[[p]])  # All columns for this prefix
+    if (length(all_cols) > 0) {
+      # Get min/max across all relevant columns for this prefix
+      temp_data <- df_filtered %>% dplyr::select(all_of(all_cols)) %>% st_drop_geometry()
+      color_limits[[p]] <- c(min(temp_data, na.rm = TRUE), max(temp_data, na.rm = TRUE))
+    }
+  }
+  # Loop over each prefix in groups
+  for (p in names(groups)) {
+    # Loop over each suffix for this prefix
+    for (s in names(groups[[p]])) {
+      cols <- groups[[p]][[s]]  # Vector of column names for this p-s combo
+      
+      if (length(cols) == 0) next  # Skip if no columns
+      
+      # Extract middle parts (e.g., "Jan" from "idw_Jan_Mean")
+      middle_parts <- str_extract(cols, paste0("^", p, "_([^_]+)_", s, "$"), group = 1)
+      middle_parts <- ifelse(is.na(middle_parts), "", middle_parts)  # Empty if no middle
+      
+      # Determine plot type
+      if (length(cols) == 1 || all(middle_parts == "")) {
+        # Single plot (no middle parts or only one column)
+        col <- cols[1]
+        p_plot <- ggplot() +
+          geom_sf(data = df_filtered, aes(color = !!sym(col))) +
+          base_theme +
+          safe_scale(df_filtered[[col]]) + #scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
+          {if(Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
+          labs(title = paste(p, s, sep = "_"))
+        plot_list[[paste(p, s, sep = "_")]] <- p_plot
+      } else {
+        # Create one plot per combination (instead of faceting, for speed)
+        unique_middle <- unique(middle_parts[middle_parts != ""])
+        #
+        # Determine ordering
+        if (all(unique_middle %in% month.abb)) {
+          levels_order <- month.abb[month.abb %in% unique_middle]
+        } else if (all(grepl("^\\d{4}$", unique_middle))) {
+          levels_order <- sort(as.numeric(unique_middle))
+        } else {
+          levels_order <- sort(unique_middle)
+        }
+        
+        # Reshape once for all middle parts
+        df_subset <- df_filtered %>% dplyr::select(geometry, all_of(cols))
+        df_long <- as.data.table(df_subset) %>%
+          melt(measure.vars = cols, variable.name = "facet_var", value.name = "value") %>%
+          mutate(facet_var = str_extract(facet_var, paste0("^", p, "_([^_]+)_", s, "$"), group = 1)) %>%
+          st_as_sf()
+        
+        # Loop over each middle part for separate plots
+        for (mid in levels_order) {
+          df_mid <- df_long %>% filter(facet_var == mid)
+          p_plot <- ggplot() +
+            geom_sf(data = df_mid, aes(color = value)) +
+            base_theme +
+            safe_scale(df_mid$value) + #scale_color_viridis_b(direction = -1, limits = color_limits[[p]]) +  # Use shared limits
+            {if (Threshold == "Y") labs(caption = "Values = Threshold sample proportions")} +
+            labs(title = paste(p, mid, s, sep = "_"))
+          
+          plot_list[[paste(p, mid, s, sep = "_")]] <- p_plot
+          # Memory cleanup
+          gc()
+        }
+      }
+    }
+  }
+  return(plot_list)
+}
+#
+plot_interpolations2 <- function(results_data,
+                                 Site_Grid,
+                                 Threshold = "N",
+                                 simplify_tolerance = 0) {
+  ## ---- fast column parsing ----
+  cn <- colnames(results_data)
+  prefix <- sub("_.*", "", cn)
+  suffix <- sub(".*_", "", cn)
+  
+  valid_prefix <- prefix %in% c("idw", "nn", "tps", "ok", "ens")
+  special_cols <- cn %in% c("Latitude", "Longitude", "geometry")
+  
+  df_filtered <- results_data[, valid_prefix | special_cols, drop = FALSE]
+  
+  ## ---- build groups ----
+  cols_groups   <- cn[valid_prefix]
+  prefix_groups <- prefix[valid_prefix]
+  
+  groups <- split(cols_groups, prefix_groups)
+  groups <- lapply(groups, function(x) split(x, suffix[match(x, cn)]))
+  
+  ## ---- sf conversion once ----
+  df_filtered <- sf::st_as_sf(df_filtered)
+  
+  if (simplify_tolerance > 0) {
+    df_filtered <- sf::st_simplify(
+      df_filtered,
+      dTolerance = simplify_tolerance,
+      preserveTopology = TRUE
+    )
+  }
+  
+  geom <- sf::st_geometry(df_filtered)
+  
+  ## ---- replace Inf / -Inf once ----
+  df_filtered <- df_filtered |>
+    dplyr::mutate(
+      dplyr::across(
+        where(is.numeric),
+        ~ ifelse(is.finite(.x), .x, NA_real_)
+      )
+    )
+  
+  ## ---- base theme ----
+  base_theme <- ggplot2::theme_classic() +
+    ggplot2::theme(
+      panel.border = ggplot2::element_rect(color = "black", fill = NA),
+      axis.text.y = ggplot2::element_text(size = 14),
+      axis.text.x = ggplot2::element_text(size = 10),
+      plot.margin = grid::unit(c(0, 0, 0, 0), "cm"),
+      plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5)),
+      plot.caption = ggplot2::element_text(face = "italic", size = 9)
+    )
+  
+  base_plot <- ggplot2::ggplot() + base_theme
+  plot_list <- list()
+  
+  ## ---- global color limits per prefix (ALL plots combined) ----
+  color_limits <- lapply(groups, function(g) {
+    all_cols <- unlist(g, use.names = FALSE)
+    if (length(all_cols) == 0) return(c(NA_real_, NA_real_))
+    
+    vals <- df_filtered |>
+      dplyr::select(dplyr::all_of(all_cols)) |>
+      sf::st_drop_geometry() |>
+      unlist(use.names = FALSE)
+    
+    vals <- vals[is.finite(vals)]
+    
+    if (length(vals) == 0) c(NA_real_, NA_real_) else range(vals, na.rm = TRUE)
+  })
+  
+  ## ---- plotting loop ----
+  for (p in names(groups)) {
+    for (s in names(groups[[p]])) {
+      cols <- groups[[p]][[s]]
+      if (length(cols) == 0) next
+      
+      mid <- sub(paste0("^", p, "_([^_]+)_", s, "$"), "\\1", cols)
+      mid[mid == cols] <- ""
+      
+      ## ---- single column ----
+      if (length(cols) == 1 || all(mid == "")) {
+        col <- cols[1]
+        
+        plot_list[[paste(p, s, sep = "_")]] <-
+          base_plot +
+          ggplot2::geom_sf(
+            data = df_filtered,
+            ggplot2::aes(color = .data[[col]])
+          ) +
+          ggplot2::scale_color_viridis_c(
+            limits = color_limits[[p]],
+            oob = scales::squish,
+            direction = -1
+          ) +
+          ggplot2::theme(
+            legend.position = "right"
+          ) +
+          ggplot2::labs(
+            title = paste(p, s, sep = "_"),
+            caption = if (Threshold == "Y")
+              "Values = Threshold sample proportions"
+          )
+        
+        next
+      }
+      
+      ## ---- multi-middle case ----
+      df_subset <- df_filtered |>
+        dplyr::select(geometry, dplyr::all_of(cols))
+      
+      DT_long <- data.table::as.data.table(df_subset)
+      DT_long[, row_id := .I]
+      
+      DT_long <- data.table::melt(
+        DT_long,
+        measure.vars = cols,
+        id.vars = "row_id",
+        variable.name = "var",
+        value.name = "value"
+      )
+      
+      DT_long[, mid := sub(
+        paste0("^", p, "_([^_]+)_", s, "$"),
+        "\\1",
+        var
+      )]
+      
+      mids <- unique(DT_long$mid)
+      if (all(mids %in% month.abb)) {
+        mids <- month.abb[month.abb %in% mids]
+      } else if (all(grepl("^\\d{4}$", mids))) {
+        mids <- sort(as.numeric(mids))
+      } else {
+        mids <- sort(mids)
+      }
+      
+      for (m in mids) {
+        idx <- DT_long$mid == m
+        
+        df_mid <- sf::st_sf(
+          value = DT_long$value[idx],
+          geometry = geom[DT_long$row_id[idx]]
+        )
+        
+        plot_list[[paste(p, m, s, sep = "_")]] <-
+          ggplot2::ggplot() +
+          ggplot2::geom_sf(
+            data = df_mid,
+            ggplot2::aes(color = value)
+          ) +
+          base_theme +
+          ggplot2::scale_color_viridis_c(
+            limits = color_limits[[p]],
+            oob = scales::squish,
+            direction = -1
+          ) +
+          ggplot2::theme(
+            legend.position = "right"
+          ) +
+          ggplot2::labs(
+            title = paste(p, m, s, sep = "_"),
+            caption = if (Threshold == "Y")
+              "Values = Threshold sample proportions"
+          )
+      }
+    }
+  }
+  plot_list
+}
+
+
+#library(cowplot, gridExtra)
+grouped_plot_interpolations <- function(plot_list, print_plots = FALSE){
+  #
+  ## Prefixes ----
+  plot_names <- names(plot_list)
+  prefixes <- sub("_.*", "", plot_names)
+  grouped_plots <- split(plot_list, prefixes)
+  #
+  ## Extract legend ----
+  first_plot_name <- names(plot_list)[1]
+  legend_title <- sub(".*_", "", first_plot_name)
+  legend_plot <- plot_list[[1]] +
+    ggplot2::labs(color = legend_title, fill = legend_title)
+  #
+  legend <- suppressWarnings(cowplot::get_legend(legend_plot))
+  #
+  # Build plots without legend ----
+  group_grids <- vector("list", length(grouped_plots))
+  
+  for (i in seq_along(grouped_plots)) {
+    group <- grouped_plots[[i]]
+    n <- length(group)  # Length of the group
+    if (n == 0) next  # Skip empty groups
+    
+    ## Dynamic sizing ----
+    dynamic_size <- max(6, 16 - (n / 2))  # Larger n -> smaller size
+    ncols <- ceiling(sqrt(n))
+    nrows <- ceiling(n / ncols)
+    #
+    
+    #
+    ## Reformatting ----
+    group <- lapply(
+      group,
+      function(p) p +
+        theme(
+          legend.position = "none",
+          axis.text = element_text(size = dynamic_size)
+        )
+    )
+    #
+    ## Arrange plots
+    group_grids[[i]] <- cowplot::plot_grid(
+      plotlist = group,
+      nrow = nrows,
+      ncol = ncols
+    )
+  }
+  # Combine plots ----
+  if (!is.null(legend)) {
+    final_plot <- cowplot::plot_grid(
+      cowplot::plot_grid(plotlist = group_grids, ncol = 1, align = "v"),
+      legend,
+      ncol = 2,
+      rel_widths = c(4.5, 0.5)
+    )
+  } 
+  # Print the grid (displays it)
+  if(print_plots){
+    print(final_plot)
+  }
+  #
+  return(final_plot)
+}
+#
+#library(progress)
+ensemble_weighting <- function(model = c("ensemble", "single"), selected_models = c("idw", "nn", "tps", "ok"), results_data, weighting, Site_Grid){
+  #
+  model <- match.arg(model)
+  result <- NULL
+  ## Timing ----
+  StartTime <- Sys.time()
+  message("Starting time:", format(StartTime))
+  #
+  ## Progress bar ----
+  total_steps <- if (model == "ensemble") 5 else 4
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = total_steps,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE
+  )
+  #
+  ## Model matching ----
+  #model <- match.arg(model)
+  pb$tick(tokens = list(step = "Matching models"))
+  #
+  matched_models <- selected_models[selected_models %in% c("idw", "nn", "tps", "ok")]
+  if (length(matched_models) > 0) {
+    message("\n Matched models: ", paste(matched_models, collapse = ", "))
+  } else {
+    message("\n No matched models found.")
+  }
+  #
+  # Safety: fallback to single if ensemble impossible
+  if (model == "ensemble" && length(matched_models) < 2) {
+    warning(
+      "Ensemble model requested but fewer than two models are available; ",
+      "reverting to single-model behavior."
+    )
+    model <- "single"
+  }
+  #
+  ## Column selection ----
+  #model_regex <- paste0("^(", paste(matched_models, collapse = "|"), ")")
+  #base_cols   <- c("PGID", "Latitude", "Longitude", "MGID", "State_Ref", "County")
+  #Determine column names to match and limit to desired columns:
+  result_data_final <- results_data %>% 
+    dplyr::select(PGID, Latitude, Longitude, MGID, dplyr::matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
+  #
+  #
+  ## Ensemble ----
+  if(model == "ensemble"){
+    #
+    pb$tick(tokens = list(step = "Computing ensemble model"))
+    #
+    model_weighting(result_data_final, weighting)
+    
+    ##Create ensemble values
+    # Define matching columns and groups
+    matching_cols <- names(result_data_final)[grepl("(idw|nn|tps|ok)_*", names(result_data_final))]
+    #
+    groups <- sub("^[^_]+_", "", matching_cols) #sapply(matching_cols, function(col) {split <- strsplit(col, "_")[[1]]  split <- split[-1]#if (length(split) > 2) split[2] else split[1]  # Middle if exists, else first  paste(split, collapse = "_")  })
+    unique_groups <- unique(groups)
+    #
+    # Pre-select all matching columns into a matrix for fast access 
+    matching_matrix <- as.matrix(result_data_final[, matching_cols, drop = FALSE])
+    
+    # Compute weighted sums for each group
+    ens_values <- lapply(unique_groups, function(g) {
+      cols_g <- matching_cols[groups == g]
+      if (length(cols_g) == 0) {
+        return(rep(NA_real_, nrow(result_data_final)))
+      }
+      
+      selected  <- matching_matrix[, cols_g, drop = FALSE]
+      weights_g <- weight_values[cols_g]
+      
+      non_na    <- !is.na(selected)
+      counts    <- rowSums(non_na)
+      
+      ens <- numeric(nrow(selected))
+      ens[counts == 0] <- NA_real_
+      
+      if (any(counts == 1)) {
+        ens[counts == 1] <- rowSums(
+          selected[counts == 1, , drop = FALSE],
+          na.rm = TRUE
+        )
+      }
+      
+      if (any(counts > 1)) {
+        weighted <- selected * matrix(
+          weights_g,
+          nrow(selected),
+          length(weights_g),
+          byrow = TRUE
+        )
+        
+        ens[counts > 1] <- rowSums(
+          weighted[counts > 1, , drop = FALSE],
+          na.rm = TRUE
+        )
+      }
+      
+      ens
+    })
+    names(ens_values) <- paste0("ens_", unique_groups) #Column name using group
+    ens_values <- tibble::as_tibble(ens_values) #Data frame to add to PGIDs
+    #
+    ens_cols <- grep("^ens_", names(ens_values), value = TRUE)
+    #
+    message("\n Selecting ensemble for each PGID")
+    #
+    library(data.table)
+    # Build data.table with only needed columns
+    DT <- as.data.table(
+      cbind(
+        result_data_final[, c("PGID", matching_cols), drop = FALSE],
+        ens_values
+      )
+    )
+    
+    # Compute ensemble score (very fast)
+    DT[, ens_score := rowSums(.SD, na.rm = TRUE), .SDcols = ens_cols]
+    
+    # Select best row per PGID
+    ens_model_dt <- DT[
+      DT[, .I[which.max(ens_score)], by = PGID]$V1
+    ][, ens_score := NULL]
+    
+    # ---- Convert back to data.frame for compatibility ----
+    ens_model <- as.data.frame(ens_model_dt)
+    #ens_model <- result_data_final %>%
+    #dplyr::select(PGID, all_of(matching_cols)) %>%
+    #dplyr::bind_cols(ens_values) %>%
+    #dplyr::mutate(
+    #  ens_score = rowSums(as.matrix(dplyr::pick(all_of(ens_cols))), na.rm = TRUE)
+    #) %>%
+    #dplyr::group_by(PGID) %>%
+    #dplyr::slice_max(ens_score, n = 1, with_ties = FALSE) %>%
+    #dplyr::ungroup() %>%
+    #dplyr::select(-ens_score)
+    
+    #ens_model <- result_data_final %>% 
+    #  dplyr::select(PGID, all_of(matching_cols)) %>%
+    #  dplyr::bind_cols(ens_values) %>%
+    #  dplyr::group_by(PGID) %>% 
+    #  dplyr::slice_max(order_by = rowSums(dplyr::across(starts_with("ens_")), na.rm = TRUE), 
+    #                   n = 1,
+    #                   with_ties = FALSE)
+    ## Spatial join ----
+    Site_Grid_interp <- dplyr::left_join(Site_Grid, ens_model)
+  } else {
+    Site_Grid_interp <- dplyr::left_join(Site_Grid, result_data_final)
+  }
+  #
+  ## Plotting ----
+  pb$tick(tokens = list(step = "Generating individual plots"))
+  temp <- plot_interpolations2(
+    Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), 
+    Site_Grid
+  ) #filter to plot ens_*
+  ## Grouped plot ----
+  pb$tick(tokens = list(step = "Generating grouped plot"))
+  grp_temp <- grouped_plot_interpolations(temp)
+  #
+  ## Threshold note ---- 
+  if("Statistic" %in% names(Site_Grid_interp) && any(Site_Grid_interp$Statistic == "Threshold")){
+    message("\n Threshold evaluation is being used. ",
+            "Values are the proportion of all samples above/below the set threshold value.")
+  }
+  #
+  ## Final wrap up
+  Site_Grid_interp <- sf::st_as_sf(
+    Site_Grid_interp,
+    sf_column_name = attr(Site_Grid_interp, "sf_column")
+  )
+  ##Return plots, grid, and shapefile
+  result <- list()
+  result$plots <- temp
+  result$grid <- grp_temp
+  result$spatialData <- Site_Grid_interp
+  #
+  ## wrap up
+  pb$tick(tokens = list(step = "Wrap up"))
+  #
+  ## Timing end ----
+  EndTime <- Sys.time()
+  message("Ending time:", format(EndTime))
+  print(EndTime - StartTime)
+  if (interactive()) {
+    print(utils::head(result$spatialData))
+  }
+  
+  gc(FALSE)
+  
+  invisible(result)
+}
+#Updated 25/11/20
+model_weighting <- function(final_data, weighting) {
+  #Patterns to search for:
+  patterns <- "(idw|nn|tps|ok)_*"
+  #Function for equal weighting
+  if (length(weighting) == 1 && weighting == "equal") {
+    weights_from_columns <- function(dataframe) {
+      #Identify columns that match the pattern
+      matched_columns <- colnames(dataframe)[grepl(patterns, colnames(dataframe))]
+      num_divisions <- length(matched_columns)  # Count the number of matched columns
+      #Create weights based on the number of divisions
+      if (num_divisions > 0) {
+        weights <- rep(1 / num_divisions, num_divisions)
+        #Create names for the weights
+        names(weights) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
+      } else {
+        weights <- numeric(0)  # Return an empty numeric vector if no matches
+      }
+      return(weights)
+    }
+    return(weight_values <<- weights_from_columns(final_data))
+    print(weight_values)
+  } else if(is.numeric(weighting) && length(weighting) > 1) {
+    weights_for_columns <- function(dataframe, weighting) {
+      #Identify columns that match the pattern
+      matched_columns <- colnames(dataframe)[grepl(patterns, colnames(dataframe))]
+      num_divisions <- length(matched_columns)  # Count the number of matched columns
+      # Check if the number of weights matches the number of matched columns
+      if (length(weighting) == num_divisions) {
+        # Create names for the weights
+        names(weighting) <- paste0("weight_", sub(".*_", "", matched_columns))  # Extract the pattern part
+        return(weighting)
+        #
+      } else if (length(weighting) < num_divisions) {
+        # Extract suffixes after the first underscore (e.g., "Jan_Mean")
+        suffixes <- sub("^[^_]+_", "", matched_columns)
+        unique_suffixes <- unique(suffixes)
+        num_groups <- length(unique_suffixes)  # e.g., 12 for months Jan-Dec
+        
+        # Create weights: repeat for each group (total length = 2 * num_groups)
+        weights <- rep(weighting, times = num_groups)
+        
+        # Sort matched_columns by suffix (month), then by prefix to match weight order
+        prefixes <- sub("_.*", "", matched_columns)
+        matching_cols_sorted <- matched_columns[order(suffixes, prefixes)]
+        
+        # Assign weights as a named vector (0.75 for idw, 0.25 for nn, per group)
+        names(weights) <- matching_cols_sorted
+        
+        # Print or use the weights vector (e.g., for further analysis)
+        return(weights)
+      } else {
+        stop("The number of weights must match the number of models")
+      }
+    }
+    return(weight_values <<- weights_for_columns(final_data, weighting))
+    print(weight_values)
+  } else {
+    print("Numbers need to be specified.")
+  }
+}
+#
+save_model_output <- function(output_data, Month_range = NA, threshold_val = threshold_value){
+  #
+  ## Month range ----
+  if(all(is.na(Month_range)) && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nNo month range has been specified for the data. Is this correct?")
+    if(result == "Yes"){cat("Continuing... \n")} else {stop("Please specify Month_range.")}
+  } else if(any(is.na(Month_range))){
+    stop("Saving stopped: Only one month has been specified properly in Month_range.")
+  } else {
+    cat("Months have been specified for the data. Continuing ... \n")
+  }
+  ## Threshold value ----
+  if(is.na(threshold_val) && interactive()){
+    result <- select.list(c("Yes", "No"), title = "\nNo threshold value has been specified for the data. Is this correct?")
+    if(result == "Yes"){cat("Continuing... \n")} else {stop("Please specify Threshold value.")}
+  } else {
+    cat("A threshold value has been specified for the data. Continuing ... \n")
+  }
+  #
+  if(all(!is.na(Month_range))){
+    Start_month <- month.abb[Month_range[1]]
+    End_month <- month.abb[Month_range[2]]
+  }
+  threshold_val <- threshold_val
+  final_output_data <- output_data
+  matching_cols <- colnames(final_output_data$spatialData)[grepl("^(idw|nn|ok|tps)_", colnames(final_output_data$spatialData))]
+  extracted_stats <- sub(".*_", "", matching_cols)
+  Stat_type <- unique(extracted_stats[!is.na(extracted_stats)])
+  #
+  ## File name ----
+  base_name <- if (all(!is.na(Month_range))) {
+    paste0(Param_name, "_", Param_name_2, "_", Stat_type,
+           "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+  } else {
+    paste0(Param_name, "_", Param_name_2, "_", Stat_type,
+           "_", Start_year, "_", End_year)
+  }
+  #
+  #
+  ## Save plots ----
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the plots of the chosen interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Interpolation plots will not be saved.")
+    } else {
+      fig_dir <- paste0("../", Site_code, "_", Version, "/Output/Figure files/")
+      #
+      skipped_plots <- list()
+      for (nm in names(final_output_data$plots)) {#for (i in seq_along(final_output_data$plots)){
+        #Current plot
+        cat("\nProcessing plot:", nm, "...\n")
+        flush.console()
+        #
+        p <- final_output_data$plots[[nm]] #p <- final_output_data$plots[[i]]
+        p_name <- nm #p_name <- final_output_data$plots[[i]]$labels$title
+        #
+        # Check if plot can build panels
+        if (!can_build_plot(p)) {
+          msg <- "Skipped: no drawable panels (empty data / scale limits)"
+          skipped_plots[[nm]] <- msg
+          cat(msg, "\n")
+          next
+        }
+        #
+        #Desired file name and specs
+        jpg_filename <- paste0(fig_dir, #Save location
+                               #File name
+                               base_name, "_", nm,  
+                               ".jpg")
+        #
+        if(is.numeric(threshold_val)) {
+          jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)
+        } else {
+          jpg_filename <- jpg_filename
+        }
+        #
+        width_pixels <- 1000
+        aspect_ratio <- 3/4
+        height_pixels <- round(width_pixels * aspect_ratio)
+        #
+        #Check and save plot
+        cat("Saving plot...\n")
+        flush.console()
+        #
+        res <- safe_save_plot(
+          p = p + 
+            theme(axis.text.y = element_text(size = 10), 
+                  axis.text.x = element_text(size = 8)),
+          filename = jpg_filename,
+          width_px = width_pixels,
+          height_px = height_pixels
+        )
+        #
+        if (!res$ok) {
+          skipped_plots[[nm]] <- res$error
+          cat("FAILED:", res$error, "\n")
+        } else {
+          cat("SUCCESS: Interpolation model figure for", p_name, "model was saved in 'Output/Figure files'.", "\n")
+        } #End check
+        flush.console()
+      }#End for loop
+      if (length(skipped_plots) > 0) {
+        cat("\nThe following plots were skipped and NOT saved:\n")
+        for (nm in names(skipped_plots)) {
+          cat(" -", nm, ":", skipped_plots[[nm]], "\n")
+        }
+      } else {
+        cat("\nAll plots were saved successfully.\n")
+      }
+    }#End interactive result
+  }#End individual plots
+  #
+  #
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the combined plot of interpolation models be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Combined  plot will not be saved.")
+    } else {
+      fig_dir <- paste0("../", Site_code, "_", Version, "/Output/Figure files/")
+      p <- final_output_data$grid
+      #naming
+      p_name <- "comb_interp_models"
+      #Desired file name and specs
+      jpg_filename <- paste0(fig_dir, #Save location
+                             #File name
+                             base_name, "_", p_name,  
+                             ".jpg")
+      if(is.numeric(threshold_val)) {
+        jpg_filename <- sub("\\.jpg$", paste0("_", threshold_val, ".jpg"), jpg_filename)
+      } else {
+        jpg_filename <- jpg_filename
+      }
+      width_pixels <- 1000
+      aspect_ratio <- 3/4
+      height_pixels <- round(width_pixels * aspect_ratio)
+      #Save plot
+      invisible(if (inherits(p, "patchwork")) {
+        
+        patchwork::save_plot(
+          filename = jpg_filename,
+          plot = p,
+          width = width_pixels / 100,
+          height = height_pixels / 100,
+          dpi = 300
+        )
+      } else {
+        ggsave(
+          filename = jpg_filename,
+          plot = p,
+          width = width_pixels / 100,
+          height = height_pixels / 100,
+          units = "in",
+          dpi = 300
+        )
+      })
+      cat("Combined interpolation model figure was saved in 'Output/Figure files'.", "\n")
+    }
+  }
+  ##End figure output
+  #
+  #
+  ## Save shapefile ----
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould the shapefile of chosen interpolation values be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Shapefile will not be saved.")
+    } else {
+      # Get shapefile 
+      shape_file <- final_output_data$spatialData
+      # Check for proper stat, "Range" if both Min and Max
+      Stat_type_clean <- unique(gsub(".*_", "", Stat_type))
+      Stat_type <- if(all(c("Minimum", "Maximum") %in% Stat_type_clean)){
+        "Range"
+      } else {
+        Stat_type_clean[1] 
+      }
+      #
+      shp_name <- if (any(!is.na(Month_range))) {
+        paste0(Param_name, "_", Param_name_2, "_", Stat_type,
+               "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+      } else {
+        paste0(Param_name, "_", Param_name_2, "_", Stat_type_clean,
+               "_", Start_year, "_", End_year)
+      }
+      #
+      # Rename columns:
+      names(shape_file) <- names(shape_file) %>% 
+        stringr::str_replace_all(c("Mean" = "E", 
+                                   "Minimum" = "I",
+                                   "Maximum" = "A",
+                                   "Threshold" = "T",
+                                   # models
+                                   "^idw" = "i", 
+                                   "^nn" = "n",
+                                   "^tps" = "t",
+                                   "^ok" = "o",
+                                   "^ens" = "e", 
+                                   # underscores
+                                   "_" = ""))
+      #
+      # Construct file name
+      shapefile_path <- paste0("../",Site_code, "_", Version,"/Output/Shapefiles/", #Save location
+                               #File name
+                               shp_name, 
+                               ".shp")
+      if(is.numeric(threshold_val)) {shapefile_path <- sub("\\.shp$", paste0("_", threshold_val, ".shp"), shapefile_path)}
+      #Save the sf dataframe as a shapefile
+      suppressMessages(sf::st_write(shape_file, shapefile_path, delete_dsn = TRUE, quiet = TRUE))
+      #Print a message to confirm saving
+      cat("Shapefile saved at:", shapefile_path, "\n",
+          "- ", nrow(final_data$spatialData), " features saved with ", ncol(final_data$spatialData)-1, "fields")
+    }
+  }
+  ##End shapefile output
+  #
+  #
+  ## Save data to Excel sheet ----
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould an Excel file with chosen interpolation data be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Interpolation data will not be saved in an Excel file.")
+    } else {
+      shp_name <- if (any(!is.na(Month_range))) {
+        paste0(Param_name, "_", Param_name_2, "_", Stat_type,
+               "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
+      } else {
+        paste0(Param_name, "_", Param_name_2, "_", Stat_type_clean,
+               "_", Start_year, "_", End_year)
+      }
+      model_data <- sf::st_drop_geometry(final_output_data$spatialData)
+      data_path <- paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                          #File name
+                          shp_name, 
+                          ".xlsx")
+      if(is.numeric(threshold_val)) {data_path <- sub("\\.xlsx$", paste0("_", threshold_val, ".xlsx"), data_path)} else {data_path <- data_path}
+      #Create wb with data:
+      new_wb <- createWorkbook()
+      addWorksheet(new_wb, "Model_data")  # Add fresh sheet
+      writeData(new_wb, sheet = "Model_data", x = model_data) 
+      #Save wb
+      saveWorkbook(new_wb, data_path, overwrite = TRUE)
+      cat("Model data successfully saved to:\n",
+          "- Sheet 'Model_data' (", nrow(model_data), " rows)\n",
+          "File: ", data_path, "\n")
+    }
+  }
+  ##End data output
+  #
+  #
+  ## Save the summary information ----
+  if(interactive()){
+    result <- select.list(c("Yes", "No"), title = paste0("\nShould summary data for the chosen interpolation models and output be saved locally to the '", Site_code, "_", Version,"' project folder?"))
+    if(result == "No"){
+      message("Summary data will not be saved.")
+    } else {
+      sheet_names <- excel_sheets(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      sheet_name <- "Interpolation_Summary"
+      summ_info <- data.frame(Parameter = Param_name,
+                              Type = Param_name_2,
+                              Statistic = Stat_type,
+                              Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("(idw|nn|tps|ok|ens)_*")) %>% colnames() %>% sub("_.*", "", .) %>% unique(), collapse = ", "),
+                              Weights = paste(as.vector(unique(weight_values)), collapse = ", "),
+                              Date_range = paste0(Start_year, "-", End_year),
+                              Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")},
+                              Threshold_value = threshold_val,
+                              Date_updated = Sys.Date())
+      #Load the workbook
+      wb <- loadWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"))
+      #Check if the sheet exists
+      if (sheet_name %in% sheet_names) {
+        #If it exists, append data to the existing sheet
+        existing_data <- readWorkbook(paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), sheet = sheet_name, detectDates = TRUE)
+        new_data <- rbind(existing_data, summ_info)
+        writeData(wb, sheet = sheet_name, new_data)
+      } else {
+        #If it does not exist, create a new sheet
+        addWorksheet(wb, sheet_name)
+        writeData(wb, sheet = sheet_name, summ_info)
+      }
+      #Save the workbook
+      saveWorkbook(wb, paste0("../",Site_code, "_", Version,"/Data/",Site_code, "_", Version,"_model_setup.xlsx"), overwrite = TRUE)
+      #Print a message to confirm saving
+      cat("Summary information was saved within:", sheet_name, "\n")
+    }
+  }
+  ##End summary output
+} 
+#
+# Function to save large data files as CSV files
+write_csv_chunks <- function(
+    df,
+    out_dir,
+    prefix = "data",
+    chunk_size = 1e6
+) {
+  dir.create(out_dir, showWarnings = FALSE, recursive = TRUE)
+  
+  n <- nrow(df)
+  idx <- ceiling(seq_len(n) / chunk_size)
+  
+  split_df <- split(df, idx)
+  
+  purrr::iwalk(split_df, function(x, i) {
+    readr::write_csv(
+      x,
+      file.path(out_dir, sprintf("%s_part_%s.csv", prefix, i))
+    )
+  })
+  
+  invisible(length(split_df))
+}
+#
+#
+#
+#
+#### Helpers ####
+#
+chunked_intersection <- function(polygons, site, chunk_size = 1000) {
+  # Split polygons into chunks
+  n <- nrow(polygons)
+  chunks <- split(polygons, (seq_len(n) - 1) %/% chunk_size)
+  
+  # Process each chunk
+  result <- map_dfr(chunks, function(chunk) {
+    st_intersection(site, chunk) %>%
+      st_make_valid() %>%  # Ensure valid geometries
+      suppressWarnings()   # Quiet common minor warnings
+  })
+  return(result)
+}
+#
+can_build_plot <- function(p) {
+  tryCatch({
+    b <- ggplot2::ggplot_build(p)
+    length(b$layout$panel_params) > 0
+  }, error = function(e) FALSE)
+}
+# check for saving plots:
+safe_save_plot <- function(p, filename, width_px, height_px, dpi = 300) {
+  tryCatch(
+    {
+      ggsave(
+        filename = filename,
+        plot = p,
+        device = ragg::agg_jpeg,
+        width = width_px,
+        height = height_px,
+        units = "px",
+        res = dpi
+      )
+      list(ok = TRUE, error = NULL)
+    },
+    error = function(e) {
+      list(ok = FALSE, error = conditionMessage(e))
+    }
+  )
+}
+

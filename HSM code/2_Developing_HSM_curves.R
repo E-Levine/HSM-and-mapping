@@ -54,6 +54,7 @@ curve_output(LineType = "categorical", FitType = "NA",
 #p <- p + labs(subtitle = expression(italic("Buffer distance (ft) = SI Score * 100")))
 #
 ###Function to gather existing curve point data from existing model setup summary data or create new:
+#Adds curve point info to Curve_Summary sheet.
 curve_point_data()
 #
 ###Function to save the curve values and/or curve figure created

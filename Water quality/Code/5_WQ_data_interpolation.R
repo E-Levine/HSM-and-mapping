@@ -1,0 +1,225 @@
+##Water quality data interpolation - **in progress - edits to be made**
+#
+#Interpolation of point data to site area based on site KML file
+#Requires WQ data Excel file, KML file, FL_outlines layer, picogrid layer
+#
+#
+##Requires data file in Compiled-data folder, site KML file
+#
+#Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
+if (!require("pacman")) {install.packages("pacman")}
+pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
+               readxl, openxlsx, progress, writexl, lubridate,
+               sf, sp, terra, furrr, future,
+               tmap, tmaptools, gridExtra, cowplot, #Mapping and figures
+               mgcv, fpc, fields, interp, #mgcv - interpolation, fpc::bscan - clustering
+               RColorBrewer, magicfor, ecorest, #HSV scoring
+               marmap, gstat, dismo, #Depth, interpolation
+               install = TRUE) 
+#
+#source("Code/WQ_functions.R")
+WQ <- new.env()
+source("Code/WQ_functions_interpolation.R", local = WQ)
+#modeling <- new.env()
+#load("SSv1_TMean_working.RData", envir = modeling)
+#
+Site_code <- c("WI")       #Two letter estuary code
+Version <- c("v1")         #Version code for model 
+State_Grid <- c("E2")      #Two-letter StateGrid ID
+Alt_Grid <- c("F2")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("WIHSM") #Project code given to data, found in file name
+Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
+End_year <- c("2024")      #End year (YYYY) of data, found in file name
+Folder <- c("compiled")    #Data folder: "compiled" or "final"
+Data_source <- c("Portal") #Required if Folder = compiled.
+Param_name <- c("Temperature, water")#Column/parameter name of interest - from WQ data file.
+Param_name_2 <- c("Monthly")#Additional identifier for parameter: i.e. Annual, Quarterly, Monthly
+#
+color_temp <- c("cool")    #"warm" or "cool"
+#
+####Load data and KML files, plot existing points - will be one function####
+#
+WQ$load_WQ_data()
+#
+Site_area <- st_read(paste0("../",Site_code,"_", Version, "/Data/Layers/KML/", Site_code, ".kml"))
+plot(Site_area[2])
+###State Outline
+FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
+plot(FL_outline)
+##Get Site area  
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area, Alt_Grid = Alt_Grid)
+Site_grid_sf <- st_as_sf(Site_Grid)
+#
+#Df of grid data
+Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
+#Check areas:
+ggpubr::ggarrange(
+  ggplot() + geom_sf(data = Site_area, fill = "#6699CC"),
+  ggplot() + geom_sf(data = Site_Grid, fill = "#6699CC")
+)
+#Map of stations
+ggplot()+
+  geom_sf(data = Site_area, fill = "#6699CC")+
+  #geom_sf(data = Site_Grid, fill = NA)+
+  geom_sf(data = FL_outline)+
+  geom_point(data = WQ_data, aes(Longitude, Latitude), size = 3.5)+
+  theme_classic()+
+  theme(panel.border = element_rect(color = "black", fill = NA), 
+        axis.title = element_text(size = 18, color = "black", family = "Arial"), 
+        axis.text =  element_text(size = 16, color = "black", family = "Arial"),
+        axis.text.x = element_text(angle = 30, hjust = 1))+
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
+           ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
+#
+#Site_version/Output/Figure files/Site_WQ_Stations
+#rm(FL_outline)
+#
+#END OF SECTION
+#
+####Grid/raster set up - run once per session####
+#
+Site_Grid_spdf <- as(Site_Grid %>% dplyr::select(Latitude, Longitude, PGID, MGID), "Spatial")
+grid <- spsample(Site_Grid_spdf, type = 'regular', n = 10000) 
+plot(grid) 
+#Get extent in meters to create raster: (raster only required for tps - skip to 93)
+Site_extent_m <- as.matrix(bb(extent(Site_area), current.projection = 4326, projection = 32617)) #W, S, E, N
+#Create base raster using meters: 
+raster_t_m <- rast(resolution = c(20, 20),
+                   xmin = Site_extent_m[1], xmax = Site_extent_m[3], ymin = Site_extent_m[2], ymax = Site_extent_m[4],
+                   crs = "+init=EPSG:32617")
+#Convert back to dd:
+raster_t <- terra::project(raster_t_m, "EPSG:4326")
+#
+# Determine which scale to use based on color_temp
+if(color_temp == "warm") {
+  scale_to_use <- scale_color_viridis_c(option = "rocket", direction = -1)
+} else if(color_temp == "cool") {
+  scale_to_use <- scale_color_viridis_c(option = "mako", direction = -1)
+} else {
+  scale_to_use <- scale_color_viridis_c()  # or some other default
+}
+#
+#
+#
+####Summarize data based on parameter of interest - all methods####
+#
+##Summarize data based on method specified:
+#Time_period - Period of time to group by: Year, Month, Quarter, YearMonth, YearQuarter
+#Year_range - Range of years of data to include. Blank/enter "NA" for all years, 4-digit year for one year, or enter a character string of 4-digit start year followed by 4-digit end year, separated by a dash "-"
+#Quarter_start - Starting month of quarter 1, entered as an integer corresponding to month. NA if January (1) start. Not needed if not wokring with quarters.
+#Month_range - Start and end month to include in final data, specified by month's integer value c(#, #)
+#Summ_method - Summarization method: Means, Mins, Maxs, Range, Range_values, Threshold
+#Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
+#
+#library(lubridate)
+WQ_summ <- WQ$summarize_data(WQ_data %>% drop_na(Value), 
+                          Time_period = "YearMonth", Summ_method = "Threshold",
+                          Threshold_parameters = c("below", 20), Month_range = c(5, 10)) # 
+#
+head(WQ_summ)
+stat <- c("ThresholdB20") #used for file naming: Means, Mins, ThresholdA35, etc.
+#write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,"_", stat,".xlsx"), format_headers = TRUE)
+#
+#
+#Data as spatial df:
+data_cols <- if(ncol(WQ_summ) >= 3) {
+  WQ_summ[, !names(WQ_summ) %in% c("Latitude", "Longitude"), drop = FALSE]#c(which(names(WQ_summ) == "Statistic"):ncol(WQ_summ)), drop = FALSE]
+  } else {
+    stop("WQ_summ must have at least 3 columns (2 for coordinates + 1 for data)")
+    }
+Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitude")], data_cols, 
+                                         proj4string = CRS("+proj=longlat +datum=WGS84 +no_defs +type=crs"))
+#
+#
+#
+#
+####Interpolation models####
+#
+#
+##Inverse distance weighted - updated for Month, Year
+idw_data <- WQ$perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
+#saveRDS(idw_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
+#idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
+#
+##Nearest neighbor - not updated
+nn_data <- WQ$perform_nn_interpolation(Site_data_spdf, Site_area, Site_Grid, Site_Grid_spdf, Param_name, WQ_summ, "Month")
+#
+##Thin plate spline - not updated
+tps_data <- WQ$perform_tps_interpolation(Site_data_spdf, raster_t, Site_area, Site_Grid, Param_name)
+#
+####Ordinary Kriging
+ok_data <- WQ$perform_ok_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
+#saveRDS(ok_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
+#ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
+#
+#
+####Joining and comparing####
+#
+#Outputs df of 'results_[Param]'; use RangeValues = Yes if both Min and Max included
+WQ$join_interpolation(Site_Grid_df)
+#Once idw, ok saved separately and join_interpolation finishes:
+#rm(idw_data, ok_data, Site_data_spdf); gc()
+#rm(Site_Grid_spdf, Site_Grid_df) #Only rm if saving clean/reduced workspace and/or not continuing to work
+#
+#Generates plots for each model and output of all models together - run for each parameter
+plotting <- WQ$plot_interpolations2(result_Mean, Site_Grid, simplify_tolerance = 0.01)
+#
+combined_plot <- grouped_plot_interpolations(plotting) #needs work. Having issues plotting. 
+grouped_plot_interpolations(final_data$plots)
+#
+#
+####Ensemble or model selection####
+#
+#weighting <- c("equal") #Specify "equal" for equal weighting, or values between 0 and 1 for specific weights.
+#Specific weights should be listed in order based on models select idw > nn > tps > ok. Only put values for models selected.
+final_data <- WQ$ensemble_weighting("ensemble", c("idw", "ok"), 
+                                 result_Threshold, weighting = c(0.50, 0.50), 
+                                 Site_Grid)
+#saveRDS(final_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.rds"))
+#rm(final_data); gc()
+#final_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.rds"))
+#
+#Other option: qs and strip data from plots before saving:
+#library(qs); qsave(final_data$spatialData, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"), preset = "fast")
+#final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"))
+#
+####Save model####
+#Specify month range if months used: Month_range = c(5, 10)
+#Specify threshold or NA
+#Can remove Site_Grid and result_[...] if workspace saved and final_data created: rm(Site_Grid, result_Mean)
+WQ$save_model_output(final_data, threshold_val = 20, Month_range = c(5, 10))
+#
+#
+#If continuing to work, good practice to remove objects to make sure correct data is used:
+rm(final_data, plotting, ok_data, tps_data, nn_data, idw_data, Site_data_spdf, WQ_summ, list = ls(pattern = "result_"))
+
+####Save large files####
+#
+##Get Site area  
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
+Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
+idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
+ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
+#Run join, run final
+#
+#library(qs)
+#final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"),
+#                    nthreads = parallel::detectCores())
+naming <- paste0(Param_name, "_", Param_name_2, "_", stat,
+                 "_", Start_year, "_", End_year)
+naming
+#
+temp_data <- st_drop_geometry(final_data$spatialData) %>% 
+  as.data.frame() %>%
+  dplyr::rename("Long_DD_X" = Long_DD_X_, "Lat_DD_Y" = Lat_DD_Y_M) %>%
+  dplyr::select(PGID, Lat_DD_Y, Long_DD_X, contains("idw"), contains("ok"), contains("ens"))
+head(temp_data)
+#
+WQ$write_csv_chunks(
+  df = temp_data,
+  out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
+                   #File name
+                   naming),
+  prefix = paste(naming)
+)
+#rm(naming, temp_data, final_data, list = ls(pattern = "result_"), Site_data_spdf)
