@@ -20,16 +20,37 @@ FileType <- c("data") #data or shapefile
 #font_import(prompt = FALSE)
 loadfonts(device = "win")
 #
-basetheme <- theme_bw()+
-  theme(axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"), 
-        axis.text = element_text(size = 11, family = "Arial"), 
-        axis.text.x = element_text(margin = margin(t=0.25, l=0.5, b=0, r=0.5, unit="cm")), 
-        axis.text.y = element_text(margin = margin(t=0, l=0.25, b=0, r=0, unit="cm")),
-        axis.ticks = element_line(color = "black", linewidth = 0.1),
-        axis.ticks.length = unit(-0.15, "cm"),
-        panel.grid = element_blank(),
-        panel.border = element_blank(), 
-        axis.line = element_line(color = "black", linewidth = 0.1))
+# manuscript formatting
+base_theme <- ggplot2::theme_classic() +
+  ggplot2::theme(
+    axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"),
+    axis.text = ggplot2::element_text(size = 12, family = "Arial", color = "black"),
+    axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+    axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
+    axis.ticks = element_line(color = "black", linewidth = 0.1),
+    axis.ticks.length = unit(-0.15, "cm"),
+    panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
+    plot.margin = grid::unit(c(0, 0, 0, 0), "cm"),
+    plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
+    plot.caption = ggplot2::element_text(face = "italic", size = 9),
+    legend.title = element_text(size = 12, family = "Arial"),
+    legend.text = element_text(size = 10, family = "Arial"))
+#
+# presentation formatting
+maptheme <- theme_classic()+
+  theme(
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+    axis.title = element_blank(),#element_text(size = 14, color = "black"), 
+    axis.text =  element_text(size = 15, color = "black", family = "Arial"),
+    axis.text.x = element_text(angle = 30, vjust = 0.5)
+  )
+#
+legendtheme <- theme(
+  legend.title = element_text(size = 14, color = "black", family = "Arial"),
+  legend.text = element_text(size = 13, color = "black", family = "Arial"),
+  legend.background = element_blank(),
+  legend.key = element_blank()
+)
 #
 FacetTheme <- theme(strip.text.y = element_text(face = "bold", size = 12),
                     strip.background = element_rect(fill = "#CCCCCC"),
@@ -40,7 +61,7 @@ FacetTheme <- theme(strip.text.y = element_text(face = "bold", size = 12),
 #
 #
 #
-# Load shapefile ----
+# Load shapefile data ----
 #Load validation data from matching shape files in Output/Shapefiles folder: SiteCode_Version_validation_data
 #Currently loads as sfc for potential mapping, can change to df if not mapping later
 load_survey_shpfiles <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "model_srvys"){
@@ -164,7 +185,7 @@ clean_database_file <- function(Srvy_quad, Srvy_LL) {
   Srvy_quad <- Srvy_quad %>%
     left_join(
       Srvy_LL %>%
-        select(
+        dplyr::select(
           SampleEventID,
           Latitude = LatitudeDec,
           Longitude = LongitudeDec
@@ -375,7 +396,48 @@ summarize_data <- function(cleanedData){
 #
 validation_summary <- summarize_data(validation_data)
 #
+nrow(HSM_ground %>% drop_na(HSM))
+nrow(HSMmodel %>% drop_na(HSM))
+(nrow(HSM_ground %>% drop_na(HSM))/nrow(HSMmodel %>% drop_na(HSM)))*100
 #
+HSM_ground <- HSM_ground %>%
+  mutate(HSMgrp = factor(HSMgrp,
+                         levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", 
+                                    "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
+                         ))
+#
+(p0 <- ggplot() +
+    geom_sf(data = HSMmodel, color = "#CCCCCC")+
+    geom_sf(data = left_join(HSM_ground,
+                             validation_data %>% dplyr::select(PGID, Presence)), 
+            aes(color = HSMgrp, shape = as.factor(Presence)), size = 6, alpha = 0.8)+ 
+    scale_color_viridis_d()+
+    scale_shape_manual(values = c(8, 19))+
+    labs(color = "Suitability score", shape = "Oyster Presence")+
+    legendtheme)
+#
+p0 + base_theme #manuscript
+p0 + maptheme #presentation 
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_GTLocations_p.png"),
+  plot = p0 + maptheme,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_GTLocations.png"),
+  plot = p0,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+left_join(HSM_ground,
+          validation_data %>% dplyr::select(PGID, Presence))
 #
 # Analysis ----
 #
