@@ -7,9 +7,9 @@ pacman::p_load(plyr, tidyverse, readxl, openxlsx,
 #
 # Setup ----
 # Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("SS") #two-letter site code
 Version <- c("v1") #Model version
-SurveyYYMM <- c("2305")
+SurveyYYMM <- c("2401")
 FileType <- c("data") #data or shapefile
 #
 #
@@ -173,10 +173,13 @@ load_survey_data <- function(Site_Code, Version, SurveyYYMM, FileType = "data") 
 }
 #
 survey_data <- load_survey_data(Site_Code, Version, SurveyYYMM, FileType)
-Srvy_quad <- survey_data$Srvy_quad
-Srvy_LL <- survey_data$Srvy_LL
+Srvy_LL <- survey_data$Srvy_LL %>%
+  # Filter to only most recent survey if repeated surveys
+  group_by(FixedLocationID) %>% arrange(desc(TripID)) %>% slice(1)
+Srvy_quad <- survey_data$Srvy_quad %>%
+  filter(SampleEventID %in% Srvy_LL$SampleEventID)
 #
-#
+# Combines LL with count data, calculates DeadRatio, summarizes by station
 clean_database_file <- function(Srvy_quad, Srvy_LL) {
   
   library(dplyr)
@@ -192,7 +195,7 @@ clean_database_file <- function(Srvy_quad, Srvy_LL) {
         ),
       by = "SampleEventID"
     ) %>%
-    mutate(across(c(Latitude, Longitude, TotalVolume, TotalWeight, NumDrills), as.numeric)) %>%
+    mutate(across(c(Latitude, Longitude, TotalVolume, TotalWeight, NumDrills, NumLive, NumDead), as.numeric)) %>%
     mutate(Station = substr(SampleEventID, 19, 22),
            DeadRatio = as.numeric(NumDead/(NumLive+NumDead)))
   
@@ -212,13 +215,13 @@ clean_database_file <- function(Srvy_quad, Srvy_LL) {
   
   # Summarize by station and clean to desired columns 
   Srvy_quad <- Srvy_quad %>%
-    mutate(across(c(Spat, Adult, Legal), as.numeric)) %>%
+    mutate(across(any_of(c("Spat", "Adult", "Legal")), as.numeric)) %>%
     group_by(SampleEventID, Latitude, Longitude) %>%
     summarise(
       n_quadrats = n_distinct(QuadratID),
       across(
-        c(NumLive, NumDead, TotalVolume, TotalWeight, NumLegal,
-          DeadRatio, Spat, Adult, Legal, SpatAdult),
+        any_of(c("NumLive", "NumDead", "TotalVolume", "TotalWeight", "NumLegal",
+          "DeadRatio", "Spat", "Adult", "Legal", "SpatAdult")),
         ~ mean(.x, na.rm = TRUE),
         .names = "{.col}"
       ),
@@ -234,7 +237,7 @@ points_sf <- st_as_sf(Srvy_data, coords = c("Longitude", "Latitude"), crs = 4326
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_model"
-model_scores_date <- c("2026-03-04") #c("2026-02-05")#
+model_scores_date <- c("2026-02-05")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
