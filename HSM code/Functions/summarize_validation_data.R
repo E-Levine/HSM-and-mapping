@@ -174,18 +174,22 @@ load_survey_data <- function(Site_Code, Version, SurveyYYMM, FileType = "data") 
 #
 survey_data <- load_survey_data(Site_Code, Version, SurveyYYMM, FileType)
 Srvy_LL <- survey_data$Srvy_LL %>%
-  # Filter to only most recent survey if repeated surveys
-  group_by(FixedLocationID) %>% arrange(desc(TripID)) %>% slice(1)
+  # Filter to only most recent survey if repeated surveys (can only use LL since CR lab has different IDs for same location)
+  group_by(LatitudeDec, LongitudeDec) %>% 
+  arrange(desc(TripID)) %>% slice(1)
+# Filter and add date column
 Srvy_quad <- survey_data$Srvy_quad %>%
-  filter(SampleEventID %in% Srvy_LL$SampleEventID)
+  filter(SampleEventID %in% Srvy_LL$SampleEventID) %>%
+  mutate(Date = as.Date(substr(SampleEventID, 8, 15), format = "%Y%m%d"))
 #
 # Combines LL with count data, calculates DeadRatio, summarizes by station
+# Requires a Date column in either the quad or LL df.
 clean_database_file <- function(Srvy_quad, Srvy_LL) {
   
   library(dplyr)
   
   # Add Latitude / Longitude to quadrat data
-  Srvy_quad <- Srvy_quad %>%
+  Srvy_quad2 <- Srvy_quad %>%
     left_join(
       Srvy_LL %>%
         dplyr::select(
@@ -199,24 +203,29 @@ clean_database_file <- function(Srvy_quad, Srvy_LL) {
     mutate(Station = substr(SampleEventID, 19, 22),
            DeadRatio = as.numeric(NumDead/(NumLive+NumDead)))
   
+  # Make sure data is valid and Longitudes are correct:
+  Srvy_quad3 <- Srvy_quad2 %>%
+    filter(QuadratNumber >= 1) %>%
+    mutate(Longitude = as.numeric(ifelse(Longitude > 0, Longitude*-1, Longitude)))
+  
   # Columns that must exist
   req_cols <- c("Spat", "Adult", "Legal", "SpatAdult")
   
   # Create missing columns
   for (col in req_cols) {
-    if (!col %in% names(Srvy_quad)) {
-      if (col == "SpatAdult" && "NumLive" %in% names(Srvy_quad)) {
-        Srvy_quad[[col]] <- Srvy_quad$NumLive
+    if (!col %in% names(Srvy_quad3)) {
+      if (col == "SpatAdult" && "NumLive" %in% names(Srvy_quad3)) {
+        Srvy_quad3[[col]] <- Srvy_quad3$NumLive
       } else {
-        Srvy_quad[[col]] <- NA
+        Srvy_quad3[[col]] <- NA
       }
     }
   }
   
   # Summarize by station and clean to desired columns 
-  Srvy_quad <- Srvy_quad %>%
+  Srvy_quad4 <- Srvy_quad3 %>%
     mutate(across(any_of(c("Spat", "Adult", "Legal")), as.numeric)) %>%
-    group_by(SampleEventID, Latitude, Longitude) %>%
+    group_by(Date, SampleEventID, Latitude, Longitude) %>%
     summarise(
       n_quadrats = n_distinct(QuadratID),
       across(
@@ -227,8 +236,12 @@ clean_database_file <- function(Srvy_quad, Srvy_LL) {
       ),
       .groups = "drop"
     ) 
-    
-  return(Srvy_quad)
+  
+  Srvy_quad5 <- Srvy_quad4 %>%
+    mutate(SampleEvent = substr(SampleEventID, 1, 17)) %>%
+    distinct(across(-SampleEventID), .keep_all = TRUE)
+  
+  return(Srvy_quad5)
 }
 #
 Srvy_data <- clean_database_file(Srvy_quad, Srvy_LL)
@@ -251,6 +264,8 @@ HSMmodel <- shp_files %>%
 points_sf <- st_transform(points_sf, st_crs(HSMmodel))
 HSM_ground <- st_join(points_sf, HSMmodel)
 #
+ggplot()+
+  geom_sf(data = points_sf, aes(color = NumLive))
 #
 #
 # Summarize ----
@@ -403,15 +418,16 @@ nrow(HSM_ground %>% drop_na(HSM))
 nrow(HSMmodel %>% drop_na(HSM))
 (nrow(HSM_ground %>% drop_na(HSM))/nrow(HSMmodel %>% drop_na(HSM)))*100
 #
-HSM_ground <- HSM_ground %>%
+HSM_ground2 <- HSM_ground %>%
   mutate(HSMgrp = factor(HSMgrp,
                          levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", 
                                     "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
-                         ))
+                         )) %>%
+  drop_na(HSMgrp)
 #
 (p0 <- ggplot() +
     geom_sf(data = HSMmodel, color = "#CCCCCC")+
-    geom_sf(data = left_join(HSM_ground,
+    geom_sf(data = left_join(HSM_ground2,
                              validation_data %>% dplyr::select(PGID, Presence)), 
             aes(color = HSMgrp, shape = as.factor(Presence)), size = 6, alpha = 0.8)+ 
     scale_color_viridis_d()+
@@ -431,15 +447,15 @@ ggsave(
   dpi = 300 # Use 300 dpi for high quality
 )
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_GTLocations.png"),
-  plot = p0,
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_GTLocations_m.png"),
+  plot = p0 + base_theme,
   width = 9,
   height = 5,
   units = "in",
   dpi = 300 # Use 300 dpi for high quality
 )
 #
-left_join(HSM_ground,
+left_join(HSM_ground2,
           validation_data %>% dplyr::select(PGID, Presence))
 #
 # Analysis ----
@@ -450,7 +466,7 @@ summary(model)
 anova(model, test = "Chisq")
 #Likely due to small sample size, HSM range too narrow for true validation
 # ROC (Receiver Operating Characteristic) curve shows the trade off between true positive rate and false postie rate
-roc_obj <- roc(validation_data$Presence, fitted(model))
+roc_obj <- roc(model$y, fitted(model)) #validation_data$Presence
 (auc_val <- auc(roc_obj))
 plot(roc_obj)
 roc_df <- data.frame(
@@ -465,9 +481,9 @@ roc_df$FPR <- 1 - roc_df$specificity
     x = "Specificity",#"False Positive Rate",
     y = "Sensitivity",#"True Positive Rate",
   ) +
-  scale_x_continuous(expand = c(0,0))+
-  scale_y_continuous(expand = c(0,0))+
-  basetheme)
+  scale_x_continuous(expand = c(0,0.025))+
+  scale_y_continuous(expand = c(0,0.025))+
+  base_theme)
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_ROC.png"),
@@ -481,6 +497,7 @@ ggsave(
 #0..5 = random, 0.6-0.7 = poor, 0.7-0.8 acceptable, 0.8-0.9 good, 0.9-1 excellent
 #EXAMPLE: Presence probability increased significantly with HSM suitability class (logistic regression, p < 0.01). Model discrimination was acceptable (AUC = 0.76), indicating that sites with higher HSM scores were more likely to contain oysters.
 (presence_summary <- validation_data %>%
+    drop_na(HSMgrp) %>%
   group_by(HSMgrp) %>%
   summarize(
     n = n(),
@@ -500,8 +517,8 @@ ggsave(
     x = "Habitat suitability class",
     y = "Observed presence probability"
   ) +
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1.1)) +
-  basetheme)
+  scale_y_continuous(expand = c(0,0), limits = c(0, 1.05)) +
+  base_theme)
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSM_presence.png"),
