@@ -7,9 +7,9 @@ pacman::p_load(plyr, tidyverse, readxl, openxlsx,
 #
 # Setup ----
 # Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SS") #two-letter site code
+Site_Code <- c("SL") #two-letter site code
 Version <- c("v1") #Model version
-SurveyYYMM <- c("2401")
+SurveyYYMM <- c("2305") #SS-2401
 FileType <- c("data") #data or shapefile
 #
 #
@@ -23,14 +23,14 @@ loadfonts(device = "win")
 # manuscript formatting
 base_theme <- ggplot2::theme_classic() +
   ggplot2::theme(
-    axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"),
-    axis.text = ggplot2::element_text(size = 12, family = "Arial", color = "black"),
+    axis.title = element_text(size = 17, face = "bold", color = "black", family = "Arial"),
+    axis.text = ggplot2::element_text(size = 15, family = "Arial", color = "black"),
     axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
     axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
     axis.ticks = element_line(color = "black", linewidth = 0.1),
     axis.ticks.length = unit(-0.15, "cm"),
     panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
-    plot.margin = grid::unit(c(0, 0, 0, 0), "cm"),
+    plot.margin = grid::unit(c(0.05, 0, 0, 0), "cm"),
     plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
     plot.caption = ggplot2::element_text(face = "italic", size = 9),
     legend.title = element_text(size = 12, family = "Arial"),
@@ -44,6 +44,10 @@ maptheme <- theme_classic()+
     axis.text =  element_text(size = 15, color = "black", family = "Arial"),
     axis.text.x = element_text(angle = 30, vjust = 0.5)
   )
+#
+# for plots
+plot_theme <- theme(plot.margin = unit(c(0.25, 0.1, 0.1, 0.1), "cm"),
+                    panel.border = element_rect(color = NA))
 #
 legendtheme <- theme(
   legend.title = element_text(size = 14, color = "black", family = "Arial"),
@@ -205,7 +209,8 @@ clean_database_file <- function(Srvy_quad, Srvy_LL) {
   
   # Make sure data is valid and Longitudes are correct:
   Srvy_quad3 <- Srvy_quad2 %>%
-    filter(QuadratNumber >= 1) %>%
+    mutate(NumLive = case_when(QuadratNumber == 0 ~ 0, TRUE ~ NumLive),
+           NumDead = case_when(QuadratNumber == 0 ~ 0, TRUE ~ NumDead)) %>%
     mutate(Longitude = as.numeric(ifelse(Longitude > 0, Longitude*-1, Longitude)))
   
   # Columns that must exist
@@ -250,7 +255,7 @@ points_sf <- st_as_sf(Srvy_data, coords = c("Longitude", "Latitude"), crs = 4326
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_model"
-model_scores_date <- c("2026-02-05")#c("2026-03-04") #
+model_scores_date <- c("2026-03-04") #c("2026-02-05")#
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -466,7 +471,7 @@ summary(model)
 anova(model, test = "Chisq")
 #Likely due to small sample size, HSM range too narrow for true validation
 # ROC (Receiver Operating Characteristic) curve shows the trade off between true positive rate and false postie rate
-roc_obj <- roc(model$y, fitted(model)) #validation_data$Presence
+roc_obj <- pROC::roc(validation_data$Presence, fitted(model)) #model$y
 (auc_val <- auc(roc_obj))
 plot(roc_obj)
 roc_df <- data.frame(
@@ -482,8 +487,9 @@ roc_df$FPR <- 1 - roc_df$specificity
     y = "Sensitivity",#"True Positive Rate",
   ) +
   scale_x_continuous(expand = c(0,0.025))+
-  scale_y_continuous(expand = c(0,0.025))+
-  base_theme)
+  scale_y_continuous(expand = c(0,0.005))+
+  base_theme +
+    plot_theme)
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_ROC.png"),
@@ -518,7 +524,8 @@ ggsave(
     y = "Observed presence probability"
   ) +
   scale_y_continuous(expand = c(0,0), limits = c(0, 1.05)) +
-  base_theme)
+  base_theme +
+    plot_theme)
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSM_presence.png"),
