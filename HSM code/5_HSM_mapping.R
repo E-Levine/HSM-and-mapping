@@ -21,7 +21,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SS") #two-letter site code
+Site_Code <- c("SL") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -29,7 +29,7 @@ Version <- c("v1") #Model version
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_model"
-model_scores_date <- c("2026-02-05")#c("2026-03-04") #
+model_scores_date <- c("2026-03-04") #c("2026-02-05")#
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -239,6 +239,24 @@ ggsave(
 )
 #
 #
+# Flow
+(p7.5 <- ggplot()+
+    geom_sf(data = HSM_scores, aes(color = FAV)) +
+    basetheme + legendtheme +
+    scale_color_viridis_c(limits = c(0,1))+
+    labs(color = "Flow") + # UPDATE AS NEEDED
+    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
+  plot = p7.5,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
 #
 # Composite model ----
 #
@@ -301,3 +319,32 @@ ggsave(
 )
 #
 #
+# Average score summary ####
+#
+# Channels coverage
+HSM_scores %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, ChnlTO) %>%
+  summarise(across(ChnlTO, ~ sum(.x == 0, na.rm = TRUE)))
+#
+Ave_scores <- HSM_scores %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, ends_with("AV"))
+# Mean overall
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ mean(.x, na.rm = TRUE)))
+# Non-zero
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x != 0, na.rm = TRUE)))
+# Zeros
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x == 0, na.rm = TRUE)))
+# Mean non-zero
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ mean(.x != 0, na.rm = TRUE)))
+# Cells >= 0.5
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x >= 0.5, na.rm = TRUE)))
+# Cells >= 0.7
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x >= 0.7, na.rm = TRUE)))
