@@ -8,14 +8,14 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
                install = TRUE) 
 #
 ##Input the site code and version for this project. (Required)
-Site_Code <- c("WC") #two-letter site code used throughout for identifying files
+Site_Code <- c("SL") #two-letter site code used throughout for identifying files
 Version <- c("v1") #current version number of the model for the specified site
 source("HSM code/Functions/HSM_Functions.R")
 #
 ##Naming convention for parameter - change with each new parameter and version of a parameter to score (i.e. if multiple Salinity curves will be used don't jsut use "Salinity".)
 #Name will be used in Excel file/sheet names and figure title. If redoing curves, name should be the same as the Excel sheet name.
-Parameter_name = c("Lease designation")
-Param_title = c("Aquaculture leases")
+Parameter_name = c("Months / Year") # X-axis
+Param_title = c("Outlier flow rate")   # Title
 #
 ###Function to create habitat suitability parameter score curves.
 ##Inputs required: LineType, FitType, Parameter_values, Parameter_limits, Parameter_step, Parameter_title, Title, show_points, save_option 
@@ -44,12 +44,12 @@ Param_title = c("Aquaculture leases")
 #
 #
 #Continuous data example:
-curve_output(LineType = "Gaussian", FitType = "hard", 
-             Parameter_values = c(15, 20.5, 26, 31, 33, 35), Parameter_limits = c(0, 40), Parameter_step = 0.01, 
+curve_output(LineType = "straight", FitType = "soft", 
+             Parameter_values = c(1, 0.75, 0.5, 0.25, 0), Parameter_limits = c(0, 1), Parameter_step = 0.01, 
              show_points = "Y") #, step_values = c(0, 0.25, 1, 0.75, 0)), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #Categorical data example:
 curve_output(LineType = "categorical", FitType = "NA", 
-             Parameter_values = c("Absent", "Within 20ft of lease", "Present"), Parameter_limits = c(1, 0.1, 0), 
+             Parameter_values = c("Offshore, Primary,\nLarge vessel,\nGeneral, Secondary", "Tertiary", "Terminus", "Shallow,\nShortcut,\nNo designation"), Parameter_limits = c(1, 0.75, 0.5, 0.25), 
              show_points = "N")
 #p <- p + labs(subtitle = expression(italic("Buffer distance (ft) = SI Score * 100")))
 #
@@ -67,3 +67,33 @@ save_curve_output()
 copy_curve_summary("US", "v1")
 copy_curve_files("US", "v1")
 #
+#
+# Presentation formatting ----
+#
+(p1 <- p + 
+   geom_point(data = cp2, aes(Param, Value), color = "blue", size = 6)+
+   geom_line(data = pred2, aes(Param, Value), color = "black", linetype = "dashed", linewidth = 2.5)+
+  #scale_y_continuous(expand = c(0,0))+
+  theme(plot.title = element_blank(),
+        plot.margin = margin(0.45, 0.75, 0.2, 0.25, "cm"),
+        axis.title = element_text(size = 24),
+        axis.text = element_text(size = 20)))
+
+p1$layers[[1]]$aes_params$linewidth <- 2.5 
+p1$layers[[2]]$aes_params$size <- 6 
+(p1)
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Curves_presentation/",Param_title,"s.png"),
+  plot = p1,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+# Multiple lines
+cp2 <- curve_points
+pred2 <- predictions
+pred2 <- pred2 %>% filter(Param < 0.751)
