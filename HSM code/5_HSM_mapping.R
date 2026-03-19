@@ -82,15 +82,15 @@ legendtheme <- theme(
   geom_sf(data = FL_outline, linewidth = 0.35)+
   geom_point(data = Ref_locs, aes(Longitude, Latitude), alpha = 0.8, size = 4)+
   geom_shadowtext(data = Ref_locs, aes(Longitude, Latitude, label = Location),
-            nudge_x = 0.05, nudge_y = -0.025, # ADJUST AS NEEDED
+            nudge_x = 0.025, nudge_y = -0.005, # ADJUST AS NEEDED 0.05, -0.025-- 0.025, -0.005
             size = 5, fontface = "bold", family = "Arial", 
             color = "black", bg.color = "white")+
   annotate("text", label = "Atlantic\nOcean", x = -80.12, y = 27.25, # UPDATE AS NEEDED
            fontface = "italic", size = 5, family = "Arial")+
   basetheme +
    theme(panel.background = element_rect(fill = "#CCFFFF"))+
-  coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.05, st_bbox(Site_area)["xmax"]+0.05),
-           ylim = c(st_bbox(Site_area)["ymin"]-0.025, st_bbox(Site_area)["ymax"]+0.025)))
+  coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.055, st_bbox(Site_area)["xmax"]+0.095), #0.05, 0.05 -- 0.055, 0.095
+           ylim = c(st_bbox(Site_area)["ymin"]-0.045, st_bbox(Site_area)["ymax"]+0.045))) #0.025, 0.025 -- 0.045, 0.045
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_area_map.png"),
