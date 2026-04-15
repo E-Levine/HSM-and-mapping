@@ -1,9 +1,10 @@
 ##HSM ground truthing data summary
 #
 if (!require("pacman")) {install.packages("pacman")}
-pacman::p_load(plyr, tidyverse, readxl, openxlsx,
-               pROC, extrafont,
+pacman::p_load(plyr, tidyverse, readxl, openxlsx, writexl,
+               pROC, extrafont, classInt, BAMMtools, #Jenks
                sf, install = TRUE)
+#
 #
 # Setup ----
 # Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
@@ -11,6 +12,9 @@ Site_Code <- c("SL") #two-letter site code
 Version <- c("v1") #Model version
 SurveyYYMM <- c("2305") #SS-2401
 FileType <- c("data") #data or shapefile
+#
+HSMfunc <- new.env()
+source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #
 # 
@@ -61,6 +65,216 @@ FacetTheme <- theme(strip.text.y = element_text(face = "bold", size = 12),
                     panel.spacing = unit(0.75, "lines"),
                     strip.text.x = element_text(face = "bold", size = 12))
 
+#
+#
+#
+#
+# Load original model for comparisons ----
+#
+###Load shape file with model data: 
+model_file_name <- "HSM_model"
+model_scores_date <- c("2026-03-04") #SS c("2026-02-05")##SL 
+# Also loads files for scoring
+shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
+shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
+                        pattern = shp_pattern,
+                        full.names = TRUE
+)
+HSMmodel <- shp_files %>%
+  map(st_read, quiet = TRUE) %>%
+  bind_rows()
+
+HSM_scores_t <- read_csv(paste0(Site_Code,"_", Version, "/Output/Data files/", Site_Code,"_", Version, "_model_scores_", model_scores_date, ".csv"))
+HSM_scores <- left_join(HSMmodel, 
+                        HSM_scores_t)
+#
+head(HSM_scores)
+#
+#
+#
+#
+#
+# Comparison to other models ----
+#
+#
+## Flow as exclusionary when 0:
+HSM_data_flow <- HSM_scores %>% 
+  st_drop_geometry() %>% 
+  {
+    av_data <- dplyr::select(., ends_with("AV") & !matches("^FAV$"))
+    
+    # Keep only AV columns with at least one real (non-NA/NaN) value
+    valid_av <- av_data[, colSums(!is.na(av_data)) > 0, drop = FALSE]
+    
+    CurveCO_val <- ncol(valid_av)
+    
+    mutate(.,
+           HSM_f = case_when(
+             ChnlTO == 1 & FAV == 0 ~ 0,  # HSM = 0 when Flow is 0
+             ChnlTO == 1 ~ (rowSums(valid_av, na.rm = TRUE) / CurveCO_val) * FAV,
+             ChnlTO == 0 ~ 0, 
+             TRUE ~ NA_real_
+           )) %>%
+      mutate(HSMround_f = round(HSM_f, 2))
+  }
+#
+# Define the breaks for grouping (0 to 1 by 0.1)
+breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
+#
+# Determine natural Jenks breaks (thirds)
+set.seed(54321)
+vals_f <- sample(HSM_data_flow$HSM_f, min(20000, length(HSM_data_flow$HSM_f))) #Sample then calculate breaks
+jenks_breaks_f <- classInt::classIntervals(vals_f, n = 4, style = "jenks")$brks#getJenksBreaks(var = HSM_data$HSM, k = 4)
+#
+# Clean breaks then make sure they cover full data range:
+jenks_breaks_f <- sort(unique(
+  signif(jenks_breaks_f, 6)
+))
+jenks_breaks_f[c(1, length(jenks_breaks_f))] <-
+  range(HSM_data_flow$HSM_f, na.rm = TRUE)
+#
+# Assign groups using cut()
+HSM_data_grps_f <- HSM_data_flow %>%
+  mutate(
+    # HSM 0.1 groups
+    HSMgrp_f = case_when(
+      HSMround_f < 0.1 & HSMround_f >= 0 ~ "[0,0.1)",
+      HSMround_f < 0.2 & HSMround_f >= 0.1 ~ "[0.1,0.2)",
+      HSMround_f < 0.3 & HSMround_f >= 0.2 ~ "[0.2,0.3)",
+      HSMround_f < 0.4 & HSMround_f >= 0.3 ~ "[0.3,0.4)",
+      HSMround_f < 0.5 & HSMround_f >= 0.4 ~ "[0.4,0.5)",
+      HSMround_f < 0.6 & HSMround_f >= 0.5 ~ "[0.5,0.6)",
+      HSMround_f < 0.7 & HSMround_f >= 0.6 ~ "[0.6,0.7)",
+      HSMround_f < 0.8 & HSMround_f >= 0.7 ~ "[0.7,0.8)",
+      HSMround_f < 0.9 & HSMround_f >= 0.8 ~ "[0.8,0.9)",
+      TRUE           ~ "[0.9,1]"
+    ),
+    # Aggregated bins
+    HSMgyr_f = case_when(
+      HSMgrp_f == "0" ~ "0",
+      HSMround_f < 0.4 ~ "Low",
+      HSMround_f < 0.6 ~ "Moderate",
+      TRUE           ~ "High"
+    ),
+    # Jenks breaks
+    HSMjb_f = cut(HSM_f,
+                  breaks = jenks_breaks_f,
+                  include.lowest = TRUE,
+                  labels = c("Low", "Medium", "High")),
+    # Quantiles
+    HSM_q4_f = factor(
+      ntile(HSM_f, 4),
+      levels = 1:4,
+      labels = c("Least", "Low", "Moderate", "Most"))
+  ) %>%
+  #Make sure grp is factors
+  mutate(
+    HSMgrp_f = factor(
+      HSMgrp_f,
+      levels = c(
+        "[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
+        "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)",
+        "[0.8,0.9)", "[0.9,1]"
+      )
+    ),
+    HSMgyr_f = factor(
+      HSMgyr_f,
+      levels = c("0", "Low", "Moderate", "High")
+    ),
+    HSMjb_f = factor(
+      HSMjb_f,
+      levels = c("Low", "Medium", "High")
+    )
+  )
+#
+head(HSM_data_grps_f)
+#
+## Model summary:
+#
+HSM_data_grps_f %>% 
+  #mutate(HSM_r = round(HSMround, 1)) %>%
+  group_by(HSMgrp_f) %>%
+  summarise(n())
+
+ggplot(HSM_data_grps_f, aes(x = HSMgrp_f)) +
+  geom_histogram(stat = "count", fill = "gray50", color = "black") +
+  labs(
+    title = "HSM scores",
+    x = "Suitability score",
+    y = "Count"
+  ) +
+  base_theme + 
+  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
+  scale_x_discrete(expand = c(0.005,0))+
+  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
+  plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20))
+#
+#
+## Compare model distributions
+#
+models_df <- data.frame(
+  value = c(HSM_data_grps_f$HSM, HSM_data_grps_f$HSM_f),
+  Model = rep(c("Flow+","Flow*"),
+              each = nrow(HSM_data_grps_f))
+)
+# 
+(p1 <- ggplot(models_df, aes(value, linetype = Model)) +
+  geom_density(linewidth = 1) +
+  scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
+  scale_y_continuous("Density", limits = c(0, 10), expand = c(0,0))+
+  base_theme + plot_theme)
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_flow_comparison.png"),
+  plot = p1,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+## Compare ranking agreement
+cor(HSM_data_grps_f$HSM,
+    HSM_data_grps_f$HSM_f,
+    method = "spearman")
+#0.8907633 - round; 0.8887132 - raw
+(p2 <- ggplot(HSM_data_grps_f,
+       aes(HSM, HSM_f)) +
+  geom_point() +
+  geom_abline(linetype = "dashed") +
+  scale_x_continuous("Flow+", limits = c(0,1), expand = c(0,0))+
+  scale_y_continuous("Flow*", limits = c(0,1), expand = c(0,0))+
+  base_theme + theme(plot.margin = unit(c(0.25, 0.2, 0.1, 0.1), "cm"), 
+                     panel.border = element_rect(color = NA)))
+# Additive scores higher than flow*
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_flow_agreement.png"),
+  plot = p2,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+#
+HSM_data_grps_f$diff <- HSM_data_grps_f$HSM_f - HSM_data_grps_f$HSM
+HSM_scores2 <- left_join(HSM_scores, HSM_data_grps_f)
+(p3 <- ggplot()+
+  geom_sf(data = HSM_scores2, aes(color = diff)) +
+  base_theme+
+  scale_color_viridis_c(limits = c(0,min(HSM_scores2$diff)))+
+  labs(color = "Model difference"))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_flow_difference.png"),
+  plot = p3,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#ggplot(HSM_data_grps_f, aes(Long_DD_X, Lat_DD_Y, color = diff)) + geom_point()+ coord_fixed()
+#
 #
 #
 #
