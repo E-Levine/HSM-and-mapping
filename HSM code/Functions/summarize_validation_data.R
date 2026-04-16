@@ -3,6 +3,7 @@
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, readxl, openxlsx, writexl,
                pROC, extrafont, classInt, BAMMtools, #Jenks
+               ecospat, ggeffects, #Boyce, response curve
                sf, install = TRUE)
 #
 #
@@ -86,7 +87,16 @@ HSMmodel <- shp_files %>%
 
 HSM_scores_t <- read_csv(paste0(Site_Code,"_", Version, "/Output/Data files/", Site_Code,"_", Version, "_model_scores_", model_scores_date, ".csv"))
 HSM_scores <- left_join(HSMmodel, 
-                        HSM_scores_t)
+                        HSM_scores_t) %>%
+  mutate(
+    HSMgrp = factor(
+      HSMgrp,
+      levels = c(
+        "[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
+        "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)",
+        "[0.8,0.9)", "[0.9,1]"
+      )
+    ))
 #
 head(HSM_scores)
 #
@@ -881,7 +891,16 @@ HSMmodel <- shp_files %>%
   bind_rows()
 #
 points_sf <- st_transform(points_sf, st_crs(HSMmodel))
-HSM_ground <- st_join(points_sf, HSMmodel)
+HSM_ground <- st_join(points_sf, HSMmodel) %>%
+  mutate(
+    HSMgrp = factor(
+      HSMgrp,
+      levels = c(
+        "[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
+        "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)",
+        "[0.8,0.9)", "[0.9,1]"
+      )
+    ))
 #
 ggplot()+
   geom_sf(data = points_sf, aes(color = NumLive))
@@ -918,7 +937,7 @@ clean_survey_data <- function(surveyData){
     # Rename columns for consistency 
     rename_with(~ sub(".*NumLive.*", "NumLive", .x), matches("NumLive")) %>%
     rename_with(~ sub(".*DeadRatio.*", "DeadRatio", .x), matches("DeadRatio")) %>%
-    mutate(HSMgrp = factor(HSMgrp, levels = expected_levels, ordered = TRUE)) %>%
+    mutate(across(starts_with("HSMgrp"), ~ factor(.x, levels = expected_levels, ordered = TRUE))) %>%
     # Replace 0 with NA when proper
     mutate(DeadRatio = as.numeric(DeadRatio),
            SpatAdult = as.numeric(SpatAdult),
@@ -956,15 +975,20 @@ clean_survey_data <- function(surveyData){
 }
 #
 # Add all model data: 
-
+(HSM_ground <- left_join(HSM_ground,
+                         HSM_data_grps_f %>% dplyr::select(PGID:Long_DD_X, HSM_f, HSMround_f, HSMgrp_f)) %>%
+    left_join(HSM_data_grps_s %>% dplyr::select(PGID:Long_DD_X, HSM_s, HSMround_s, HSMgrp_s)) %>%
+    left_join(HSM_data_grps_fs %>% dplyr::select(PGID:Long_DD_X, HSM_fs, HSMround_fs, HSMgrp_fs)))
+  
 #
 validation_data <- clean_survey_data(HSM_ground)
 head(validation_data)
-val_df <- validation_data %>%
+(val_df1 <- validation_data %>%
   group_by(HSMgrp) %>%
   mutate(Live_scale = scale(sqrt(NumLive+0.5))[,1]) %>%
-  ungroup()
+  ungroup())
 #
+# Function to summarize (mean/sd, min, max) GT data by raw HSM values. Updated to calculate for each HSM* column:
 summarize_data <- function(cleanedData){
   
   # checks
@@ -972,8 +996,11 @@ summarize_data <- function(cleanedData){
     stop("Input 'cleanedData' must be a data frame or tibble.")
   }
   
-  if (!any(grepl("HSMgrp", names(cleanedData)))) {
-    stop("No column containing 'HSMgrp' found in cleanedData")
+  # find ALL HSM grp columns
+  hsm_cols <- grep("^HSMgrp", names(cleanedData), value = TRUE)
+  
+  if (length(hsm_cols) == 0) {
+    stop("No grouped 'HSM' columns found in cleanedData")
   }
   
   required_cols <- c("NumLive", "DeadRatio", "SpatAdult", grep("Presence", names(cleanedData), value = TRUE))
@@ -993,17 +1020,25 @@ summarize_data <- function(cleanedData){
   expected_levels <- c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
   
   # Check if all expected levels are present
-  actual_levels <- unique(na.omit(cleanedData$HSMgrp))
-  missing_levels <- setdiff(expected_levels, actual_levels)
+  #actual_levels <- unique(na.omit(cleanedData$HSMgrp))
+  #missing_levels <- setdiff(expected_levels, actual_levels)
   
-  if (length(missing_levels) > 0) {
-    warning(paste("Expected HSMgrp levels missing:", paste(missing_levels, collapse = ", "), ". Proceeding with available levels."))
-  }
+  #if (length(missing_levels) > 0) {
+  #  warning(paste("Expected HSMgrp levels missing:", paste(missing_levels, collapse = ", "), ". Proceeding with available levels."))
+  #}
   
+  # reshape to long format across HSMgrp variants
   summarized_data <- suppressWarnings(
     cleanedData %>%
-      mutate(HSMgrp = factor(HSMgrp, levels = expected_levels, ordered = TRUE)) %>%
-      group_by(HSMgrp) %>%
+      tidyr::pivot_longer(
+        cols = all_of(hsm_cols),
+        names_to = "HSM_type",
+        values_to = "HSMgrp"
+      ) %>%
+      mutate(
+        HSMgrp = factor(HSMgrp, levels = expected_levels, ordered = TRUE)
+      ) %>%
+      group_by(HSM_type, HSMgrp) %>%
       summarise(
         across(
           all_of(required_cols),
@@ -1018,13 +1053,13 @@ summarize_data <- function(cleanedData){
         ),
         .groups = "drop"
       ) %>%
-      pivot_longer(
-        cols = -HSMgrp,
+      tidyr::pivot_longer(
+        cols = -c(HSM_type, HSMgrp),
         names_to = c("variable", "stat"),
         names_sep = "_",
         values_to = "value"
       ) %>%
-      pivot_wider(names_from = stat, values_from = value) %>%
+      tidyr::pivot_wider(names_from = stat, values_from = value) %>%
       mutate(
         min = ifelse(is.infinite(min), NA_real_, min),
         max = ifelse(is.infinite(max), NA_real_, max)
@@ -1041,10 +1076,6 @@ nrow(HSMmodel %>% drop_na(HSM))
 (nrow(HSM_ground %>% drop_na(HSM))/nrow(HSMmodel %>% drop_na(HSM)))*100
 #
 HSM_ground2 <- HSM_ground %>%
-  mutate(HSMgrp = factor(HSMgrp,
-                         levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", 
-                                    "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
-                         )) %>%
   drop_na(HSMgrp)
 #
 (p0 <- ggplot() +
@@ -1084,20 +1115,20 @@ left_join(HSM_ground2,
 #
 # Original model:
 set.seed(5432)
-model <- glm(Presence ~ round(HSMround,1), data = validation_data, family = binomial)
-summary(model)
-anova(model, test = "Chisq")
+model1 <- glm(Presence ~ round(HSMround,1), data = validation_data, family = binomial)
+summary(model1)
+anova(model1, test = "Chisq")
 #Likely due to small sample size, HSM range too narrow for true validation
 # ROC (Receiver Operating Characteristic) curve shows the trade off between true positive rate and false postie rate
-roc_obj <- pROC::roc(validation_data$Presence, fitted(model)) #model$y
-(auc_val <- auc(roc_obj))
-plot(roc_obj)
-roc_df <- data.frame(
-  specificity = roc_obj$specificities,
-  sensitivity = roc_obj$sensitivities
+roc_obj1 <- pROC::roc(validation_data$Presence, fitted(model1)) #model$y
+(auc_val1 <- auc(roc_obj1))
+plot(roc_obj1)
+roc_df1 <- data.frame(
+  specificity = roc_obj1$specificities,
+  sensitivity = roc_obj1$sensitivities
 )
-roc_df$FPR <- 1 - roc_df$specificity
-(p1 <- ggplot(roc_df, aes(x = FPR, y = sensitivity)) +
+roc_df1$FPR <- 1 - roc_df1$specificity
+(p1_1 <- ggplot(roc_df1, aes(x = FPR, y = sensitivity)) +
   geom_line(linewidth = 1) +
   geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
   labs(
@@ -1111,7 +1142,7 @@ roc_df$FPR <- 1 - roc_df$specificity
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_ROC.png"),
-  plot = p1,
+  plot = p1_1,
   width = 9,
   height = 5,
   units = "in",
@@ -1120,60 +1151,25 @@ ggsave(
 #AUC = probability that a randomly chosen presence site has a higher predicted suitability than a randomly chosen absence site.
 #0..5 = random, 0.6-0.7 = poor, 0.7-0.8 acceptable, 0.8-0.9 good, 0.9-1 excellent
 #EXAMPLE: Presence probability increased significantly with HSM suitability class (logistic regression, p < 0.01). Model discrimination was acceptable (AUC = 0.76), indicating that sites with higher HSM scores were more likely to contain oysters.
-(presence_summary <- validation_data %>%
-    drop_na(HSMgrp) %>%
-  group_by(HSMgrp) %>%
-  summarize(
-    n = n(),
-    pres = sum(Presence),
-    presence_rate = mean(Presence)
-  ) %>% 
-    mutate(
-      se = sqrt((presence_rate * (1 - presence_rate)) / n),
-      lower = presence_rate - 1.96 * se,
-      upper = presence_rate + 1.96 * se
-    ))
-#
-(p2 <- ggplot(presence_summary, aes(x = HSMgrp, y = presence_rate)) +
-  geom_point(size = 5) +
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, linewidth = 0.7) +
-  labs(
-    x = "Habitat suitability class",
-    y = "Observed presence probability"
-  ) +
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1.05)) +
-  base_theme +
-    plot_theme)
-#
-ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSM_presence.png"),
-  plot = p2,
-  width = 9,
-  height = 5,
-  units = "in",
-  dpi = 300 # Use 300 dpi for high quality
-)
 #
 #
 #
 # Flow* model:
-validation_data2 <- left_join(validation_data, 
-                              st_drop_geometry(HSM_scores2) %>% dplyr::select(PGID, HSM_f, HSMround_f, HSMgrp_f))
 set.seed(5432)
-model_f2 <- glm(Presence ~ round(HSMround_f,1), data = validation_data2, family = binomial)
-summary(model_f2)
-anova(model_f2, test = "Chisq")
+model2 <- glm(Presence ~ round(HSMround_f,1), data = validation_data, family = binomial)
+summary(model2)
+anova(model2, test = "Chisq")
 #Likely due to small sample size, HSM range too narrow for true validation
 # ROC (Receiver Operating Characteristic) curve shows the trade off between true positive rate and false postie rate
-roc_obj_f2 <- pROC::roc(validation_data2$Presence, fitted(model_f2)) #model$y
-(auc_val_f2 <- auc(roc_obj_f2))
-plot(roc_obj_f2)
-roc_df_f2 <- data.frame(
-  specificity = roc_obj_f2$specificities,
-  sensitivity = roc_obj_f2$sensitivities
+roc_obj2 <- pROC::roc(validation_data$Presence, fitted(model2)) #model$y
+(auc_val2 <- auc(roc_obj2))
+plot(roc_obj2)
+roc_df2 <- data.frame(
+  specificity = roc_obj2$specificities,
+  sensitivity = roc_obj2$sensitivities
 )
-roc_df_f2$FPR <- 1 - roc_df_f2$specificity
-(p1f <- ggplot(roc_df_f2, aes(x = FPR, y = sensitivity)) +
+roc_df2$FPR <- 1 - roc_df2$specificity
+(p1_2 <- ggplot(roc_df2, aes(x = FPR, y = sensitivity)) +
     geom_line(linewidth = 1) +
     geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
     labs(
@@ -1186,8 +1182,8 @@ roc_df_f2$FPR <- 1 - roc_df_f2$specificity
     plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_ROC_flow2.png"),
-  plot = p1f,
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_flow2.png"),
+  plot = p1_2,
   width = 9,
   height = 5,
   units = "in",
@@ -1195,10 +1191,130 @@ ggsave(
 )
 #AUC = probability that a randomly chosen presence site has a higher predicted suitability than a randomly chosen absence site.
 #0..5 = random, 0.6-0.7 = poor, 0.7-0.8 acceptable, 0.8-0.9 good, 0.9-1 excellent
-#EXAMPLE: Presence probability increased significantly with HSM suitability class (logistic regression, p < 0.01). Model discrimination was acceptable (AUC = 0.76), indicating that sites with higher HSM scores were more likely to contain oysters.
-(presence_summary_f2 <- validation_data2 %>%
-    drop_na(HSMgrp_f) %>%
-    group_by(HSMgrp_f) %>%
+#
+#
+#
+# Salinity* model:
+set.seed(5432)
+model3 <- glm(Presence ~ round(HSMround_s,1), data = validation_data, family = binomial)
+summary(model3)
+anova(model3, test = "Chisq")
+#Likely due to small sample size, HSM range too narrow for true validation
+# ROC (Receiver Operating Characteristic) curve shows the trade off between true positive rate and false postie rate
+roc_obj3 <- pROC::roc(validation_data$Presence, fitted(model3)) #model$y
+(auc_val3 <- auc(roc_obj3))
+plot(roc_obj3)
+roc_df3 <- data.frame(
+  specificity = roc_obj3$specificities,
+  sensitivity = roc_obj3$sensitivities
+)
+roc_df3$FPR <- 1 - roc_df3$specificity
+(p1_3 <- ggplot(roc_df3, aes(x = FPR, y = sensitivity)) +
+    geom_line(linewidth = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    labs(
+      x = "Specificity",#"False Positive Rate",
+      y = "Sensitivity",#"True Positive Rate",
+    ) +
+    scale_x_continuous(expand = c(0,0.025))+
+    scale_y_continuous(expand = c(0,0.005))+
+    base_theme +
+    plot_theme)
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_sal3.png"),
+  plot = p1_3,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#AUC = probability that a randomly chosen presence site has a higher predicted suitability than a randomly chosen absence site.
+#0..5 = random, 0.6-0.7 = poor, 0.7-0.8 acceptable, 0.8-0.9 good, 0.9-1 excellent
+#
+#
+#
+# Flow&Salinity* model:
+set.seed(5432)
+model4 <- glm(Presence ~ round(HSMround_fs,1), data = validation_data, family = binomial)
+summary(model4)
+anova(model4, test = "Chisq")
+#Likely due to small sample size, HSM range too narrow for true validation
+# ROC (Receiver Operating Characteristic) curve shows the trade off between true positive rate and false postie rate
+roc_obj4 <- pROC::roc(validation_data$Presence, fitted(model4)) #model$y
+(auc_val4 <- auc(roc_obj4))
+plot(roc_obj4)
+roc_df4 <- data.frame(
+  specificity = roc_obj4$specificities,
+  sensitivity = roc_obj4$sensitivities
+)
+roc_df4$FPR <- 1 - roc_df4$specificity
+(p1_4 <- ggplot(roc_df4, aes(x = FPR, y = sensitivity)) +
+    geom_line(linewidth = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    labs(
+      x = "Specificity",#"False Positive Rate",
+      y = "Sensitivity",#"True Positive Rate",
+    ) +
+    scale_x_continuous(expand = c(0,0.025))+
+    scale_y_continuous(expand = c(0,0.005))+
+    base_theme +
+    plot_theme)
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_fs4.png"),
+  plot = p1_4,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#AUC = probability that a randomly chosen presence site has a higher predicted suitability than a randomly chosen absence site.
+#0..5 = random, 0.6-0.7 = poor, 0.7-0.8 acceptable, 0.8-0.9 good, 0.9-1 excellent
+#
+#
+#
+# Model Comparison ----
+#
+# Distributions:
+## Compare model distributions
+#
+models_dists <- data.frame(
+  value = c(HSM_data_grps_f$HSM, HSM_data_grps_f$HSM_f, HSM_data_grps_s$HSM_s, HSM_data_grps_fs$HSM_fs),
+  Model = rep(c("Original", "Flow*", "Salinity*","Flow* Salinity*"),
+              each = nrow(HSM_data_grps_f))) %>%
+    mutate(Model = factor(Model, levels = c("Original", "Flow*", "Salinity*","Flow* Salinity*")))
+# 
+(p1_d <- ggplot(models_dists, aes(value)) +
+    geom_density(linewidth = 1) +
+    #scale_linetype_manual(values = c("solid", "longdash", "dotted", "dotdash"))+
+    facet_wrap(.~Model, nrow = 2, ncol = 2)+
+    scale_x_continuous("Habitat suitability score", limits = c(0,1), expand = c(0,0)) + 
+    scale_y_continuous("Density", limits = c(0, 10), expand = c(0,0))+
+    base_theme + FacetTheme +
+    theme(legend.position = "none",
+          panel.border = element_rect(color = "black"),
+          panel.spacing.x = unit(2.25, "lines"),
+          plot.margin = unit(c(0.2, 0.5, 0.1, 0.1), "cm")))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_distributions.png"),
+  plot = p1_d,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+# By presence/HSMgrp:
+(presence_summary <- validation_data %>%
+    drop_na(HSMgrp) %>%
+    tidyr::pivot_longer(
+      cols = all_of(grep("^HSMgrp", names(validation_data), value = TRUE)),
+      names_to = "HSM_type",
+      values_to = "HSMgrp"
+    ) %>%
+    group_by(HSM_type, HSMgrp) %>%
     summarize(
       n = n(),
       pres = sum(Presence),
@@ -1209,26 +1325,163 @@ ggsave(
       lower = presence_rate - 1.96 * se,
       upper = presence_rate + 1.96 * se
     ))
-#
-(p2f <- ggplot(presence_summary_f2, aes(x = HSMgrp_f, y = presence_rate)) +
+presence_summary$HSM_type <- factor(
+  presence_summary$HSM_type,
+  levels = c("HSMgrp", "HSMgrp_f", "HSMgrp_s", "HSMgrp_fs")  # <-- desired order
+)
+# Compile and use once
+(p2 <- ggplot(presence_summary, 
+              aes(x = HSMgrp, y = presence_rate)) +
     geom_point(size = 5) +
     geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, linewidth = 0.7) +
+    facet_wrap(.~HSM_type, nrow = 2, ncol = 2,
+               labeller = labeller(HSM_type = c("HSMgrp" = "Original",
+                                                "HSMgrp_f" = "Flow*",
+                                                "HSMgrp_s" = "Salinity*",
+                                                "HSMgrp_fs" = "Flow* Salinity*")))+
     labs(
       x = "Habitat suitability class",
       y = "Observed presence probability"
     ) +
-    scale_y_continuous(expand = c(0,0), limits = c(0, 1.25)) +
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1.2), breaks = seq(0, 1.2, by = 0.3)) +
     base_theme +
-    plot_theme)
+    plot_theme + FacetTheme+
+    theme(panel.border = element_rect(color = "black"),
+          axis.text.x = element_text(angle = 45, hjust = 0.8),
+          panel.spacing.x = unit(1.5, "lines")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSM_presence_flow2.png"),
-  plot = p2f,
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_HSM_presence_by_model.png"),
+  plot = p2,
   width = 9,
   height = 5,
   units = "in",
   dpi = 300 # Use 300 dpi for high quality
 )
+#
+#
+# Combined ROC plot
+all_roc <- rbind(
+  roc_df1 %>% mutate(Model = "Original"),
+  roc_df2 %>% mutate(Model = "Flow*")) %>%
+  rbind(roc_df3 %>% mutate(Model = "Salinity*")) %>%
+  rbind(roc_df4 %>% mutate(Model = "Flow* Salinity*")) %>%
+  mutate(Model = factor(Model, levels = c("Original", "Flow*", "Salinity*", "Flow* Salinity*")))
+#
+(p3r <- ggplot(all_roc, aes(x = FPR, y = sensitivity)) +
+    geom_line(linewidth = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    facet_wrap(.~Model, nrow = 2, ncol = 2)+
+    labs(
+      x = "Specificity",#"False Positive Rate",
+      y = "Sensitivity",#"True Positive Rate",
+    ) +
+    scale_x_continuous(expand = c(0,0.025))+
+    scale_y_continuous(expand = c(0,0.005))+
+    base_theme +
+    plot_theme + FacetTheme +
+    theme(panel.border = element_rect(color = "black"),
+          plot.margin = unit(c(0.2, 0.25, 0.1, 0.1), "cm"),
+          panel.spacing.x = unit(1.5, "lines")))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_all.png"),
+  plot = p3r,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+#
+# Boyce Index - on raw data
+m1_Boyce <- ecospat.boyce(
+  fit = validation_data$HSM,
+  obs = validation_data$HSM[validation_data$Presence == 1]
+) 
+m1_Boyce$cor
+m2_Boyce <- ecospat.boyce(
+  fit = validation_data$HSM_f,
+  obs = validation_data$HSM_f[validation_data$Presence == 1]
+)
+m2_Boyce$cor
+m3_Boyce <- ecospat.boyce(
+  fit = validation_data$HSM_s,
+  obs = validation_data$HSM_s[validation_data$Presence == 1]
+)
+m3_Boyce$cor
+m4_Boyce <- ecospat.boyce(
+  fit = validation_data$HSM_fs,
+  obs = validation_data$HSM_fs[validation_data$Presence == 1]
+)
+m4_Boyce$cor
+boyce_df <- data.frame(
+  Model = c("Original", "Flow*", "Salinity*", "Flow* Salinity*"),
+  Boyce = c(m1_Boyce$cor, m2_Boyce$cor, m3_Boyce$cor, m4_Boyce$cor)
+) %>%
+  mutate(Model = factor(Model, levels = c("Original", "Flow*", "Salinity*", "Flow* Salinity*")))
+#
+(p4b <- ggplot(boyce_df, aes(x = Model, y = Boyce)) +
+    geom_col() +
+    geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(
+      x = "Model",
+      y = "Boyce Index",
+    ) +
+    scale_x_discrete(expand = c(0,0.025))+
+    scale_y_continuous(expand = c(0,0), limits = c(0, 0.75), breaks = seq(0, 0.75, 0.25))+    
+    base_theme + 
+    theme(plot.margin = unit(c(0.2, 0.25, 0.1, 0.1), "cm")))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_Boyce.png"),
+  plot = p4b,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+# Response curve
+(pred_all <- bind_rows(
+  ggpredict(model1, terms = "HSMround") %>% mutate(Model = "Original"),
+  ggpredict(model2, terms = "HSMround_f") %>% mutate(Model = "Flow*"),
+  ggpredict(model3, terms = "HSMround_s") %>% mutate(Model = "Salinity*"),
+  ggpredict(model4, terms = "HSMround_fs") %>% mutate(Model = "Flow* Salinity*")
+) %>% as.data.frame() %>% drop_na() %>%
+    mutate(Model = factor(Model, levels = c("Original", "Flow*", "Salinity*", "Flow* Salinity*"))))
+#
+(p5r <- ggplot(pred_all, aes(x = x, y = predicted, linetype = Model)) +
+    geom_line(linewidth = 1.5) +
+    geom_ribbon(data = pred_all, aes(x, ymin = conf.low, ymax = conf.high), fill = "#666666", alpha = 0.3)+
+    #geom_hline(yintercept = 0, linetype = "dashed") +
+    labs(
+      x = "Habitat suitabilty score",
+      y = "Predicted probabillity",
+    ) +
+    facet_wrap(.~Model)+
+    scale_linetype_manual(values = c("solid", "longdash", "dotted", "dotdash"))+
+    scale_x_continuous(expand = c(0,0))+
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1.00), breaks = seq(0, 1.00, 0.25))+    
+    base_theme + FacetTheme +
+    theme(legend.position =  "none", 
+          panel.border = element_rect(color = "black"),
+          plot.margin = unit(c(0.2, 0.5, 0.1, 0.1), "cm"),
+          panel.spacing.x = unit(2.25, "lines")))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_response.png"),
+  plot = p5r,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+AIC(model1, model2, model3, model4)
+#
 #
 #
 # Plotting ----
@@ -1258,7 +1511,7 @@ validation_summary %>% mutate(range = max-min) %>%
   theme_classic()+ 
   basetheme + FacetTheme
 #
-val_df %>% group_by(HSMgrp) %>%
+val_df1 %>% group_by(HSMgrp) %>%
   rstatix::get_summary_stats(Live_scale, show = c("mean", "min", "max")) %>% 
   mutate(range = max-min)  %>%
   ggplot(aes(HSMgrp, range))+
@@ -1266,4 +1519,4 @@ val_df %>% group_by(HSMgrp) %>%
   lemon::facet_rep_grid(variable~., scales = "free_y")+
   scale_y_continuous(expand = c(0,0))+
   theme_classic() + 
-  basetheme + FacetTheme
+  base_theme + FacetTheme
