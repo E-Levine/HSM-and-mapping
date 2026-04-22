@@ -1,11 +1,20 @@
-##HSM ground truthing data summary
+##HSM ground truthing data summary and model comparison
 #
+##Requires shapefile of area with data layers/scores applied
+#
+#.rs.restartR() #Restarts session (good if rerunning after working with other files)
+#graphics.off()  # turns off any plots from previous work session
+#rm(list=ls(all=TRUE)) # clears out environment 
+#
+#Load required packages (should install missing packages as necessary) - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
 pacman::p_load(plyr, tidyverse, readxl, openxlsx, writexl,
                pROC, extrafont, classInt, BAMMtools, #Jenks
                rms, ecospat, ggeffects, #ROC, Boyce, response curve
                sf, install = TRUE)
 #
+HSMfunc <- new.env()
+source("HSM code/Functions/HSM_gt_model_functions.R", local = HSMfunc)
 #
 # Setup ----
 # Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
@@ -51,7 +60,7 @@ maptheme <- theme_classic()+
   )
 #
 # for plots
-plot_theme <- theme(plot.margin = unit(c(0.25, 0.1, 0.1, 0.1), "cm"),
+plot_theme <- theme(plot.margin = unit(c(0.25, 0.45, 0.1, 0.1), "cm"),
                     panel.border = element_rect(color = NA))
 #
 legendtheme <- theme(
@@ -106,7 +115,6 @@ head(HSM_scores)
 #
 # Comparison to other models: model 2 ----
 #
-#
 ## Flow as exclusionary when 0:
 HSM_data_flow <- HSM_scores %>% 
   st_drop_geometry() %>% 
@@ -125,7 +133,8 @@ HSM_data_flow <- HSM_scores %>%
              ChnlTO == 0 ~ 0, 
              TRUE ~ NA_real_
            )) %>%
-      mutate(HSMround_f = round(HSM_f, 2))
+      mutate(HSMround_f = round(HSM_f, 2),
+             Curve_val = ncol(valid_av))
   }
 #
 # Define the breaks for grouping (0 to 1 by 0.1)
@@ -207,17 +216,17 @@ HSM_data_grps_f %>%
   summarise(n())
 
 (p1 <- ggplot(HSM_data_grps_f, aes(x = HSMgrp_f)) +
-  geom_histogram(stat = "count", fill = "gray50", color = "black") +
-  labs(
-    title = "HSM scores",
-    x = "Suitability score",
-    y = "Count"
-  ) +
-  base_theme + 
-  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
-  scale_x_discrete(expand = c(0.005,0))+
-  theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
-  plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
+    geom_histogram(stat = "count", fill = "gray50", color = "black") +
+    labs(
+      title = "HSM scores",
+      x = "Suitability score",
+      y = "Count"
+    ) +
+    base_theme + 
+    scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
+    scale_x_discrete(expand = c(0.005,0))+
+    theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
+    plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_JenksBreaks_flow2.png"),
@@ -238,11 +247,11 @@ models_df_f <- data.frame(
 )
 # 
 (p2 <- ggplot(models_df_f, aes(value, linetype = Model)) +
-  geom_density(linewidth = 1) +
-  scale_linetype_manual(values = c("dashed", "solid"))+
-  scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
-  scale_y_continuous("Density", limits = c(0, 80), expand = c(0,0))+ #Modify as needed: SL 0-10, SS 0-80
-  base_theme + plot_theme)
+    geom_density(linewidth = 1) +
+    scale_linetype_manual(values = c("dashed", "solid"))+
+    scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
+    scale_y_continuous("Density", limits = c(0, 80), expand = c(0,0))+ #Modify as needed: SL 0-10, SS 0-80
+    base_theme + plot_theme)
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_comparison.png"),
@@ -258,13 +267,13 @@ cor(HSM_data_grps_f$HSM,
     method = "spearman")
 #0.8887132 - raw SL; 0.9710259 SS
 (p3 <- ggplot(HSM_data_grps_f,
-       aes(HSM, HSM_f)) +
-  geom_point() +
-  geom_abline(linetype = "dashed") +
-  scale_x_continuous("Flow+", limits = c(0,1), expand = c(0,0))+
-  scale_y_continuous("Flow*", limits = c(0,1), expand = c(0,0))+
-  base_theme + theme(plot.margin = unit(c(0.25, 0.2, 0.1, 0.1), "cm"), 
-                     panel.border = element_rect(color = NA)))
+              aes(HSM, HSM_f)) +
+    geom_point() +
+    geom_abline(linetype = "dashed") +
+    scale_x_continuous("Flow+", limits = c(0,1), expand = c(0,0))+
+    scale_y_continuous("Flow*", limits = c(0,1), expand = c(0,0))+
+    base_theme + theme(plot.margin = unit(c(0.25, 0.2, 0.1, 0.1), "cm"), 
+                       panel.border = element_rect(color = NA)))
 # Additive scores higher than flow*
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_agreement.png"),
@@ -281,10 +290,10 @@ HSM_data_grps_f$diff <- HSM_data_grps_f$HSM_f - HSM_data_grps_f$HSM
 mean(HSM_data_grps_f$diff)
 HSM_scores2 <- left_join(HSM_scores, HSM_data_grps_f)
 (p4 <- ggplot()+
-  geom_sf(data = HSM_scores2, aes(color = diff)) +
-  base_theme+
-  scale_color_viridis_c(limits = c(0,min(HSM_scores2$diff)))+
-  labs(color = "Model difference"))
+    geom_sf(data = HSM_scores2, aes(color = diff)) +
+    base_theme+
+    scale_color_viridis_c(limits = c(0,min(HSM_scores2$diff)))+
+    labs(color = "Model difference"))
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_difference.png"),
@@ -321,7 +330,8 @@ HSM_data_sal <- HSM_scores %>%
              ChnlTO == 0 ~ 0, 
              TRUE ~ NA_real_
            )) %>%
-      mutate(HSMround_s = round(HSM_s, 2))
+      mutate(HSMround_s = round(HSM_s, 2),
+             Curve_val = ncol(valid_av))
   }
 #
 # Define the breaks for grouping (0 to 1 by 0.1)
@@ -518,7 +528,8 @@ HSM_data_fs <- HSM_scores %>%
              ChnlTO == 0 ~ 0, 
              TRUE ~ NA_real_
            )) %>%
-      mutate(HSMround_fs = round(HSM_fs, 2))
+      mutate(HSMround_fs = round(HSM_fs, 2),
+             Curve_val = ncol(valid_av))
   }
 #
 # Define the breaks for grouping (0 to 1 by 0.1)
@@ -561,9 +572,9 @@ HSM_data_grps_fs <- HSM_data_fs %>%
     ),
     # Jenks breaks
     HSMjb_fs = cut(HSM_fs,
-                  breaks = jenks_breaks_fs,
-                  include.lowest = TRUE,
-                  labels = c("Low", "Medium", "High")),
+                   breaks = jenks_breaks_fs,
+                   include.lowest = TRUE,
+                   labels = c("Low", "Medium", "High")),
     # Quantiles
     HSM_q4_fs = factor(
       ntile(HSM_fs, 4),
@@ -651,7 +662,7 @@ cor(HSM_data_grps_fs$HSM,
     method = "spearman")
 #0.9759851 - raw SL; SS 0.9912836
 (p11 <- ggplot(HSM_data_grps_fs,
-              aes(HSM, HSM_fs)) +
+               aes(HSM, HSM_fs)) +
     geom_point() +
     geom_abline(linetype = "dashed") +
     scale_x_continuous("Flow+ Salinity+", limits = c(0,1), expand = c(0,0))+
@@ -693,117 +704,14 @@ ggsave(
 #
 #
 #
-# Load shapefile data ----
-#Load validation data from matching shape files in Output/Shapefiles folder: SiteCode_Version_validation_data
-#Currently loads as sfc for potential mapping, can change to df if not mapping later
-load_survey_shpfiles <- function(SiteCode = Site_Code, VersionNumber = Version, shp_filename = "model_srvys"){
-  data_dir <- paste0(SiteCode, "_", VersionNumber, "/Output/Shapefiles/")
-  output_name <- paste0(SiteCode, "_", VersionNumber, "_validation_data")  
-  #
-  # Build match pattern:
-  pattern <- paste0("^", SiteCode, ".*", shp_filename, ".*", SurveyYYMM,"\\.shp$")
-  # List all matching shape files
-  shp_files <- list.files(path = data_dir, pattern = pattern, full.names = TRUE)
-  if (length(shp_files) == 0) {
-    stop("No shapefiles found matching the pattern.")
-  } else {
-    #Print list of files loaded:
-    message("Files loaded:\n", paste(shp_files, collapse = "\n"))
-    #
-  
-    if (length(shp_files) == 1) {
-      shape_obj <- st_read(shp_files[1])
-    } else {
-      # Read and combine all shape files
-      shape_list <- lapply(shp_files, function(file) {
-        sf_obj <- st_read(file)
-
-        # Extract Section from file name
-        base_name <- basename(file)  # e.g., "ABC123_datalayer.shp"
-        section <- str_extract(base_name,"(.*)(?=_model_srvys)")  # Remove _datalayer suffix, e.g., "ABC123"
-        sf_obj$Section <- section  # Add Section column
-        return(sf_obj)
-      })
-      shape_obj <- do.call(rbind, shape_list)  
-    }
-  }
-  #Check for and remove duplicate rows (created during split)
-  # Install and load necessary packages
-  if (!require(data.table)) install.packages("data.table")
-  library(data.table)
-  # Convert to data.table (handles both sf and data.frame)
-  if (inherits(shape_obj, "sf")) {
-    object_type <- "sf"
-    geometry_col <- attr(shape_obj, "sf_column")
-    setDT(shape_obj)  # Converts sf to data.table in place
-  } else if (!is.data.table(shape_obj)) {
-    object_type <- "not_sf"
-    setDT(shape_obj)  # Convert standard data.frame to data.table
-    geometry_col <- NULL
-  }
-  #Get column names
-  group_by_cols <- setdiff(names(shape_obj), c("Section", geometry_col))
-  # Perform grouping by "PGID" and remove duplicates
-  result <- shape_obj[, .SD[1], by = group_by_cols]
-  # If it was an sf object, convert back to sf to preserve geometry
-  if (object_type == "sf") {
-    setDF(result)  # Convert back to data.frame (if needed)
-    result_sf <- st_as_sf(result)  # Re-attach sf class
-    result <- result_sf  # Update result to the sf object
-  }
-  #Clean up memory
-  rm(shape_obj)  # Remove original object
-  gc()    # Run garbage collection, especially for large data
-  #assign shp to object
-  assign(output_name, result, envir = .GlobalEnv)
-}
+# Load and clean data ----
 #
+#Load validation data
 load_survey_shpfiles()
 str(SS_v1_validation_data)
 #
 #
-# Load data file and combine with model ----
-#
-load_survey_data <- function(Site_Code, Version, SurveyYYMM, FileType = "data") {
-  
-  library(readxl)
-  # Create file path:
-  file_path <- file.path(
-    paste0(Site_Code, "_", Version),
-    "Data",
-    paste0(Site_Code, "_groundtruthing_", SurveyYYMM, ".xlsx")
-  )
-  
-  Srvy_quad <- NULL
-  Srvy_LL <- NULL
-  # Check for file:
-  if (!file.exists(file_path)) {
-    warning(paste("File not found:", file_path))
-    return(list(Srvy_quad = NULL, Srvy_LL = NULL))
-  }
-  
-  sheets <- excel_sheets(file_path)
-  
-  # Load Quadrat sheet:
-  if ("Quadrat" %in% sheets) {
-    Srvy_quad <- read_excel(file_path, sheet = "Quadrat", .name_repair = "universal")
-  } else {
-    warning("'Quadrat' sheet not found in file.")
-  }
-  
-  # Load SampleEvent sheet:
-  if ("SampleEvent" %in% sheets) {
-    Srvy_LL <- read_excel(file_path, sheet = "SampleEvent", .name_repair = "universal")
-  } else {
-    warning("'SampleEvent' sheet not found in file.")
-  }
-  
-  return(list(
-    Srvy_quad = Srvy_quad,
-    Srvy_LL = Srvy_LL
-  ))
-}
-#
+# Load data file and combine with model
 survey_data <- load_survey_data(Site_Code, Version, SurveyYYMM, FileType)
 Srvy_LL <- survey_data$Srvy_LL %>%
   # Filter to only most recent survey if repeated surveys (can only use LL since CR lab has different IDs for same location)
@@ -814,69 +722,8 @@ Srvy_quad <- survey_data$Srvy_quad %>%
   filter(SampleEventID %in% Srvy_LL$SampleEventID) %>%
   mutate(Date = as.Date(substr(SampleEventID, 8, 15), format = "%Y%m%d"))
 #
-# Combines LL with count data, calculates DeadRatio, summarizes by station
+# Clean data: Combines LL with count data, calculates DeadRatio, summarizes by station
 # Requires a Date column in either the quad or LL df.
-clean_database_file <- function(Srvy_quad, Srvy_LL) {
-  
-  library(dplyr)
-  
-  # Add Latitude / Longitude to quadrat data
-  Srvy_quad2 <- Srvy_quad %>%
-    left_join(
-      Srvy_LL %>%
-        dplyr::select(
-          SampleEventID,
-          Latitude = LatitudeDec,
-          Longitude = LongitudeDec
-        ),
-      by = "SampleEventID"
-    ) %>%
-    mutate(across(c(Latitude, Longitude, TotalVolume, TotalWeight, NumDrills, NumLive, NumDead), as.numeric)) %>%
-    mutate(Station = substr(SampleEventID, 19, 22),
-           DeadRatio = as.numeric(NumDead/(NumLive+NumDead)))
-  
-  # Make sure data is valid and Longitudes are correct:
-  Srvy_quad3 <- Srvy_quad2 %>%
-    mutate(NumLive = case_when(QuadratNumber == 0 ~ 0, TRUE ~ NumLive),
-           NumDead = case_when(QuadratNumber == 0 ~ 0, TRUE ~ NumDead)) %>%
-    mutate(Longitude = as.numeric(ifelse(Longitude > 0, Longitude*-1, Longitude)))
-  
-  # Columns that must exist
-  req_cols <- c("Spat", "Adult", "Legal", "SpatAdult")
-  
-  # Create missing columns
-  for (col in req_cols) {
-    if (!col %in% names(Srvy_quad3)) {
-      if (col == "SpatAdult" && "NumLive" %in% names(Srvy_quad3)) {
-        Srvy_quad3[[col]] <- Srvy_quad3$NumLive
-      } else {
-        Srvy_quad3[[col]] <- NA
-      }
-    }
-  }
-  
-  # Summarize by station and clean to desired columns 
-  Srvy_quad4 <- Srvy_quad3 %>%
-    mutate(across(any_of(c("Spat", "Adult", "Legal")), as.numeric)) %>%
-    group_by(Date, SampleEventID, Latitude, Longitude) %>%
-    summarise(
-      n_quadrats = n_distinct(QuadratID),
-      across(
-        any_of(c("NumLive", "NumDead", "TotalVolume", "TotalWeight", "NumLegal",
-          "DeadRatio", "Spat", "Adult", "Legal", "SpatAdult")),
-        ~ mean(.x, na.rm = TRUE),
-        .names = "{.col}"
-      ),
-      .groups = "drop"
-    ) 
-  
-  Srvy_quad5 <- Srvy_quad4 %>%
-    mutate(SampleEvent = substr(SampleEventID, 1, 17)) %>%
-    distinct(across(-SampleEventID), .keep_all = TRUE)
-  
-  return(Srvy_quad5)
-}
-#
 Srvy_data <- clean_database_file(Srvy_quad, Srvy_LL)
 head(Srvy_data)
 points_sf <- st_as_sf(Srvy_data, coords = c("Longitude", "Latitude"), crs = 4326)
@@ -910,172 +757,28 @@ ggplot()+
   geom_sf(data = points_sf, aes(color = NumLive))
 #
 #
-# Summarize ----
-### Summarize NumLive, DeadRatio, SpatAdult, Presence by HSMgrp score
-clean_survey_data <- function(surveyData){
-  # checks
-  if (!is.data.frame(surveyData) && !is_tibble(surveyData)) {
-    stop("Input 'surveyData' must be a data frame or tibble.")
-  }
-  #
-  if (!any(grepl("NumLive", names(surveyData)))) {
-    stop("No column containing 'NumLive' found in surveyData.")
-  }
-  if (!any(grepl("DeadRatio", names(surveyData)))) {
-    stop("No column containing 'DeadRatio' found in surveyData.")
-  }
-  required_cols <- c("Spat", "Adult", "Legal", "SpatAdult")
-  missing_cols <- setdiff(required_cols, names(surveyData))
-  if (length(missing_cols) > 0) {
-    stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
-  }
-  #
-  # Define HSM grps
-  expected_levels <- c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
-  
-  # Define na replacement case:
-  na_condition <- (surveyData$Spat %in% c(0, NA) & surveyData$Adult %in% c(0, NA) & surveyData$Legal %in% c(0, NA))
-  #
-  cleaned_data <- surveyData %>% 
-    as.data.frame() %>%
-    # Rename columns for consistency 
-    rename_with(~ sub(".*NumLive.*", "NumLive", .x), matches("NumLive")) %>%
-    rename_with(~ sub(".*DeadRatio.*", "DeadRatio", .x), matches("DeadRatio")) %>%
-    mutate(across(starts_with("HSMgrp"), ~ factor(.x, levels = expected_levels, ordered = TRUE))) %>%
-    # Replace 0 with NA when proper
-    mutate(DeadRatio = as.numeric(DeadRatio),
-           SpatAdult = as.numeric(SpatAdult),
-           DeadRatio = if_else(na_condition, NA_real_, DeadRatio),
-           SpatAdult = if_else(na_condition, NA_real_, SpatAdult))
-  #
-  # Create Presence column if missing
-  if (!"Presence" %in% names(cleaned_data)) {
-    if (!"NumLive" %in% names(cleaned_data)) {
-      stop("Column 'NumLive' is required to create Presence.")
-    }
-    
-    cleaned_data <- cleaned_data %>%
-      mutate(
-        PresenceL = case_when(
-          is.na(NumLive) ~ NA_real_,
-          NumLive > 0 ~ 1,
-          TRUE ~ 0
-        ),
-        PresenceD = case_when(
-          is.na(NumDead) ~ NA_real_,
-          NumDead > 0 ~ 1,
-          TRUE ~ 0
-        ),
-        Presence = case_when(
-          is.na(NumLive) & is.na(NumDead) ~ NA_real_,
-          NumLive > 0 | NumDead > 0 ~ 1,
-          TRUE ~ 0
-        )
-      )
-  }
-  
-  return(cleaned_data)
-  #
-}
 #
-# Add all model data: 
+#
+# Summarize ----
+#
 (HSM_ground <- left_join(HSM_ground,
                          HSM_data_grps_f %>% dplyr::select(PGID:Long_DD_X, HSM_f, HSMround_f, HSMgrp_f)) %>%
     left_join(HSM_data_grps_s %>% dplyr::select(PGID:Long_DD_X, HSM_s, HSMround_s, HSMgrp_s)) %>%
     left_join(HSM_data_grps_fs %>% dplyr::select(PGID:Long_DD_X, HSM_fs, HSMround_fs, HSMgrp_fs)))
-  
+
 #
+# Summarize NumLive, DeadRatio, SpatAdult, Presence by HSMgrp score
 validation_data <- clean_survey_data(HSM_ground) %>%
   drop_na(HSMgrp, Presence)
 head(validation_data)
 (val_df1 <- validation_data %>%
-  group_by(HSMgrp) %>%
-  mutate(Live_scale = scale(sqrt(NumLive+0.5))[,1]) %>%
-  ungroup())
-#
-# Function to summarize (mean/sd, min, max) GT data by raw HSM values. Updated to calculate for each HSM* column:
-summarize_data <- function(cleanedData){
-  
-  # checks
-  if (!is.data.frame(cleanedData) && !tibble::is_tibble(cleanedData)) {
-    stop("Input 'cleanedData' must be a data frame or tibble.")
-  }
-  
-  # find ALL HSM grp columns
-  hsm_cols <- grep("^HSMgrp", names(cleanedData), value = TRUE)
-  
-  if (length(hsm_cols) == 0) {
-    stop("No grouped 'HSM' columns found in cleanedData")
-  }
-  
-  required_cols <- c("NumLive", "DeadRatio", "SpatAdult", grep("Presence", names(cleanedData), value = TRUE))
-  
-  missing_cols <- setdiff(required_cols, names(cleanedData))
-  if (length(missing_cols) > 0) {
-    stop(paste("Missing required columns:", paste(missing_cols, collapse = ", ")))
-  }
-  
-  for (col in required_cols) {
-    if (!is.numeric(cleanedData[[col]])) {
-      stop(paste("Column", col, "must be numeric for summarization."))
-    }
-  }
-  
-  # Define HSM grps
-  expected_levels <- c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)", "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
-  
-  # Check if all expected levels are present
-  #actual_levels <- unique(na.omit(cleanedData$HSMgrp))
-  #missing_levels <- setdiff(expected_levels, actual_levels)
-  
-  #if (length(missing_levels) > 0) {
-  #  warning(paste("Expected HSMgrp levels missing:", paste(missing_levels, collapse = ", "), ". Proceeding with available levels."))
-  #}
-  
-  # reshape to long format across HSMgrp variants
-  summarized_data <- suppressWarnings(
-    cleanedData %>%
-      tidyr::pivot_longer(
-        cols = all_of(hsm_cols),
-        names_to = "HSM_type",
-        values_to = "HSMgrp"
-      ) %>%
-      mutate(
-        HSMgrp = factor(HSMgrp, levels = expected_levels, ordered = TRUE)
-      ) %>%
-      group_by(HSM_type, HSMgrp) %>%
-      summarise(
-        across(
-          all_of(required_cols),
-          list(
-            n = ~ sum(!is.na(.x)),
-            mean = ~ mean(.x, na.rm = TRUE),
-            sd = ~ sd(.x, na.rm = TRUE),
-            min = ~ min(.x, na.rm = TRUE),
-            max = ~ max(.x, na.rm = TRUE)
-          ),
-          .names = "{.col}_{fn}"
-        ),
-        .groups = "drop"
-      ) %>%
-      tidyr::pivot_longer(
-        cols = -c(HSM_type, HSMgrp),
-        names_to = c("variable", "stat"),
-        names_sep = "_",
-        values_to = "value"
-      ) %>%
-      tidyr::pivot_wider(names_from = stat, values_from = value) %>%
-      mutate(
-        min = ifelse(is.infinite(min), NA_real_, min),
-        max = ifelse(is.infinite(max), NA_real_, max)
-      )
-  )
-  
-  return(summarized_data)
-}
+    group_by(HSMgrp) %>%
+    mutate(Live_scale = scale(sqrt(NumLive+0.5))[,1]) %>%
+    ungroup())
 #
 validation_summary <- summarize_data(validation_data)
 #
+# Number of grid cells surveyed:
 nrow(HSM_ground %>% drop_na(HSM))
 nrow(HSMmodel %>% drop_na(HSM))
 (nrow(HSM_ground %>% drop_na(HSM))/nrow(HSMmodel %>% drop_na(HSM)))*100
@@ -1144,15 +847,15 @@ cal <- calibrate(lrm(Presence ~ HSMround, data = validation_data, x= TRUE, y = T
 plot(cal)
 #
 (p1_1 <- ggplot(roc_df1, aes(x = FPR, y = sensitivity)) +
-  geom_line(linewidth = 1) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  labs(
-    x = "Specificity",#"False Positive Rate",
-    y = "Sensitivity",#"True Positive Rate",
-  ) +
-  scale_x_continuous(expand = c(0,0.025))+
-  scale_y_continuous(expand = c(0,0.005))+
-  base_theme +
+    geom_line(linewidth = 1) +
+    geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+    labs(
+      x = "Specificity",#"False Positive Rate",
+      y = "Sensitivity",#"True Positive Rate",
+    ) +
+    scale_x_continuous(expand = c(0,0.025))+
+    scale_y_continuous(expand = c(0,0.005))+
+    base_theme +
     plot_theme)
 #
 ggsave(
@@ -1187,7 +890,7 @@ roc_df2$FPR <- 1 - roc_df2$specificity
 #Threshold sensitivity:
 coords(roc_obj2, "best", ret = c("threshold","sensitivity","specificity"))
 cal2 <- calibrate(lrm(Presence ~ round(HSMround_f,1), data = validation_data, x= TRUE, y = TRUE),
-                 method = "boot", B = 500)
+                  method = "boot", B = 500)
 plot(cal2)
 #
 (p1_2 <- ggplot(roc_df2, aes(x = FPR, y = sensitivity)) +
@@ -1311,12 +1014,11 @@ ggsave(
 #
 # Distributions:
 ## Compare model distributions
-#
 models_dists <- data.frame(
   value = c(HSM_data_grps_f$HSM, HSM_data_grps_f$HSM_f, HSM_data_grps_s$HSM_s, HSM_data_grps_fs$HSM_fs),
   Model = rep(c("Original", "Flow*", "Salinity*","Flow* Salinity*"),
               each = nrow(HSM_data_grps_f))) %>%
-    mutate(Model = factor(Model, levels = c("Original", "Flow*", "Salinity*","Flow* Salinity*")))
+  mutate(Model = factor(Model, levels = c("Original", "Flow*", "Salinity*","Flow* Salinity*")))
 # 
 (p1_d <- ggplot(models_dists, aes(value)) +
     geom_density(linewidth = 1) +
@@ -1430,7 +1132,7 @@ ggsave(
 #
 # Boyce Index - on raw data
 m1_Boyce <- ecospat.boyce(
-  fit = HSM_scores$HSMround, #validation_data$HSM,
+  fit = HSM_scores$HSM, #validation_data$HSM,
   obs = validation_data$HSM[validation_data$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -1439,7 +1141,7 @@ m1_Boyce <- ecospat.boyce(
 ) 
 m1_Boyce$cor
 m2_Boyce <- ecospat.boyce(
-  fit = HSM_data_flow$HSMround_f, #validation_data$HSM_f,
+  fit = HSM_data_flow$HSM_f, #validation_data$HSM_f,
   obs = validation_data$HSM_f[validation_data$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -1448,7 +1150,7 @@ m2_Boyce <- ecospat.boyce(
 )
 m2_Boyce$cor
 m3_Boyce <- ecospat.boyce(
-  fit = HSM_data_sal$HSMround_s, #validation_data$HSM_s,
+  fit = HSM_data_sal$HSM_s, #validation_data$HSM_s,
   obs = validation_data$HSM_s[validation_data$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -1457,7 +1159,7 @@ m3_Boyce <- ecospat.boyce(
 )
 m3_Boyce$cor
 m4_Boyce <- ecospat.boyce(
-  fit = HSM_data_fs$HSMround_fs, #validation_data$HSM_fs,
+  fit = HSM_data_fs$HSM_fs, #validation_data$HSM_fs,
   obs = validation_data$HSM_fs[validation_data$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -1656,36 +1358,36 @@ HSM_data_grps_comp2 <- HSM_data_comp2 %>%
       HSMround_fs < 0.9 & HSMround_fs >= 0.8 ~ "[0.8,0.9)",
       TRUE           ~ "[0.9,1]"
     )
-    ) %>%
+  ) %>%
   #Make sure grp is factors
   mutate(
     HSMgrp = factor(HSMgrp,
-      levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
-                 "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
+                    levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
+                               "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
     ),
     HSMgrp_f = factor(HSMgrp_f,
-      levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
-                 "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
+                      levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
+                                 "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
     ),
     HSMgrp_s = factor(HSMgrp_s,
-                    levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
-                               "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
+                      levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
+                                 "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
     ),
     HSMgrp_fs = factor(HSMgrp_fs,
-                    levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
-                               "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
+                       levels = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)","[0.4,0.5)", "[0.5,0.6)", 
+                                  "[0.6,0.7)", "[0.7,0.8)", "[0.8,0.9)", "[0.9,1]")
     )
   )
 #
 #
 #
 HSMmodel_comps2 <- HSMmodel %>% dplyr::select(PGID:Long_DD_X) %>%
-       left_join(HSM_data_comp2 %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X, contains("HSM")))
+  left_join(HSM_data_comp2 %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X, contains("HSM")))
 # Add all model data: st_as_sf(df, coords = c("lon", "lat"), crs = 4326)
 HSM_ground_comp2 <- st_join(points_sf, HSMmodel_comps2)
 (HSM_ground_comp2 <- left_join(HSM_ground_comp2,
-                         HSM_data_grps_comp2 %>% dplyr::select(PGID:Long_DD_X, contains("HSM")) %>%
-                           dplyr::select(-HSMgyr, -HSMjb, -HSM_q4)))
+                               HSM_data_grps_comp2 %>% dplyr::select(PGID:Long_DD_X, contains("HSM")) %>%
+                                 dplyr::select(-HSMgyr, -HSMjb, -HSM_q4)))
 
 #
 validation_data_comp2 <- clean_survey_data(HSM_ground_comp2) %>%
@@ -1719,7 +1421,7 @@ roc_df5$FPR <- 1 - roc_df5$specificity
 #Threshold sensitivity:
 coords(roc_obj5, "best", ret = c("threshold","sensitivity","specificity"))
 cal5 <- calibrate(lrm(Presence ~ HSMround, data = validation_data_comp2, x= TRUE, y = TRUE),
-                 method = "boot", B = 500)
+                  method = "boot", B = 500)
 plot(cal5)
 #
 (p1_5 <- ggplot(roc_df5, aes(x = FPR, y = sensitivity)) +
@@ -1856,13 +1558,13 @@ HSM_data_grps_comp2$s_diff <- HSM_data_grps_comp2$HSM_s - HSM_data_grps_comp2$HS
 mean(HSM_data_grps_comp2$s_diff)
 #
 (p3_7 <- ggplot(HSM_data_grps_comp2,
-aes(HSM, HSM_s)) +
-  geom_point() +
-  geom_abline(linetype = "dashed") +
-  scale_x_continuous("Salinity+", limits = c(0,1), expand = c(0,0))+
-  scale_y_continuous("Salinity*", limits = c(0,1), expand = c(0,0))+
-  base_theme + theme(plot.margin = unit(c(0.25, 0.2, 0.1, 0.1), "cm"), 
-                     panel.border = element_rect(color = NA)))
+                aes(HSM, HSM_s)) +
+    geom_point() +
+    geom_abline(linetype = "dashed") +
+    scale_x_continuous("Salinity+", limits = c(0,1), expand = c(0,0))+
+    scale_y_continuous("Salinity*", limits = c(0,1), expand = c(0,0))+
+    base_theme + theme(plot.margin = unit(c(0.25, 0.2, 0.1, 0.1), "cm"), 
+                       panel.border = element_rect(color = NA)))
 # Additive scores higher than flow*
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_comps2_salinity_agreement.png"),
@@ -1997,7 +1699,7 @@ presence_summary_comp2$HSM_type <- factor(
 )
 # Compile and use once
 (p2_2 <- ggplot(presence_summary_comp2, 
-              aes(x = HSMgrp, y = presence_rate)) +
+                aes(x = HSMgrp, y = presence_rate)) +
     geom_point(size = 5) +
     geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, linewidth = 0.7) +
     facet_wrap(.~HSM_type, nrow = 2, ncol = 2,
@@ -2063,7 +1765,7 @@ ggsave(
 #
 # Boyce Index - on raw data
 m5_Boyce <- ecospat.boyce(
-  fit = HSM_data_comp2$HSMround, #validation_data_comp2$HSM,
+  fit = HSM_data_comp2$HSM, #validation_data_comp2$HSM,
   obs = validation_data_comp2$HSM[validation_data_comp2$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -2072,7 +1774,7 @@ m5_Boyce <- ecospat.boyce(
 ) 
 m5_Boyce$cor
 m6_Boyce <- ecospat.boyce(
-  fit = HSM_data_comp2$HSMround_f, #validation_data_comp2$HSM_f,
+  fit = HSM_data_comp2$HSM_f, #validation_data_comp2$HSM_f,
   obs = validation_data_comp2$HSM_f[validation_data_comp2$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -2081,7 +1783,7 @@ m6_Boyce <- ecospat.boyce(
 )
 m6_Boyce$cor
 m7_Boyce <- ecospat.boyce(
-  fit = HSM_data_comp2$HSMround_s, #validation_data_comp2$HSM_s,
+  fit = HSM_data_comp2$HSM_s, #validation_data_comp2$HSM_s,
   obs = validation_data_comp2$HSM_s[validation_data_comp2$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -2090,7 +1792,7 @@ m7_Boyce <- ecospat.boyce(
 )
 m7_Boyce$cor
 m8_Boyce <- ecospat.boyce(
-  fit = HSM_data_comp2$HSMround_fs, #validation_data_comp2$HSM_fs,
+  fit = HSM_data_comp2$HSM_fs, #validation_data_comp2$HSM_fs,
   obs = validation_data_comp2$HSM_fs[validation_data_comp2$Presence == 1],
   nclass = 0,                   
   window.w = "default",         
@@ -2171,7 +1873,111 @@ AIC(model1, model5)
 #
 #
 #
-# Plotting ----
+# Best model output ----
+#
+# Limit to HSM, HSMround, and HSMgrp of best model
+# Make sure HSMgrp, HSMgyr, HSMjb, and HSM_q4 exists
+(final_data <- HSM_data_grps_f %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X, 
+                                                contains("SC"), contains("AV"), ChnlTO, Curve_val,
+                                                HSM_f, HSMround_f, HSMgrp_f, HSMgyr_f, HSMjb_f, HSM_q4_f))
+#
+summary(final_data$HSMgrp_f) %>%
+  as.data.frame() %>%
+  mutate(Pct = round((./178633)*100,2))
+#
+final_data %>%
+  group_by(HSMgyr_f) %>%
+  summarise(
+    n = n(),
+    min = min(HSM_f, na.rm = TRUE),
+    max = max(HSM_f, na.rm = TRUE),
+    mean = mean(HSM_f, na.rm = TRUE),
+    .groups = "drop"
+ )
+#Jenks breaks summary:
+table(
+  cut(final_data$HSM_f, breaks = jenks_breaks_f, include.lowest = TRUE),
+  useNA = "ifany"
+)
+jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenks_breaks_f))
+#
+(jb_plot <- ggplot(final_data, aes(x = HSM_f)) +
+  geom_histogram(fill = "gray50", color = "black", bins = 30) +
+  geom_vline(xintercept = jenks_breaks_f, linetype = "dashed", linewidth = 1, color = "red") +
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks_f, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)), 
+                           aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
+                           nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                           segment.color = NA)+
+  #annotate("text", x = jenks_breaks, y = 0, label = round(jenks_breaks, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
+  labs(
+    title = "Jenks Breakpoints Overlay",
+    x = "HSM score",
+    y = "Count"
+  ) +
+  base_theme + plot_theme +
+  scale_y_continuous(expand = c(0,0))+
+  scale_x_continuous(limits = c(0,1), expand = c(0,0.0015)))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_jb_hist.png"),
+  plot = jb_plot,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+summary(final_data$HSM_q4_f)
+(temp_cuts <- final_data %>%
+    group_by(HSM_q4_f) %>%
+    summarise(
+      n = n(),
+      min = min(HSM_f, na.rm = TRUE),
+      max = max(HSM_f, na.rm = TRUE),
+      mean = mean(HSM_f, na.rm = TRUE),
+      .groups = "drop"
+    ))
+#
+(q4_plot <- ggplot(final_data, aes(HSM_f)) +
+  geom_histogram(bins = 40, fill = "grey50", color = "black") +
+  geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
+  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-16000), 
+                           aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
+                           nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                           segment.color = NA)+
+  #annotate("text", x = temp_cuts$min, y = 0, label = round(temp_cuts$min, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
+  labs(
+    title = "Quartile Bins Overlay",
+    x = "HSM score",
+    y = "Count"
+  ) +
+  base_theme + plot_theme +
+    scale_y_continuous(expand = c(0,0), limits = c(0, 40000))+
+    scale_x_continuous(limits = c(0, 1.0), expand = c(0,0.0015)))
+#
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_q4hist.png"),
+  plot = q4_plot,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
+# Make sure object is sfc
+HSM_final <- left_join(HSMmodel %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X), 
+                       final_data)
+#
+#
+HSMfunc$save_final_model_output(data = HSM_final, output_type = "all")
+## Once saved, revisit code #5 for updated maps of data and model output.
+#
+#
+#
+# GT data Plotting ----
 #
 ## Plot summaries x = score, y = mean values
 validation_summary %>% 
