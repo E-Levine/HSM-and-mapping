@@ -1271,7 +1271,6 @@ ggplot()+
   scale_color_viridis_c(limits = c(0,1))
 #
 #
-
 #
 summary(final_data$HSMgrp_f) %>%
   as.data.frame() %>%
@@ -1297,7 +1296,7 @@ jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenk
 (jb_plot <- ggplot(final_data, aes(x = HSM_f)) +
   geom_histogram(fill = "gray50", color = "black", bins = 30) +
   geom_vline(xintercept = jenks_breaks_f, linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks_f, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-1000), #-300000, 1000
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks_f, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-300000), #-300000, 1000
                            aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
@@ -1308,7 +1307,7 @@ jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenk
     y = "Count"
   ) +
   base_theme + plot_theme +
-  scale_y_continuous(expand = c(0,0), limits = c(0, 20000))+ #1250000, 20000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 1250000))+ #1250000, 20000
   scale_x_continuous(limits = c(0,1), expand = c(0,0.0025)))
 #
 ggsave(
@@ -1336,7 +1335,7 @@ summary(final_data$HSM_q4_f)
 (q4_plot <- ggplot(final_data, aes(HSM_f)) +
   geom_histogram(bins = 40, fill = "grey50", color = "black") +
   geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-1000), #300000, 1000
+  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-300000), #300000, 1000
                            aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
@@ -1347,7 +1346,7 @@ summary(final_data$HSM_q4_f)
     y = "Count"
   ) +
   base_theme + plot_theme +
-    scale_y_continuous(expand = c(0,0), limits = c(0, 20000))+ #1200000, 20000
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1200000))+ #1200000, 20000
     scale_x_continuous(limits = c(0, 1.0), expand = c(0,0.0015)))
 #
 #
@@ -1363,7 +1362,7 @@ ggsave(
 #
 #
 #
-HSMfunc$save_final_model_output(data = HSM_final, output_type = "all")
+HSMfunc$save_final_model_output(data = final_data, output_type = "all")
 ## Once saved, revisit code #5 for updated maps of data and model output.
 #
 #
