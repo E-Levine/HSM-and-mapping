@@ -23,8 +23,8 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SS") #two-letter site code
-Version <- c("v0") #Model version
+Site_Code <- c("SL") #two-letter site code
+Version <- c("v1") #Model version
 #
 #
 # Data setup ----
@@ -989,7 +989,7 @@ if(model_data == "all"){
 (assign(paste0(Site_Code, "_", Version, "_data_clean"), HSMfunc$clean_model_data(get(paste0(Site_Code, "_", Version, "_data_totals")))))
 #
 #
-#
+# Additive model:
 HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>% 
   st_drop_geometry() %>% 
   {
@@ -1275,4 +1275,7 @@ Scoring_summ %>%
   group_by(Param = substr(Parameter, 1, 7)) %>%
   summarise(meanVal = mean(mean, na.rm = T),
             sdVal = sd(mean, na.rm = T))
-
+#
+#
+#
+#
