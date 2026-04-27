@@ -570,6 +570,24 @@ if(Final_version == "Y"){
 }
 #
 #
+# Flow
+(p7.5 <- ggplot()+
+    geom_sf(data = HSM_scores, aes(color = FAV)) +
+    basetheme + legendtheme +
+    scale_color_viridis_c(limits = c(0,1))+
+    labs(color = "Flow") + # UPDATE AS NEEDED
+    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
+  plot = p7.5,
+  width = 9,
+  height = 5,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)
+#
+#
 #
 # Composite model ----
 #
@@ -676,3 +694,32 @@ if(Final_version == "Y"){
 }
 #
 #
+# Average score summary ####
+#
+# Channels coverage
+HSM_scores %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, ChnlTO) %>%
+  summarise(across(ChnlTO, ~ sum(.x == 0, na.rm = TRUE)))
+#
+Ave_scores <- HSM_scores %>% 
+  st_drop_geometry() %>%
+  dplyr::select(PGID, ends_with("AV"))
+# Mean overall
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ mean(.x, na.rm = TRUE)))
+# Non-zero
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x != 0, na.rm = TRUE)))
+# Zeros
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x == 0, na.rm = TRUE)))
+# Mean non-zero
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ mean(.x != 0, na.rm = TRUE)))
+# Cells >= 0.5
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x >= 0.5, na.rm = TRUE)))
+# Cells >= 0.7
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ sum(.x >= 0.7, na.rm = TRUE)))
