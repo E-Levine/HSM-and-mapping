@@ -21,7 +21,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("SS") #two-letter site code
 Version <- c("v1") #Model version
 Final_version <- c("Y") #Final model output? Y/N
 #
@@ -30,7 +30,7 @@ Final_version <- c("Y") #Final model output? Y/N
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_final_model"
-model_scores_date <- c("2026-04-23")#c("2026-03-04") #
+model_scores_date <- c("2026-04-28")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -93,6 +93,9 @@ SS_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.015, st_bbox(Site_area
                     ylim = c(st_bbox(Site_area)["ymin"]-0.005, st_bbox(Site_area)["ymax"]+0.010))
 SS_logger_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.17),
                              ylim = c(st_bbox(Site_area)["ymin"]-0.02, st_bbox(Site_area)["ymax"]+0.02))
+#
+#
+#
 #
 # Model summary ----
 #
@@ -268,7 +271,7 @@ HSMmodel %>%
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 36000), breaks = seq(0, 36000, 12000))+ #2000000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))+#, breaks = seq(0, 36000, 12000))+ #2000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme + theme(axis.text.x = element_text(size = 11, angle = 20)))
@@ -365,7 +368,7 @@ ggsave(
    theme(panel.border = element_rect(color = "black", fill = NA), 
          axis.title = element_text(size = 12, color = "black"), 
          axis.text =  element_text(size = 10, color = "black"))+
-   SS_logger_zoom
+   SL_overview_zoom
 )
 #
 ggsave(
@@ -573,19 +576,32 @@ if(Final_version == "Y"){
 # Flow
 (p7.5 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = FAV)) +
+    geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
     basetheme + legendtheme +
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Flow") + # UPDATE AS NEEDED
-    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
+    SS_zoom)
 #
-ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
-  plot = p7.5,
-  width = 9,
-  height = 5,
-  units = "in",
-  dpi = 300 # Use 300 dpi for high quality
-)
+if(Final_version == "Y"){
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Flow.png"),
+    plot = p7.5,
+    width = 9,
+    height = 5,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+} else {
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
+    plot = p7.5,
+    width = 9,
+    height = 5,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  ) 
+}
 #
 #
 #
@@ -707,19 +723,19 @@ Ave_scores <- HSM_scores %>%
   dplyr::select(PGID, ends_with("AV"))
 # Mean overall
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ mean(.x, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(mean(.x, na.rm = TRUE),2)))
 # Non-zero
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ sum(.x != 0, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(sum(.x != 0, na.rm = TRUE),2)))
 # Zeros
 Ave_scores %>%
   summarise(across(OystAV:FAV, ~ sum(.x == 0, na.rm = TRUE)))
 # Mean non-zero
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ mean(.x != 0, na.rm = TRUE)))
-# Cells >= 0.5
-Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ sum(.x >= 0.5, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(mean(.x != 0, na.rm = TRUE),3)))
 # Cells >= 0.7
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ sum(.x >= 0.7, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(sum(.x >= 0.7, na.rm = TRUE),3)))
+# Cells >= 0.9
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ round(sum(.x >= 0.9, na.rm = TRUE),3)))

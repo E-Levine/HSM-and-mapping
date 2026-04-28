@@ -13,18 +13,23 @@ pacman::p_load(plyr, tidyverse, readxl, openxlsx, writexl,
                rms, ecospat, ggeffects, #ROC, Boyce, response curve
                sf, install = TRUE)
 #
-HSMfunc <- new.env()
-source("HSM code/Functions/HSM_gt_model_functions.R", local = HSMfunc)
+HSMfuncGT <- new.env()
+source("HSM code/Functions/HSM_gt_model_functions.R", local = HSMfuncGT)
 #
 # Setup ----
 # Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SS") #two-letter site code
+Site_Code <- c("SL") #two-letter site code
 Version <- c("v1") #Model version
 SurveyYYMM <- c("2401") #SS-2401, SL-2305
 FileType <- c("shapefile") #data or shapefile
 #
 HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
+#
+#
+# Load land:
+FL_outline <- st_read("Data layers/FL_Outlines/FL_Outlines.shp")
+plot(FL_outline)
 #
 #
 # 
@@ -83,7 +88,7 @@ FacetTheme <- theme(strip.text.y = element_text(face = "bold", size = 12),
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_model"
-model_scores_date <- c("2026-02-05") #SS c("2026-02-05")##SL "2026-03-04"
+model_scores_date <- c("2026-04-27") #2026-04-27; SS c("2026-02-05")##SL "2026-03-04"
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -223,7 +228,7 @@ HSM_data_grps_f %>%
       y = "Count"
     ) +
     base_theme + 
-    scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
+    scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))+ #2000000, 80000
     scale_x_discrete(expand = c(0.005,0))+
     theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
     plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
@@ -250,7 +255,7 @@ models_df_f <- data.frame(
     geom_density(linewidth = 1) +
     scale_linetype_manual(values = c("dashed", "solid"))+
     scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
-    scale_y_continuous("Density", limits = c(0, 80), expand = c(0,0))+ #Modify as needed: SL 0-10, SS 0-80
+    scale_y_continuous("Count", limits = c(0, 80), expand = c(0,0))+ #Modify as needed: SL 0-15, SS 0-80
     base_theme + plot_theme)
 #
 ggsave(
@@ -265,7 +270,7 @@ ggsave(
 cor(HSM_data_grps_f$HSM,
     HSM_data_grps_f$HSM_f,
     method = "spearman")
-#0.8887132 - raw SL; 0.9710259 SS
+#
 (p3 <- ggplot(HSM_data_grps_f,
               aes(HSM, HSM_f)) +
     geom_point() +
@@ -274,7 +279,7 @@ cor(HSM_data_grps_f$HSM,
     scale_y_continuous("Flow*", limits = c(0,1), expand = c(0,0))+
     base_theme + theme(plot.margin = unit(c(0.25, 0.2, 0.1, 0.1), "cm"), 
                        panel.border = element_rect(color = NA)))
-# Additive scores higher than flow*
+# 
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_agreement.png"),
   plot = p3,
@@ -420,7 +425,7 @@ HSM_data_grps_s %>%
       y = "Count"
     ) +
     base_theme + 
-    scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
+    scale_y_continuous(expand = c(0,0), limits = c(0, 2500000))+ #2500000, 50000
     scale_x_discrete(expand = c(0.005,0))+
     theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
     plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
@@ -447,7 +452,7 @@ models_df_s <- data.frame(
     geom_density(linewidth = 1) +
     scale_linetype_manual(values = c("dashed", "solid"))+
     scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
-    scale_y_continuous("Density", limits = c(0, 80), expand = c(0,0))+
+    scale_y_continuous("Count", limits = c(0, 80), expand = c(0,0))+
     base_theme + plot_theme)
 #
 ggsave(
@@ -462,7 +467,7 @@ ggsave(
 cor(HSM_data_grps_s$HSM,
     HSM_data_grps_s$HSM_s,
     method = "spearman")
-#0.9068286 - raw SL; SS 0.966154
+#
 (p7 <- ggplot(HSM_data_grps_s,
               aes(HSM, HSM_s)) +
     geom_point() +
@@ -538,7 +543,7 @@ breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
 # Determine natural Jenks breaks (thirds)
 set.seed(54321)
 vals_fs <- sample(HSM_data_fs$HSM_fs, min(20000, length(HSM_data_fs$HSM_fs))) #Sample then calculate breaks
-jenks_breaks_fs <- classInt::classIntervals(vals_fs, n = 4, style = "jenks")$brks#getJenksBreaks(var = HSM_data$HSM, k = 4)
+jenks_breaks_fs <- classInt::classIntervals(vals_fs, n = 3, style = "jenks")$brks#getJenksBreaks(var = HSM_data$HSM, k = 4)
 #
 # Clean breaks then make sure they cover full data range:
 jenks_breaks_fs <- sort(unique(
@@ -618,7 +623,7 @@ HSM_data_grps_fs %>%
       y = "Count"
     ) +
     base_theme + 
-    scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
+    scale_y_continuous(expand = c(0,0), limits = c(0, 2500000))+ #2500000, 50000
     scale_x_discrete(expand = c(0.005,0))+
     theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
     plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
@@ -645,7 +650,7 @@ models_df_fs <- data.frame(
     geom_density(linewidth = 1) +
     scale_linetype_manual(values = c("dashed", "solid"))+
     scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
-    scale_y_continuous("Density", limits = c(0, 10), expand = c(0,0))+
+    scale_y_continuous("Count", limits = c(0, 80), expand = c(0,0))+
     base_theme + plot_theme)
 #
 ggsave(
@@ -660,7 +665,7 @@ ggsave(
 cor(HSM_data_grps_fs$HSM,
     HSM_data_grps_fs$HSM_fs,
     method = "spearman")
-#0.9759851 - raw SL; SS 0.9912836
+#
 (p11 <- ggplot(HSM_data_grps_fs,
                aes(HSM, HSM_fs)) +
     geom_point() +
@@ -707,12 +712,12 @@ ggsave(
 # Load and clean data ----
 #
 #Load validation data
-load_survey_shpfiles()
+HSMfuncGT$load_survey_shpfiles()
 str(SS_v1_validation_data)
 #
 #
 # Load data file and combine with model
-survey_data <- load_survey_data(Site_Code, Version, SurveyYYMM, FileType)
+survey_data <- HSMfuncGT$load_survey_data(Site_Code, Version, SurveyYYMM, FileType)
 Srvy_LL <- survey_data$Srvy_LL %>%
   # Filter to only most recent survey if repeated surveys (can only use LL since CR lab has different IDs for same location)
   group_by(LatitudeDec, LongitudeDec) %>% 
@@ -724,7 +729,7 @@ Srvy_quad <- survey_data$Srvy_quad %>%
 #
 # Clean data: Combines LL with count data, calculates DeadRatio, summarizes by station
 # Requires a Date column in either the quad or LL df.
-Srvy_data <- clean_database_file(Srvy_quad, Srvy_LL)
+Srvy_data <- HSMfuncGT$clean_database_file(Srvy_quad, Srvy_LL)
 head(Srvy_data)
 points_sf <- st_as_sf(Srvy_data, coords = c("Longitude", "Latitude"), crs = 4326)
 #
@@ -768,7 +773,7 @@ ggplot()+
 
 #
 # Summarize NumLive, DeadRatio, SpatAdult, Presence by HSMgrp score
-validation_data <- clean_survey_data(HSM_ground) %>%
+validation_data <- HSMfuncGT$clean_survey_data(HSM_ground) %>%
   drop_na(HSMgrp, Presence)
 head(validation_data)
 (val_df1 <- validation_data %>%
@@ -776,7 +781,7 @@ head(validation_data)
     mutate(Live_scale = scale(sqrt(NumLive+0.5))[,1]) %>%
     ungroup())
 #
-validation_summary <- summarize_data(validation_data)
+validation_summary <- HSMfuncGT$summarize_data(validation_data)
 #
 # Number of grid cells surveyed:
 nrow(HSM_ground %>% drop_na(HSM))
@@ -816,8 +821,8 @@ ggsave(
   dpi = 300 # Use 300 dpi for high quality
 )
 #
-left_join(HSM_ground2,
-          validation_data %>% dplyr::select(PGID, Presence))
+#left_join(HSM_ground2,
+#          validation_data %>% dplyr::select(PGID, Presence))
 #
 #
 #
@@ -1249,10 +1254,6 @@ final_data_raw <- left_join(HSMmodel %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X
                             final_data_raw)
 #
 # Limit model cells to aquatic area (remove cells completely covered by land)
-# Load land:
-FL_outline <- st_read("Data layers/FL_Outlines/FL_Outlines.shp")
-plot(FL_outline)
-#
 # Make sure same CRS
 FL_outline <- st_transform(FL_outline, st_crs(final_data_raw))
 #
@@ -1307,7 +1308,7 @@ jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenk
     y = "Count"
   ) +
   base_theme + plot_theme +
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1250000))+ #1250000, 20000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 1250000))+ #1250000, 20000 
   scale_x_continuous(limits = c(0,1), expand = c(0,0.0025)))
 #
 ggsave(
@@ -1346,7 +1347,7 @@ summary(final_data$HSM_q4_f)
     y = "Count"
   ) +
   base_theme + plot_theme +
-    scale_y_continuous(expand = c(0,0), limits = c(0, 1200000))+ #1200000, 20000
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1250000))+ #1250000, 20000
     scale_x_continuous(limits = c(0, 1.0), expand = c(0,0.0015)))
 #
 #
@@ -1362,7 +1363,7 @@ ggsave(
 #
 #
 #
-HSMfunc$save_final_model_output(data = final_data, output_type = "all")
+HSMfuncGT$save_final_model_output(data = final_data, output_type = "all")
 ## Once saved, revisit code #5 for updated maps of data and model output.
 #
 #
