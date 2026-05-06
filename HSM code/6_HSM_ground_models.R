@@ -80,7 +80,17 @@ FacetTheme <- theme(strip.text.y = element_text(face = "bold", size = 12),
                     panel.spacing = unit(0.75, "lines"),
                     strip.text.x = element_text(face = "bold", size = 12))
 
-#
+#Manuscript format
+manu_theme <- theme_bw()+
+  theme(axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"), 
+        axis.text = element_text(size = 11, family = "Arial"), 
+        axis.text.x = element_text(margin = unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+        axis.text.y = element_text(margin = unit(c(0, 0.25, 0, 0), "cm")),
+        axis.ticks = element_line(color = "black", linewidth = 0.1),
+        axis.ticks.length = unit(-0.15, "cm"),
+        panel.grid = element_blank(),
+        panel.border = element_blank(), 
+        axis.line = element_line(color = "black", linewidth = 0.1))
 #
 #
 #
@@ -1266,7 +1276,7 @@ covered_any <- apply(covered_mat, 1, any)
 # Keep only those NOT fully covered
 final_data <- final_data_raw[!covered_any, ]
 #
-# Check final are coverage
+# Check final area coverage
 ggplot()+
   geom_sf(data = final_data, aes(color = HSM_f))+
   scale_color_viridis_c(limits = c(0,1))
@@ -1287,6 +1297,11 @@ final_data %>% st_drop_geometry() %>%
     .groups = "drop"
  ) %>%
   mutate(Pct = round((n/nrow(final_data))*100,2))
+#
+#
+
+#
+#
 #Jenks breaks summary:
 table(
   cut(final_data$HSM_f, breaks = jenks_breaks_f, include.lowest = TRUE),
@@ -1295,7 +1310,7 @@ table(
 jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenks_breaks_f))
 #
 (jb_plot <- ggplot(final_data, aes(x = HSM_f)) +
-  geom_histogram(fill = "gray50", color = "black", bins = 30) +
+  geom_histogram(fill = "gray50", color = "black", bins = 30,  center = 0.05) +
   geom_vline(xintercept = jenks_breaks_f, linetype = "dashed", linewidth = 1, color = "red") +
   ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks_f, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-300000), #-300000, 1000
                            aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
@@ -1308,7 +1323,7 @@ jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenk
     y = "Count"
   ) +
   base_theme + plot_theme +
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1250000))+ #1250000, 20000 
+  scale_y_continuous(expand = c(0,0), limits = c(0, 20000))+ #1250000, 20000 
   scale_x_continuous(limits = c(0,1), expand = c(0,0.0025)))
 #
 ggsave(
