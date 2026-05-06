@@ -1,6 +1,6 @@
 ##Functions used for habitat suitability mapping project set up
 ##
-#### SetUp_Folders
+#### SetUp_Folders ----
 create_folders <- function(Site_Code, Version) {
   if(interactive()){
     result <- select.list(c("Yes", "No"), title = "\nCan local folders be created to organize model files in a Site and Version specific directory?")
@@ -217,7 +217,7 @@ Identify_dataframes <- function(object_list){
 #
 #
 #
-####Creation of HSI curves
+#### Creation of HSI curves ----
 curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, Parameter_step = NA, Parameter_title = Param_title, show_points, bimodal_Yvalues = NA, step_values = NA){
   #Remove previous items:
   if(exists("curve_points", envir = globalenv())){rm(curve_points, envir = globalenv())}
@@ -518,7 +518,91 @@ copy_curve_files <- function(source_site, source_version) {
 #copy_curve_files("SL", "v1")
 #
 #
-###SUB-FUNCTIONS
+#### Load existing curve file ----
+#
+#' Load HSI Curve Excel Files into R Environment
+#'
+#' Reads Excel files from a source HSI curves directory and loads them
+#' into R as objects for immediate use. Image files are ignored.
+#'
+#' @param source_site Character. Source site code (e.g., "SL").
+#' @param source_version Character. Source version identifier (e.g., "v1").
+#' @param include_regression_curves Logical. If \code{TRUE} (default), all Excel files are loaded.
+#'   If \code{FALSE}, files containing "_curve_" in the name are excluded.
+#'
+#' @return A named list of data frames read from Excel files.
+#'
+#' @details
+#' - Excel files are read using \code{readxl::read_excel}
+#' - Image files are not loaded because they cannot be directly converted into
+#'   true \code{ggplot2} objects
+#' - Object names are derived from file names (without extensions)
+#'
+#' @examples
+#' \dontrun{
+#' res <- load_curve_files("SL", "v1")
+#' names(res)
+#' }
+#'
+#' @export
+load_curve_files <- function(source_site,
+                             source_version,
+                             include_regression_curves = TRUE) {
+  
+  # Source folder
+  source_folder <- paste0(source_site, "_", source_version, "/Data/HSI curves/")
+  
+  if (!dir.exists(source_folder)) {
+    stop("Source folder does not exist: ", source_folder)
+  }
+  
+  # Excel extensions only
+  excel_exts <- c("xls", "xlsx", "xlsm", "xlsb")
+  
+  # List files
+  all_files <- list.files(source_folder, full.names = TRUE)
+  
+  # Filter Excel files only
+  files_to_load <- all_files[
+    tolower(tools::file_ext(all_files)) %in% excel_exts
+  ]
+  
+  # Optional filter: exclude regression curves
+  if (!include_regression_curves) {
+    files_to_load <- files_to_load[
+      !grepl("_curve_", basename(files_to_load), ignore.case = TRUE)
+    ]
+  }
+  
+  curves_loaded <- sub(".*HSI curves/([^.]*)\\..*", "\\1", files_to_load) |> unique()
+  
+  # Storage
+  excel_list <- list()
+  
+  for (file_path in files_to_load) {
+    
+    obj_name <- tools::file_path_sans_ext(basename(file_path))
+    obj_name <- make.names(obj_name)
+    
+    excel_list[[obj_name]] <- readxl::read_excel(file_path)
+  }
+  
+  message(
+    paste0(
+      length(files_to_load),
+      " Excel curve files loaded from '", source_folder, "'\n",
+      "Curves included:\n",
+      paste(curves_loaded, collapse = "\n")
+    )
+  )
+  
+  return(excel_list)
+}
+#
+#
+#
+#
+#### SUB-FUNCTIONS ----
 #
 # Create the line data frame
 line_dataframe <- function(LineType, Parameter_values, step_values, Parameter_limits){
