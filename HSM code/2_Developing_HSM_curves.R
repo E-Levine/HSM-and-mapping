@@ -97,3 +97,46 @@ ggsave(
 cp2 <- curve_points
 pred2 <- predictions
 pred2 <- pred2 %>% filter(Param < 0.751)
+#
+#
+# Load existing curves to edit:
+curves <- load_curve_files("SL", "v1", include_regression_curves = FALSE)
+#
+# Formatting:
+base_theme <- ggplot2::theme_classic() +
+  ggplot2::theme(
+    axis.title = element_text(size = 20, face = "bold", color = "black", family = "Arial"),
+    axis.text = ggplot2::element_text(size = 18, family = "Arial", color = "black"),
+    axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+    axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
+    axis.ticks = element_line(color = "black", linewidth = 0.1),
+    axis.ticks.length = unit(-0.15, "cm"),
+    plot.margin = grid::unit(c(0.25, 0.25, 0, 0), "cm"),
+    plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
+    plot.caption = ggplot2::element_text(face = "italic", size = 9),
+    legend.title = element_text(size = 12, family = "Arial"),
+    legend.text = element_text(size = 10, family = "Arial"))
+#
+(p1 <- curves$Seagrass %>%
+    #rbind(data.frame(Param = "> 1000 m", Value = 0)) %>%
+    mutate(Param = case_when(Param == "Absent/None/NA" ~ "Unclassfied/\nNone", Param == "Patchy" ~ "Discontinuous",TRUE ~ Param)) %>%
+    mutate(Param = fct_reorder(Param, Value, .desc = TRUE)) %>%
+    ggplot(aes(Param, Value))+
+    geom_histogram(stat = "identity", fill = "#333333")+
+    #geom_point()+
+    xlab("Seagrass")+
+    ylab("SI score")+
+    base_theme+
+    scale_x_discrete(expand = c(0,0.5))+
+    #scale_x_continuous(expand = c(0,0.5))+
+    scale_y_continuous(expand = c(0,0)))
+#
+#
+ggsave(
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_Seagrass.png"),
+  plot = p1,
+  width = 8,
+  height = 4,
+  units = "in",
+  dpi = 300 # Use 300 dpi for high quality
+)

@@ -1198,16 +1198,19 @@ join_score_dataframes <- function(shp_df, join_by = "PGID", env = .GlobalEnv, ve
 #
 #
 ###Calculate total HSM score
-calculate_totals <- function(data_scores){
+calculate_totals <- function(data_scores, nyears){
   #Oyster score
-  decay <- 0.2
-  n_years <- 5
-  oyster_total <- data_scores %>%
+  n_years <- nyears
+  # Restructure and determine change between years:
+  oyster_long <- data_scores %>%
     st_drop_geometry() %>%
     dplyr::select(PGID, contains("Oyst") & ends_with("SC")) %>%
+    mutate(
+      row_id = row_number()
+    ) %>% 
     # pivot to get years
     pivot_longer(
-      cols = -PGID,
+      cols = -c(PGID, row_id),
       names_to = "variable",
       values_to = "value") %>%
     mutate(
@@ -1217,31 +1220,43 @@ calculate_totals <- function(data_scores){
                      year),
       year = as.numeric(year)) %>%
     filter(!is.na(year)) %>%
-    mutate(
-      year_rank = dense_rank(desc(year))) %>%
+    arrange(PGID, row_id, year) %>%
+    group_by(PGID, row_id) %>%
+    mutate(prev = lag(value),
+           change = ifelse(is.na(prev), NA, value != prev))
+    #
+    # Determine lambda of decay function: Determine flip, convert to half-life & Lambda
+    flip_rate <- mean(oyster_long$change, na.rm = TRUE)
+    half_life <- 1 / flip_rate
+    lambda_raw <- log(2) / half_life
+      # constrain to moderate ecological range to ensure older presence still matters
+    lambda <- max(0.3, min(lambda_raw, 0.7))
+    year_weights <- data.frame(
+      year = seq(min(unique(oyster_long$year)),max(unique(oyster_long$year)))
+      ) %>%
+      mutate(
+        lag = max(unique(oyster_long$year)) - year,
+        lambda = lambda,
+        weight = exp(-lambda * lag)
+      )
+    #
+  # Apply exponential decay weighting
+  oyster_total <- oyster_long %>%
+    # Limit to most recent n_years
+    mutate(year_rank = dense_rank(desc(year))) %>%
     filter(year_rank <= n_years) %>%
-    # weight years to only keep 5 most recent
+    # weight years 
     mutate(
-      weight = 1 - decay * (year_rank - 1),
-      value = value * weight) %>%
-    # Pivot back
-    {
-      max_possible <- sum(unique(.$weight))    
-      # Pivot back
-      dplyr::select(., PGID, variable, value) %>% 
-      pivot_wider( 
-        names_from = variable,
-        values_from = value
-        ) %>%
-        # Summarize 
-        mutate(
-          OystTO = rowSums(dplyr::select(., -PGID), na.rm = TRUE),
-          OystCO = max_possible,
-          OystAV = OystTO / OystCO,
-          row_id = row_number()
-          ) %>%
-        dplyr::select(PGID, OystTO, OystCO, OystAV, row_id)
-    }
+      weight = exp(-lambda * (max(year) - year)), 
+      weighted_value = value * weight) %>%
+    # Summarize 
+    group_by(PGID, row_id) %>%
+    summarise(
+      OystTO = sum(weighted_value, na.rm = TRUE), 
+      OystCO = sum(weight, na.rm = TRUE),
+      OystAV = OystTO / OystCO,
+      .groups = "drop") %>% 
+      dplyr::select(PGID, row_id, OystTO, OystCO, OystAV, row_id)
   #
   #Buffer score
   buffer_total <- data_scores %>% st_drop_geometry() %>%
@@ -1308,6 +1323,7 @@ calculate_totals <- function(data_scores){
     left_join(flow_total, by = c("row_id", "PGID")) %>%
     dplyr::select(-row_id)
   #
+  print(year_weights)
   print(head(all_totals))
   return(all_totals)
   #
