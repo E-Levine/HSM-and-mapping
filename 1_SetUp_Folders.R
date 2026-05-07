@@ -6,8 +6,8 @@
 ##This code does NOT need to be run if updating an existing site/version. 
 #
 ##Establish the site code and version for this project. (Required for both code chunks.)
-Site_Code <- c("WI") #two-letter site code used throughout for identifying files
-Version <- c("v1") #current version number of the model for the specified site
+Site_Code <- c("SL") #two-letter site code used throughout for identifying files
+Version <- c("RE") #current version number of the model for the specified site
 source("HSM code/Functions/HSM_Functions.R")
 #
 #Proceed to folder setup, file separation, and parameter assignment as needed
@@ -31,7 +31,7 @@ pacman::p_load(sf, tidyverse, stringr, install = TRUE) #Mapping and figures
 #Does file need to be separated or existing files gathered? 
 #If requiring separation of one file into one per section, status = "separated"; if existing, status = list of names of existing files from Reference files/KML.
 #If only using one file and separation is not needed, enter 'one_file = "Y"' in KML_separation function
-KML_status <- c("WI", "WI-CI", "WI-WA", "WI-WC")
+KML_status <- c("SL", "SL_Central", "SL-North", "SL-South")
 #
 KML_separation(KML_status, one_file = "Y")
 ##If file was separated, confirm all polygons needed are listed in the output. If any are missing, they are missing from the "all" file. 
@@ -50,10 +50,11 @@ Long_Names <- c("Y")
 Order_of_Sections <- c("Y")
 Order_of_Parameters <- c("Y")
 FL_Oysters <- c("Y")
-Seagrass <- c("Y")
-Navigation_channels <- c("Y")
+Seagrass <- c("N")
+Navigation_channels <- c("N")
 Shellfish_Harvest_Area_Designations <- c("N")
 Aquaculture_lease <- c("N")
+WMD <- c("Y")
 #
 ##Gather required data.##Code does not need to be changed. 
 Gather_setup_data(Long_Names, Order_of_Sections, Order_of_Parameters, FL_Oysters, Shellfish_Harvest_Area_Designations, Navigation_channels, Aquaculture_lease)

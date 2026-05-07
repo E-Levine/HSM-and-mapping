@@ -170,6 +170,7 @@ Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters
     if(Shellfish_Harvest_Area_Designations == "Y"){SHAreas  <<- temp %>% subset(Parameter == "SHA_Class")} else {SHAreas <<- "Shellfish Harvest Areas is not needed."}
     if(Navigation_channels == "Y"){NavCha <<- temp %>% subset(Parameter == "Nav_Channels")} else {NavCha <<- "'Navigational channels' layer is not needed."}
     if(Aquaculture_lease == "Y"){AquaLease <<- temp %>% subset(Parameter == "Aquaculture_Lease")} else {AquaLease <<- "'Aquaculture leases' layer is not needed."}
+    if(WMD == "Y"){WMDs <<- temp %>% subset(Parameter == "WMD")} else {AquaLease <<- "'WMD survey' layer is not needed."}
     df_list <<- list("Long_Names" = Names, 
                      "Section_Order" = Sections, 
                      "Parameter_Order" = Parameters, 
@@ -178,6 +179,7 @@ Gather_setup_data <- function(Long_Names, Order_of_Sections, Order_of_Parameters
                      "SHAs" = SHAreas,
                      "Nav_Channels" = NavCha,
                      "Aquaculture" = AquaLease,
+                     "WMD" = WMDs,
                      "Continuous" = temp %>% subset(Parameter %in% (Parameters %>% filter(Parameter %in% c("Salinity", "Temperature", "Flow")) %>% filter(!is.na(Priority)))$Parameter))
     return(list("Excel file found. Required sheets loaded into data frames. Levels of specified parameters listed.", df_list))
   } else {
