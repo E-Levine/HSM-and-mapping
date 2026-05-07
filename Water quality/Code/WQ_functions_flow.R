@@ -86,37 +86,53 @@ load_WQ_data <- function() {
     detectDates = TRUE
   ) %>%
     dplyr::filter(Site == Site_code)
-  
-  flow_file <- list.files(
-    path = "Data/Raw-data/",
-    pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$")
-  )
-  
-  if (length(flow_file) == 0) {
-    stop("No flow file found for Site_code: ", Site_code)
+  #
+  # Helper function to read and combine files
+  read_and_bind <- function(pattern, file_type) {
+    
+    files <- list.files(
+      path = "Data/Raw-data/",
+      pattern = pattern,
+      full.names = TRUE
+    )
+    
+    if (length(files) == 0) {
+      stop(paste0("No ", file_type, " files found for Site_code: ", Site_code))
+    }
+    
+    dat_list <- lapply(files, function(x) {
+      
+      dat <- openxlsx::read.xlsx(
+        x,
+        na.strings = c("NA", " ", "", "Z"),
+        detectDates = TRUE
+      )
+      
+      # Convert all columns to character
+      dat %>%
+        dplyr::mutate(
+          dplyr::across(
+            everything(),
+            as.character
+          )
+        )
+    })
+    
+    dplyr::bind_rows(dat_list)
   }
-  
-  flow_raw <- openxlsx::read.xlsx(
-    file.path("Data/Raw-data/", flow_file[1]),
-    na.strings = c("NA", " ", "", "Z"),
-    detectDates = TRUE
+  #
+  # Read and combine all matching flow files
+  flow_raw <- read_and_bind(
+    pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$"),
+    file_type = "flow"
   )
   
-  salinity_file <- list.files(
-    path = "Data/Raw-data/",
-    pattern = paste0(Site_code, "_logger_[Ss]alinity_.*\\.xlsx$")
+  # Read and combine all matching salinity files
+  salinity_raw <- read_and_bind(
+    pattern = paste0(Site_code, "_logger_[Ss]alinity_.*\\.xlsx$"),
+    file_type = "salinity"
   )
-  
-  if (length(salinity_file) == 0) {
-    stop("No salinity file found for Site_code: ", Site_code)
-  }
-  
-  salinity_raw <- openxlsx::read.xlsx(
-    file.path("Data/Raw-data/", salinity_file[1]),
-    na.strings = c("NA", " ", "", "Z"),
-    detectDates = TRUE
-  )
-  
+  #
   # Assign outputs to global environment
   assign("Loggers", Stations, envir = .GlobalEnv)
   assign("flow_raw", flow_raw, envir = .GlobalEnv)
