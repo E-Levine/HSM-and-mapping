@@ -67,6 +67,7 @@ Location: HSM code; Project: HSM_and_mapping
 - Determine initial breakpoints or category names for all parameters being added to the model to act as a starting point to establish curves.
 - Use "2_Devloping_HSM_curves" to establish suitability curves for all parameters to be used in the model.
 - Final breakpoints and layer names will be added to the "model_setup" summary file in the Site_version Data folder, and scores for values and figures of scores will be saved in the Data/HSI curves folder for use when building the model. 
+- Code is provided to load existing curve data for modifying plots of SI curves.
 
 ### 3_HSM_Creation  
 Location: HSM_Code; Project: HSM_and_mapping
@@ -96,6 +97,21 @@ Location: HSM_Code; Project: HSM_and_mapping
   - Navigational channels
   - Salinity 
   - Water temperature
-- Code is provided to output maps of the composite model scores as well as the composite model scores according to Jenks breaks and quartile breaks.
+- Code is provided to output maps of the composite model scores as well as the composite model scores according to Jenks breaks and quartile breaks. Histograms of scores can also be output. 
 - Individual map file output sizes can be modified.
-- Plot formatting is coded to be consistent among plots.
+- Plot formatting is coded to be consistent among plots and to designate if outputting maps for working or final model. 
+
+### 6_HSM_ground_models **In progress. Use with caution.**
+Location: HSM_Code; Project: HSM_and_mapping
+- Code is provided to compare ground truthing data to model outputs:
+  - Data is loaded, cleaned, and summarized.
+  - Presence/absence data is compared to HSM bin scores for grid cells containing survey locations.
+- Current models compared include: original model (1), flow* (2), salinity* (3), flow* and salinity* (4)
+- Models are compared using:
+  - Model distributions
+  - Regression/AIC
+  - ROC and AUC
+  - Boyce Index
+  - Ecological trends
+- Final model can be selected and output saved as "final_model"
+

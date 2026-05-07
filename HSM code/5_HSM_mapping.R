@@ -30,7 +30,7 @@ Final_version <- c("Y") #Final model output? Y/N
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_final_model"
-model_scores_date <- c("2026-04-23")#c("2026-03-04") #
+model_scores_date <- c("2026-04-27")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -62,13 +62,28 @@ Loggers <- Ref_locs %>% filter(str_detect(Type, "logger"))
 # Formatting ----
 #
 #
-basetheme <- theme_classic()+
+map_basetheme <- theme_classic()+
   theme(
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
     axis.title = element_blank(),#element_text(size = 14, color = "black"), 
     axis.text =  element_text(size = 15, color = "black", family = "Arial"),
     axis.text.x = element_text(angle = 30, vjust = 0.5)
   )
+#
+base_theme <- ggplot2::theme_classic() +
+  ggplot2::theme(
+    axis.title = element_text(size = 20, face = "bold", color = "black", family = "Arial"),
+    axis.text = ggplot2::element_text(size = 18, family = "Arial", color = "black"),
+    axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
+    axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
+    axis.ticks = element_line(color = "black", linewidth = 0.1),
+    axis.ticks.length = unit(-0.15, "cm"),
+    panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
+    plot.margin = grid::unit(c(0.05, 0, 0, 0), "cm"),
+    plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
+    plot.caption = ggplot2::element_text(face = "italic", size = 9),
+    legend.title = element_text(size = 12, family = "Arial"),
+    legend.text = element_text(size = 10, family = "Arial"))
 #
 legendtheme <- theme(
   legend.title = element_text(size = 14, color = "black", family = "Arial"),
@@ -78,10 +93,9 @@ legendtheme <- theme(
 )
 #
 papertheme <- theme(
-  axis.text = element_text(size = 13),
-  axis.title = element_text(size = 14),
-  plot.title =  element_blank(), plot.margin = margin(t = 10, r=10)
+  plot.title =  element_blank(), plot.margin = margin(t = 10, r=15)
 )
+#
 #
 SL_overview_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.055, st_bbox(Site_area)["xmax"]+0.095),
                              ylim = c(st_bbox(Site_area)["ymin"]-0.045, st_bbox(Site_area)["ymax"]+0.045))
@@ -93,6 +107,9 @@ SS_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.015, st_bbox(Site_area
                     ylim = c(st_bbox(Site_area)["ymin"]-0.005, st_bbox(Site_area)["ymax"]+0.010))
 SS_logger_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.17),
                              ylim = c(st_bbox(Site_area)["ymin"]-0.02, st_bbox(Site_area)["ymax"]+0.02))
+#
+#
+#
 #
 # Model summary ----
 #
@@ -268,7 +285,7 @@ HSMmodel %>%
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 36000), breaks = seq(0, 36000, 12000))+ #2000000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))+#, breaks = seq(0, 36000, 12000))+ #2000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme + theme(axis.text.x = element_text(size = 11, angle = 20)))
@@ -296,7 +313,7 @@ ggsave(
             color = "black", bg.color = "white")+
   annotate("text", label = "Atlantic\nOcean", x = -80.12, y = 27.25, # UPDATE AS NEEDED
            fontface = "italic", size = 5, family = "Arial")+
-  basetheme +
+   map_basetheme +
    theme(panel.background = element_rect(fill = "#CCFFFF"))+
   SS_overview_zoom)
 #
@@ -354,17 +371,14 @@ ggsave(
             fontface = "italic", size = 5, family = "Arial")+
    # Extra notes
    geom_text(aes(-82.87, 29.37, label = "Suwannee\nRiver", fontface = "italic"), color = "black", size = 4.25)+
-      geom_segment(aes(x = -83.065, y = 29.36, xend = -82.91, yend = 29.37), linewidth = 1)+
+   geom_segment(aes(x = -83.065, y = 29.36, xend = -82.91, yend = 29.37), linewidth = 1)+
    geom_text(aes(-82.87, 29.13, label = "Waccasassa\nBay", fontface = "italic"), color = "black", size = 3.5)+
    geom_text(aes(-82.87, 29.26, label = "Waccasassa\nRiver", fontface = "italic"), color = "black", size = 4.25)+
-      geom_segment(aes(x = -82.80, y = 29.175, xend = -82.83, yend = 29.25), linewidth = 1)+
+   geom_segment(aes(x = -82.80, y = 29.175, xend = -82.83, yend = 29.25), linewidth = 1)+
    # Formatting
-   theme_classic()+
+   theme_classic()+ map_basetheme + legendtheme +
    scale_color_manual(values = c("#333333", "#D55E00"))+
    scale_shape_manual(values = c(16, 15))+
-   theme(panel.border = element_rect(color = "black", fill = NA), 
-         axis.title = element_text(size = 12, color = "black"), 
-         axis.text =  element_text(size = 10, color = "black"))+
    SS_logger_zoom
 )
 #
@@ -386,7 +400,7 @@ ggsave(
 (p3 <- ggplot()+
    geom_sf(data = HSM_scores, aes(color = OystAV)) +
    geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-   basetheme + legendtheme +
+   map_basetheme + legendtheme +
    scale_color_viridis_c(limits = c(0,1))+
    labs(color = "Oyster habitat") + # UPDATE AS NEEDED
    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
@@ -417,7 +431,7 @@ if(Final_version == "Y"){
 (p4 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = BuffAV)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    basetheme + legendtheme +
+    map_basetheme + legendtheme +
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Oyster buffer") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
@@ -448,7 +462,7 @@ if(Final_version == "Y"){
 (p5 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = SgrsAV)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    basetheme + legendtheme +
+    map_basetheme + legendtheme +
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Seagrass habitat") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
@@ -479,7 +493,7 @@ if(Final_version == "Y"){
 (p5 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = ChnlTO)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    basetheme + legendtheme +
+    map_basetheme + legendtheme +
     scale_color_viridis_c()+
     labs(color = "Channels") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
@@ -512,7 +526,7 @@ if(Final_version == "Y"){
 (p6 <- ggplot()+
    geom_sf(data = HSM_scores, aes(color = SAV)) +
    geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-   basetheme + legendtheme +
+   map_basetheme + legendtheme +
    scale_color_viridis_c(limits = c(0,1))+
    labs(color = "Salinity") + # UPDATE AS NEEDED
    theme(axis.text.x = element_text(angle = 0, vjust = 0)) +
@@ -543,7 +557,7 @@ if(Final_version == "Y"){
 (p7 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = TAV)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    basetheme + legendtheme +
+    map_basetheme + legendtheme +
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Temperature") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
@@ -573,19 +587,32 @@ if(Final_version == "Y"){
 # Flow
 (p7.5 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = FAV)) +
-    basetheme + legendtheme +
+    geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
+    map_basetheme + legendtheme +
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Flow") + # UPDATE AS NEEDED
-    theme(axis.text.x = element_text(angle = 0, vjust = 0)))
+    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
+    SS_zoom)
 #
-ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
-  plot = p7.5,
-  width = 9,
-  height = 5,
-  units = "in",
-  dpi = 300 # Use 300 dpi for high quality
-)
+if(Final_version == "Y"){
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Flow.png"),
+    plot = p7.5,
+    width = 9,
+    height = 5,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+} else {
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
+    plot = p7.5,
+    width = 9,
+    height = 5,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  ) 
+}
 #
 #
 #
@@ -595,7 +622,7 @@ ggsave(
 (p8 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = HSMgrp_f, fill = HSMgrp_f), show.legend = TRUE) +
    geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-   basetheme + legendtheme +
+   map_basetheme + legendtheme +
     scale_color_viridis_d(limits = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
                                      "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)",
                                      "[0.8,0.9)", "[0.9,1]"))+ 
@@ -628,13 +655,59 @@ if(Final_version == "Y"){
 }
 #
 #
+# Scores hist
+HSM_scores <- HSM_scores %>%
+  mutate(
+    HSMgrp_f = factor(
+      HSMgrp_f,
+      levels = c(
+        "[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
+        "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)",
+        "[0.8,0.9)", "[0.9,1]"
+      )
+    ))
+(p8.5 <- ggplot(HSM_scores, aes(x = HSMgrp_f)) +
+    geom_histogram(stat = "count", fill = "gray50", color = "black") +
+    labs(
+      title = "Jenks Breakpoints Overlay",
+      x = "Suitability score",
+      y = "Count"
+    ) +
+    base_theme + papertheme + 
+    theme(panel.border = element_blank(), 
+          axis.text.x = element_text(angle = 20, hjust = 0.8))+
+    scale_x_discrete(drop = FALSE)+
+    scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))) #SL 32000, SS 
+#
+if(Final_version == "Y"){
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMgrp_hist.png"),
+    plot = p8.5,
+    width = 8,
+    height = 4,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+} else {
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMgrp_hist.png"),
+    plot = p8.5,
+    width = 8,
+    height = 4,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+}
+#
+#
+#
 ## Jenks breaks
 #Make sure in proper order:
 HSM_scores <- HSM_scores %>% mutate(HSMjb_f = factor(HSMjb_f, levels = c("Low", "Medium", "High")))
 (p9 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = HSMjb_f, fill = HSMjb_f)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    basetheme + legendtheme +
+    map_basetheme + legendtheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
     labs(color = "Jenks breaks", fill = "Jenks breaks") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
@@ -661,12 +734,53 @@ if(Final_version == "Y"){
   )
   }
 #
+# Jenks hist
+jb_breaks <- c(0.00, 0.43, 0.61)
+(p9.5 <- ggplot(HSM_scores, aes(x = HSM_f)) +
+  geom_histogram(fill = "gray50", color = "black", bins = 30, center = 0.05) +
+  geom_vline(xintercept = jb_breaks, linetype = "dashed", linewidth = 1, color = "red") +
+  ggrepel::geom_text_repel(data = data.frame(x = jb_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts+148000)), #-1500
+                           aes(x = x, y = y, label = round(x, 2)), size = 4.75, color = "red", angle = 0, direction = "y", 
+                           nudge_y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                           segment.color = NA)+
+  labs(
+    title = "Jenks Breakpoints Overlay",
+    x = "HSM score",
+    y = "Count"
+  ) +
+  base_theme + papertheme + 
+  theme(panel.border = element_blank())+
+  scale_x_continuous(expand = c(0,0), limits = c(-0.005, 1.0), breaks = seq(0, 1, 0.1))+
+  scale_y_continuous(expand = c(0,0), limits = c(0, 1600000))) #20000, 1600000
 #
-## Quartile breaks
+if(Final_version == "Y"){
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMjb_hist.png"),
+    plot = p9.5,
+    width = 8,
+    height = 4,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+} else {
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMjb_hist.png"),
+    plot = p9.5,
+    width = 8,
+    height = 4,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+}
+#
+#
+#
+#
+## Quantile breaks
 (p10 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = HSM_q4_f, fill = HSM_q4_f)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    basetheme + legendtheme +
+    base_theme + legendtheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
     labs(color = "Quartile breaks", fill = "Quartile breaks") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
@@ -694,6 +808,47 @@ if(Final_version == "Y"){
 }
 #
 #
+# Quantile hist
+q4_breaks <- c(0.00, 0.49, 0.51, 0.54)
+(p10.5 <- ggplot(HSM_scores, aes(x = HSM_f)) +
+    geom_histogram(fill = "gray50", color = "black", bins = 30, center = 0.05) +
+    geom_vline(xintercept = q4_breaks, linetype = "dashed", linewidth = 1, color = "red") +
+    ggrepel::geom_text_repel(data = data.frame(x = q4_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts)), #1500
+                             aes(x = x, y = y, label = round(x, 2)), size = 4.75, color = "red", angle = 0, direction = "y", 
+                             nudge_y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                             segment.color = NA)+
+    labs(
+      title = "Quartile Breakpoints Overlay",
+      x = "HSM score",
+      y = "Count"
+    ) +
+    base_theme + papertheme + 
+    theme(panel.border = element_blank())+
+    scale_x_continuous(expand = c(0,0), limits = c(-0.005, 1.0), breaks = seq(0, 1, 0.1))+
+    scale_y_continuous(expand = c(0,0), limits = c(0, 1600000))) #20000
+#
+if(Final_version == "Y"){
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMq4_hist.png"),
+    plot = p10.5,
+    width = 8,
+    height = 4,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+} else {
+  ggsave(
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMq4_hist.png"),
+    plot = p10.5,
+    width = 8,
+    height = 4,
+    units = "in",
+    dpi = 300 # Use 300 dpi for high quality
+  )
+}
+#
+#
+#
 # Average score summary ####
 #
 # Channels coverage
@@ -707,19 +862,19 @@ Ave_scores <- HSM_scores %>%
   dplyr::select(PGID, ends_with("AV"))
 # Mean overall
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ mean(.x, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(mean(.x, na.rm = TRUE),2)))
 # Non-zero
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ sum(.x != 0, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(sum(.x != 0, na.rm = TRUE),2)))
 # Zeros
 Ave_scores %>%
   summarise(across(OystAV:FAV, ~ sum(.x == 0, na.rm = TRUE)))
 # Mean non-zero
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ mean(.x != 0, na.rm = TRUE)))
-# Cells >= 0.5
-Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ sum(.x >= 0.5, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(mean(.x != 0, na.rm = TRUE),3)))
 # Cells >= 0.7
 Ave_scores %>%
-  summarise(across(OystAV:FAV, ~ sum(.x >= 0.7, na.rm = TRUE)))
+  summarise(across(OystAV:FAV, ~ round(sum(.x >= 0.7, na.rm = TRUE),3)))
+# Cells >= 0.9
+Ave_scores %>%
+  summarise(across(OystAV:FAV, ~ round(sum(.x >= 0.9, na.rm = TRUE),3)))

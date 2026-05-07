@@ -980,9 +980,9 @@ model_data <- c("scores")
 #
 ### Calculate total HSM score
 if(model_data == "all"){
-  assign(paste0(Site_Code, "_", Version, "_data_totals"), HSMfunc$calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data"))))
+  assign(paste0(Site_Code, "_", Version, "_data_totals"), HSMfunc$calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_data")), nyears = 5))
 } else {
-  assign(paste0(Site_Code, "_", Version, "_data_totals"), HSMfunc$calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_only"))))
+  assign(paste0(Site_Code, "_", Version, "_data_totals"), HSMfunc$calculate_totals(get(paste0(Site_Code, "_", Version, "_scores_only")), nyears = 5))
 }
 #
 # Clean model data frame
@@ -1164,14 +1164,14 @@ ggplot(HSM_data_grps, aes(x = HSMgrp)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 120000))+
+  scale_y_continuous(expand = c(0,0), limits = c(0, 3000000), breaks = seq(0, 3000000, 500000))+ #120000, 3000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme + theme(axis.text.x = element_text(size = 11, angle = 20))
 ### SAVE PLOT: SiteCode_version_HSMscores_hist - ~850 * auto 600 paper
 #
 summary(HSM_data_grps$HSMgrp)
-hsummary(HSM_data_grps$HSMgyr)
+summary(HSM_data_grps$HSMgyr)
 summary(HSM_data_grps$HSMjb)
 #Jenks breaks summary:
 table(
@@ -1191,11 +1191,11 @@ jenks.tests(classIntervals(HSM_data$HSM, style = "fixed", fixedBreaks = jenks_br
 #abline(v = jenks_breaks, col = "red", lwd = 2, lty = 2)
 #text(x = jenks_breaks, y = 59500, labels = round(jenks_breaks, 2), pos = 4, col = "red", cex = 1.15)
 #SL: -15000 - repel; ylim - 60000
-#SS: -750000 - repel; ylim - 2000000
+#SS: -250000 - repel; ylim - 2500000
 ggplot(HSM_data, aes(x = HSM)) +
   geom_histogram(fill = "gray50", color = "black", bins = 30, boundary = 0) +
   geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-15000), 
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-250000), 
                            aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
@@ -1206,7 +1206,7 @@ ggplot(HSM_data, aes(x = HSM)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 60000)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 2500000)) + #60000
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0, 1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme
@@ -1225,11 +1225,11 @@ summary(HSM_data_grps$HSM_q4)
     ))
 #
 #SL: -15000 - repel; ylim - 60000
-#SS: -750000 - repel; ylim - 2000000
+#SS: -350000 - repel; ylim - 2500000
 ggplot(HSM_data, aes(HSM)) +
   geom_histogram(bins = 30, fill = "grey50", color = "black", boundary = 0) +
   geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-15000), 
+  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-350000), 
                            aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.35,
                            segment.color = NA)+
@@ -1240,7 +1240,7 @@ ggplot(HSM_data, aes(HSM)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0))+#, limits = c(0, 60000)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 2500000)) +
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0,1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))+
   papertheme
