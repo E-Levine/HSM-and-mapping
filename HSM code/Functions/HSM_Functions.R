@@ -229,7 +229,7 @@ curve_output <- function(LineType, FitType, Parameter_values, Parameter_limits, 
   curve_points <<- line_dataframe(LineType, Parameter_values, step_values, Parameter_limits)
   #
   # Get values to calculate for:
-  if(length(Parameter_limits) == 2){
+  if(length(Parameter_limits) == 2 & LineType != "categorical"){
     seq_values <- seq(Parameter_limits[1], Parameter_limits[2], by = Parameter_step) 
   } else {seq_values <- NA} 
   #
