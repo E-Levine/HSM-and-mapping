@@ -215,8 +215,13 @@ load_WQ_data <- function(){
     files <- list.files(path = "Data/Compiled-data/", 
                         pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
     WQ_data <- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
-      dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
-                    Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
+      rename_with(~str_to_title(.x)) %>%
+      dplyr::rename(Latitude = contains("Latitude"), 
+                    Longitude = contains("Longitude"), 
+                    StationID = contains("LocationIdentifier"),
+                    Parameter = contains("CharacteristicName"), 
+                    Value = contains("MeasureValue"),
+                    Date = contains("Timestamp"))
     
     #Check if Latitude and Longitude columns exist and are not all NA
     lat_exists <- "Latitude" %in% colnames(WQ_data) && any(!is.na(WQ_data$Latitude))
@@ -334,7 +339,12 @@ load_site_grid <- function(StateGrid, SiteArea, Alt_Grid = NA) {
   return(Site_Grid)
 }
 #
-summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Time_period = c("Year", "Month", "Quarter", "YearMonth", "YearQuarter"), Year_range = "NA", Quarter_start = NA, Month_range = NA, Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), Threshold_parameters = c(NA, "above", "below")) {
+summarize_data <- function(data_frame = WQ_data, 
+                           Parameter_name = Param_name, 
+                           Time_period = c("Year", "Month", "Quarter", "Week", "YearMonth", "YearQuarter", "YearWeek"), 
+                           Year_range = "NA", Quarter_start = NA, Month_range = NA, 
+                           Summ_method = c("Means", "Mins", "Maxs", "Range", "Range_values", "Threshold"), 
+                           Threshold_parameters = c(NA, "above", "below")) {
   #
   Time_period <- match.arg(Time_period)
   Summ_method <- match.arg(Summ_method)
@@ -365,16 +375,31 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
   #
   #Function to filter and prepare temp_df based on Parameter_name
   get_temp_df <- function(param_name) {
-    data_frame %>% 
+    #
+    temp <- data_frame
+    #
+    if ("ActivityStartDate" %in% names(temp)) {
+      temp <- temp %>%
+        rename(Date = ActivityStartDate)
+    } else if (!"Date" %in% names(temp)) {
+      stop("No ActivityStartDate or Date column found.")
+    }
+    temp %>% 
       #Filter to desired parameter
       dplyr::filter(str_detect(Parameter, param_name)) %>%
       #Add in missing group columns
-      mutate(Year = year(as.Date(ActivityStartDate)),
-             Month = lubridate::month(as.Date(ActivityStartDate), label = TRUE)) %>%
+      mutate(Date = as.Date(Date),
+             Year = year(Date),
+             Month = lubridate::month(Date, label = TRUE),
+             # Sunday-start week
+             Week_n = floor_date(Date,unit = "week", week_start = 7),
+             # Formatted week and year-week labels
+             Week = sprintf("%02d", lubridate::week(Week_n)),
+             YearWeek = paste0(year(Week_n), "_W", sprintf("%02d", lubridate::week(Week_n)))) %>%
       #Assign quarters, starting at month specified or default start of January
-      {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(as.Date(ActivityStartDate), Quarter_start)) else mutate(., Quarter = quarter(as.Date(ActivityStartDate)))} %>%
+      {if(!is.na(Quarter_start)) mutate(., Quarter = set_quarters(Date, Quarter_start)) else mutate(., Quarter = quarter(Date))} %>%
       #Filter to specified months if applicable
-      {if(length(Month_range) == 2) filter(., between(month(as.Date(ActivityStartDate)), Month_range[1], Month_range[2])) else . }
+      {if(length(Month_range) == 2) filter(., between(month(Date), Month_range[1], Month_range[2])) else . }
   }
   #
   #Initial filtering
@@ -418,6 +443,8 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
       else if (Time_period == "YearMonth") group_by(., Year, Month)
       else if (Time_period == "Quarter") group_by(., Quarter)
       else if (Time_period == "YearQuarter") group_by(., Year, Quarter)
+      else if (Time_period == "Week") group_by(., Week)
+      else if (Time_period == "YearWeek") group_by(., YearWeek)
       else (.)}
   #
   ##Summarize data using method specified
@@ -440,7 +467,9 @@ summarize_data <- function(data_frame = WQ_data, Parameter_name = Param_name, Ti
   output_data <- summary_data %>% ungroup() %>% 
     pivot_longer(cols = intersect(c("Mean", "Minimum", "Maximum", "Range", "Threshold"), names(summary_data)), names_to = "Statistic", values_to = "Value") %>%
     pivot_wider(names_from = "Parameter", values_from = "Value") %>% 
-    dplyr::select(any_of(c("Year", "Month", "YearMonth", "Quarter", "YearQuarter")), Longitude, Latitude, Statistic, any_of("n"), all_of(Param_name)) %>% drop_na() %>% ungroup() %>%
+    dplyr::select(any_of(c("Year", "Month", "YearMonth", "Quarter", "YearQuarter", "Week", "YearWeek")), Longitude, Latitude, Statistic, any_of("n"), all_of(Param_name)) %>% 
+    drop_na() %>% 
+    ungroup() %>%
     rename(Working_Param = any_of(Param_name))
   #
   message(Param_name," summarized by ", Summ_method, " over ", Time_period)
@@ -467,6 +496,8 @@ station_means <- function(df, Range, StartYr, EndYr, Time_period){
       else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Week") group_by(., Week, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearWeek") group_by(., Year, Week, Week_n, YearWeek, Estuary, Latitude, Longitude, Parameter)
       else (.)} %>%
     summarise(Mean = mean(Value, na.rm = TRUE), n = sum(!is.na(Value)))
   return(temp)
@@ -481,6 +512,8 @@ station_mins <- function(df, Range, StartYr, EndYr, Time_period){
       else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Week") group_by(., Week, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearWeek") group_by(., Year, Week, Week_n, YearWeek, Estuary, Latitude, Longitude, Parameter)
       else (.)} %>%
     summarise(Minimum = min(Value, na.rm = TRUE), n = sum(!is.na(Value)))
   return(temp)
@@ -495,6 +528,8 @@ station_maxs <- function(df, Range, StartYr, EndYr, Time_period){
       else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Week") group_by(., Week, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearWeek") group_by(., Year, Week, Week_n, YearWeek, Estuary, Latitude, Longitude, Parameter)
       else (.)} %>%
     summarise(Maximum = max(Value, na.rm = TRUE), n = sum(!is.na(Value)))
   return(temp)
@@ -509,6 +544,8 @@ station_range <- function(df, values, Range, StartYr, EndYr, Time_period){
       else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Week") group_by(., Week, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearWeek") group_by(., Year, Week, Week_n, YearWeek, Estuary, Latitude, Longitude, Parameter)
       else (.)} %>%
     summarise(Maximum = max(Value, na.rm = TRUE),
               Minimum = min(Value, na.rm = TRUE), 
@@ -527,6 +564,8 @@ station_threshold <- function(df, Range, StartYr, EndYr, Time_period, Threshold_
       else if (Time_period == "YearMonth") group_by(., Year, Month, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "Quarter") group_by(., Quarter, Estuary, Latitude, Longitude, Parameter)
       else if (Time_period == "YearQuarter") group_by(., Year, Quarter, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "Week") group_by(., Week, Estuary, Latitude, Longitude, Parameter)
+      else if (Time_period == "YearWeek") group_by(., Year, Week, Week, YearWeek, Estuary, Latitude, Longitude, Parameter)
       else (.)} 
   #Calculate number above/below threshold and total number observations
   temp <- left_join(temp_raw %>% {if (length(Threshold_parameters) == 2 && Threshold_parameters[1] %in% c("above", "below") && is.numeric(threshold_value)) {
@@ -558,8 +597,8 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
     Individual <- "Statistic"
   }
   # Validate Individual parameter
-  if (!Individual %in% c("Month", "Year", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
-    stop("Individual must be 'Month', 'Year', or 'Statistic'.")
+  if (!Individual %in% c("Month", "Year", "Week", "YearWeek", "Statistic")) {
+    stop("Individual must be 'Month', 'Year', 'Week', 'YearWeek', or 'Statistic'.")
   }
   # Check for Month column if Individual == "Month"| "Year"
   if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
@@ -567,6 +606,13 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
   }
   if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
     stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
+  if (Individual == "Week" && !"Week" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Week' column when Individual = 'Week'.")
+  }
+  
+  if (Individual == "YearWeek" && !"YearWeek" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'YearWeek' column when Individual = 'YearWeek'.")
   }
   # Determine what to loop over
   # Month
@@ -587,12 +633,27 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
       return(NULL)
     }
     loop_name <- "Year-Statistic"
+  } else if (Individual == "Week") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(Week, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    loop_name <- "Week-Statistic"
+  } else if (Individual == "YearWeek") {
+    combo_df <- Site_data_spdf@data %>% dplyr::select(YearWeek, Statistic) %>% distinct()
+    loop_vars <- combo_df
+    loop_name <- "YearWeek-Statistic"
   } else {
     loop_vars <- unique(Site_data_spdf@data$Statistic)
     loop_name <- "Statistic"
   }
+  
+  if (nrow(loop_vars) == 0 && Individual != "Statistic") {
+    warning(paste("No", Individual, "values found in data."))
+    return(NULL)
+  }
+  
   #Progress bar setup
-  total_steps <- if (Individual == "Month" | Individual == "Year") nrow(loop_vars) * 4 + 2 else length(loop_vars) * 4 + 2
+  total_steps <- if (Individual %in% c("Month", "Year", "Week", "YearWeek")) {nrow(loop_vars) * 4 + 2
+    } else {length(loop_vars) * 4 + 2}  
   pb <- progress_bar$new(
     format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
     total = total_steps,
@@ -606,8 +667,9 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
   tryCatch({
     pb$tick(tokens = list(step = "Set up"))
     Sys.sleep(1/1000)
+    
     #Notify if Threshold statistic is present
-    if(Individual != "Month" && any(stats == "Threshold")){
+    if(Individual != "Month" && any(loop_vars$Statistic == "Threshold")){
       cat("Threshold evaluation is being used. Values are the proportion of all samples above or below the set threshold value.\n")
     }
     #Initialize lists to store results
@@ -628,6 +690,12 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
       } else if (Individual == "Year") {
         filtered_data <- Site_data_spdf[Site_data_spdf@data$Year == loop_vars$Year[i] & 
                                           Site_data_spdf@data$Statistic == loop_vars$Statistic[i],]
+      } else if (Individual == "Week") {
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$Week == loop_vars$Week[i] &
+                                          Site_data_spdf@data$Statistic == loop_vars$Statistic[i], ]
+      } else if (Individual == "YearWeek") {
+        filtered_data <- Site_data_spdf[Site_data_spdf@data$YearWeek == loop_vars$YearWeek[i] &
+                                          Site_data_spdf@data$Statistic == loop_vars$Statistic[i], ]
       } else {
         filtered_data <- Site_data_spdf[Site_data_spdf@data$Statistic == loop_vars[i], ]
       }
@@ -676,6 +744,10 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         col_name <- paste0("Pred_Value_", loop_vars$Month[i], "_", loop_vars$Statistic[i])
       } else if (Individual == "Year") {
         col_name <- paste0("Pred_Value_", loop_vars$Year[i], "_", loop_vars$Statistic[i])
+      } else if (Individual == "Week") {
+        col_name <- paste0("Pred_Value_", format(loop_vars$Week[i], "%Y%m%d"), "_", loop_vars$Statistic[i])
+      } else if (Individual == "YearWeek") {
+        col_name <- paste0("Pred_Value_", loop_vars$YearWeek[i], "_", loop_vars$Statistic[i])
       } else {
         col_name <- paste0("Pred_Value_", loop_vars[i])
       }
@@ -683,7 +755,17 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         rename(!!col_name := Pred_Value)#rename(Pred_Value_idw = Pred_Value)
       #
       # Store the result
-      key <- if (Individual == "Month") paste(loop_vars$Month[i], loop_vars$Statistic[i], sep = "_") else if (Individual == "Year") paste(loop_vars$Year[i], loop_vars$Statistic[i], sep = "_") else as.character(loop_vars[i])
+      if (Individual == "Month") {
+        key <- paste(loop_vars$Month[i], loop_vars$Statistic[i], sep = "_") 
+        } else if (Individual == "Year") {
+          key <- paste(loop_vars$Year[i], loop_vars$Statistic[i], sep = "_") 
+        } else if (Individual == "Week") {
+          key <- paste(loop_vars$Week[i], loop_vars$Statistic[i], sep = "_")
+        } else if (Individual == "YearWeek") {
+          key <- paste(loop_vars$YearWeek[i], loop_vars$Statistic[i], sep = "_")
+        } else {
+          key <- as.character(loop_vars[i])
+          }
       idw_results[[key]] <- centroids_joined
       #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
       #site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID") %>%
@@ -742,6 +824,52 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
           combined_sf <- combined_sf %>%
             mutate(!!paste0("Pred_Value_Combined_",stat) := {
               temp_df <- st_drop_geometry(dplyr::select(., all_of(yearly_cols)))  # Drop geometry for rowMeans
+              ifelse(
+                rowSums(!is.na(temp_df)) == 0,
+                NA_real_,
+                rowMeans(temp_df, na.rm = TRUE))
+            }
+            )
+        }
+      }
+    }
+    #
+    if (Individual == "Week") {
+      # Group monthly columns by statistic and compute mean per statistic
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        weekly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(weekly_cols) > 0) {
+          # Ensure monthly columns are numeric
+          if (!all(sapply(combined_sf[weekly_cols], is.numeric))) {
+            stop("Yearly prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(!!paste0("Pred_Value_Combined_",stat) := {
+              temp_df <- st_drop_geometry(dplyr::select(., all_of(weekly_cols)))  # Drop geometry for rowMeans
+              ifelse(
+                rowSums(!is.na(temp_df)) == 0,
+                NA_real_,
+                rowMeans(temp_df, na.rm = TRUE))
+            }
+            )
+        }
+      }
+    }
+    #
+    if (Individual == "YearWeek") {
+      # Group monthly columns by statistic and compute mean per statistic
+      stats <- unique(loop_vars$Statistic)
+      for (stat in stats) {
+        weekly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
+        if (length(weekly_cols) > 0) {
+          # Ensure monthly columns are numeric
+          if (!all(sapply(combined_sf[weekly_cols], is.numeric))) {
+            stop("Yearly prediction columns must be numeric.")
+          }
+          combined_sf <- combined_sf %>%
+            mutate(!!paste0("Pred_Value_Combined_",stat) := {
+              temp_df <- st_drop_geometry(dplyr::select(., all_of(weekly_cols)))  # Drop geometry for rowMeans
               ifelse(
                 rowSums(!is.na(temp_df)) == 0,
                 NA_real_,

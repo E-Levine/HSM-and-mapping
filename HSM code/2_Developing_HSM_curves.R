@@ -9,13 +9,13 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
 #
 ##Input the site code and version for this project. (Required)
 Site_Code <- c("SL") #two-letter site code used throughout for identifying files
-Version <- c("v1") #current version number of the model for the specified site
+Version <- c("RE") #current version number of the model for the specified site
 source("HSM code/Functions/HSM_Functions.R")
 #
 ##Naming convention for parameter - change with each new parameter and version of a parameter to score (i.e. if multiple Salinity curves will be used don't jsut use "Salinity".)
 #Name will be used in Excel file/sheet names and figure title. If redoing curves, name should be the same as the Excel sheet name.
-Parameter_name = c("Months / Year") # X-axis
-Param_title = c("Outlier flow rate")   # Title
+Parameter_name = c("Salinity") # X-axis
+Param_title = c("Salinity")   # Title
 #
 ###Function to create habitat suitability parameter score curves.
 ##Inputs required: LineType, FitType, Parameter_values, Parameter_limits, Parameter_step, Parameter_title, Title, show_points, save_option 
@@ -44,12 +44,12 @@ Param_title = c("Outlier flow rate")   # Title
 #
 #
 #Continuous data example:
-curve_output(LineType = "straight", FitType = "soft", 
-             Parameter_values = c(1, 0.75, 0.5, 0.25, 0), Parameter_limits = c(0, 1), Parameter_step = 0.01, 
-             show_points = "Y") #, step_values = c(0, 0.25, 1, 0.75, 0)), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
+curve_output(LineType = "Gaussian", FitType = "hard", 
+             Parameter_values = c(5, 10, 15, 25, 32.5, 40), Parameter_limits = c(0, 45), Parameter_step = 0.01, 
+             show_points = "N") #, step_values = c(0, 0.25, 1, 0.75, 0)), bimodal_Yvalues = c(0, 0.5, 0.25, 1, 0))
 #Categorical data example:
 curve_output(LineType = "categorical", FitType = "NA", 
-             Parameter_values = c("Offshore, Primary,\nLarge vessel,\nGeneral, Secondary", "Tertiary", "Terminus", "Shallow,\nShortcut,\nNo designation"), Parameter_limits = c(1, 0.75, 0.5, 0.25), 
+             Parameter_values = c("Dense Shell", "Scattered Shell"), Parameter_limits = c(1, 0.25), 
              show_points = "N")
 #p <- p + labs(subtitle = expression(italic("Buffer distance (ft) = SI Score * 100")))
 #
@@ -103,6 +103,8 @@ pred2 <- pred2 %>% filter(Param < 0.751)
 curves <- load_curve_files("SL", "v1", include_regression_curves = FALSE)
 #
 # Formatting:
+extrafont::loadfonts(device = "win")
+#
 base_theme <- ggplot2::theme_classic() +
   ggplot2::theme(
     axis.title = element_text(size = 20, face = "bold", color = "black", family = "Arial"),
@@ -117,23 +119,23 @@ base_theme <- ggplot2::theme_classic() +
     legend.title = element_text(size = 12, family = "Arial"),
     legend.text = element_text(size = 10, family = "Arial"))
 #
-(p1 <- curves$Seagrass %>%
+(p1 <- p + #curves$Seagrass %>%
     #rbind(data.frame(Param = "> 1000 m", Value = 0)) %>%
-    mutate(Param = case_when(Param == "Absent/None/NA" ~ "Unclassfied/\nNone", Param == "Patchy" ~ "Discontinuous",TRUE ~ Param)) %>%
-    mutate(Param = fct_reorder(Param, Value, .desc = TRUE)) %>%
-    ggplot(aes(Param, Value))+
-    geom_histogram(stat = "identity", fill = "#333333")+
+    #mutate(Param = case_when(Param == "Absent/None/NA" ~ "Unclassfied/\nNone", Param == "Patchy" ~ "Discontinuous",TRUE ~ Param)) %>%
+    #mutate(Param = fct_reorder(Param, Value, .desc = TRUE)) %>%
+    #ggplot(aes(Param, Value))+
+    #eom_histogram(stat = "identity", fill = "#333333")+
     #geom_point()+
-    xlab("Seagrass")+
-    ylab("SI score")+
-    base_theme+
-    scale_x_discrete(expand = c(0,0.5))+
-    #scale_x_continuous(expand = c(0,0.5))+
+    #xlab("Seagrass")+
+    #ylab("SI score")+
+    base_theme+ theme(plot.title = element_blank())+
+    #scale_x_discrete(expand = c(0,0.5))+
+    scale_x_continuous(expand = c(0,0.5))+
     scale_y_continuous(expand = c(0,0)))
 #
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_Seagrass.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_Salinity_pres.png"),
   plot = p1,
   width = 8,
   height = 4,

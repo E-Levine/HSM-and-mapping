@@ -17,10 +17,10 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                install = TRUE) 
 #
 #
-Site_code <- c("WI")       #Two letter estuary code
-Version <- c("v1")         #For saving plots
-Start_year <- c("2020")
-End_year <- c("2024")
+Site_code <- c("SL")       #Two letter estuary code
+Version <- c("RE")         #For saving plots
+Start_year <- c("1965")
+End_year <- c("2025")
 #
 WQ <- new.env()
 source("Code/WQ_functions_flow.R", local = WQ)
@@ -33,15 +33,14 @@ library(dataRetrieval)
 #Parameter code: 00060 = mean daily discharge, 00061 = instantaneous discharge
 # 00480 = Salinity, 00095 = Specific conductance
 #Statistic_id: 00003 = Mean
-(temp_data <- read_waterdata_daily(monitoring_location_id = c("USGS-02310700", "USGS-02313700", "USGS-02313230", "USGS-02313250", "USGS-02310750",
-                                                              "USGS-285447082445100", "USGS-285531082412600", "USGS-02310752", "USGS-02313272", "USGS-02310712", "USGS-284506082435801"), 
-                                  parameter_code = c("00060", "00061"),
+(temp_data <- read_waterdata_daily(monitoring_location_id = c("USGS-02277100", "USGS-02277110"),
+                                  parameter_code = c("00480", "00010", "90860"),
                                   properties = c("value", "statistic_id", "monitoring_location_id", "parameter_code", "time", "unit_of_measure"),
                                   skipGeometry = TRUE))
-#
+#"USGS-02310700", "USGS-02313700", "USGS-02313230", "USGS-02313250", "USGS-02310750", "USGS-285447082445100", "USGS-285531082412600", "USGS-02310752", "USGS-02313272", "USGS-02310712", "USGS-284506082435801")
 unique(temp_data$parameter_code)
 #
-WQ$clean_save_usgs_data(temp_data, "2020-01-01", "2024-12-31", "flow")
+WQ$clean_save_usgs_data(temp_data, "1965-01-01", "2025-12-31", "WQ")
 #
 #
 #
@@ -79,13 +78,14 @@ devtools::install_github("USGS-R/CSI")
 library("CSI")
 #
 #
+#
 # Total daily flow for each logger
-flow_ave <- flow_raw %>% 
+flow_sum <- flow_raw %>% 
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
-  mutate(Site = Site_code, Date = as.Date(Date)) %>% 
+  mutate(Site = Site_code, Date = as.Date(Date), Value = as.numeric(Value)) %>% 
   # If using all stations as 1 run next line, if stations should be separate, remove line
-  #mutate(Station = "ALL") %>%
+  mutate(Station = "ALL") %>%
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Flow = sum(Value, na.rm = T)) %>% 
   ungroup()
@@ -119,20 +119,33 @@ salinity_ave <- salinity_raw %>% #sali_grps$data %>%
       .
     }
   } %>%
-  mutate(Site = Site_code, Date = as.Date(Date)) %>% 
+  mutate(Site = Site_code, Date = as.Date(Date), Value = as.numeric(Value)) %>% 
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Salinity = mean(Value, na.rm = T)) %>% 
   ungroup()
 #
+# Add 14day average (previous 14 days)
+salinity_ave <-  salinity_ave %>%
+  group_by(Site, Station) %>%
+  arrange(Site, Station, Date) %>%
+  mutate(days14 = slide_dbl(
+    Salinity,
+    mean,
+    .before = 13,
+    .complete = TRUE,
+    na.rm = TRUE)
+  ) %>%
+  ungroup()
 #
 #
 ## Get monthly means
 (sal_monthly <- WQ$calculate_monthly_value(salinity_ave, "Salinity"))
-(flow_monthly <- WQ$calculate_monthly_value(flow_ave, "Flow"))
+(flow_monthly <- WQ$calculate_monthly_value(flow_sum, "Flow"))
 #
 #
 #
-### Logger station mapping ###
+### 
+### Logger station mapping ####
 #
 # Map stations to confirm if all flow*salinity loggers should be related.
 # Identify any relationships not needed.
@@ -146,8 +159,8 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area
-State_Grid <- c("E2") #E2, H4
-Alt_Grid <- c("F2")
+State_Grid <- c("H4") #E2, H4
+Alt_Grid <- c(NA)
 Site_Grid <- WQ2$load_site_grid(State_Grid, Site_area, Alt_Grid = Alt_Grid)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
@@ -173,13 +186,16 @@ ggplot()+
 #
 ### Model fit and plot ####
 ## Combined data frame - not currently helpful
-monthly_data <- left_join(sal_monthly, flow_monthly)
+#monthly_data <- left_join(sal_monthly, flow_monthly)
 #head(monthly_data)
 #
+flow_train <- flow_sum %>% filter(Date >= "1997-01-01" & Date <= "2015-12-31")
+sal_train <- salinity_ave %>% filter(Date >= "1997-01-01" & Date <= "2015-12-31")
 ## Fit curve
 #library(stringr, minpack.lm, dplyr)
 models <- WQ$fit_salinity_flow_models(flow_monthly, sal_monthly)
 #Fit fails unless means used: models <- fit_salinity_flow_models(flow_ave, sal_monthly, flow_col = "Flow")
+models <- WQ$fit_salinity_flow_models(flow_train, sal_train, flow_col = "Flow", salinity_col = "Salinity")
 #
 #
 models <- WQ$filter_models(models, c("USGS-02313700-USGS-02313700", 

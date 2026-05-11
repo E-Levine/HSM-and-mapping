@@ -5,6 +5,7 @@
 #
 #
 ##Requires data file in Compiled-data folder, site KML file
+#If possible, make sure to add LL to data file if available and not already present.
 #
 #Load require packages (install as necessary)  - MAKE SURE PACMAN IS INSTALLED AND RUNNING!
 if (!require("pacman")) {install.packages("pacman")}
@@ -23,17 +24,17 @@ source("Code/WQ_functions_interpolation.R", local = WQ)
 #modeling <- new.env()
 #load("SSv1_TMean_working.RData", envir = modeling)
 #
-Site_code <- c("WI")       #Two letter estuary code
-Version <- c("v1")         #Version code for model 
-State_Grid <- c("E2")      #Two-letter StateGrid ID
-Alt_Grid <- c("F2")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("WIHSM") #Project code given to data, found in file name
-Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
-End_year <- c("2024")      #End year (YYYY) of data, found in file name
+Site_code <- c("SL")       #Two letter estuary code
+Version <- c("RE")         #Version code for model 
+State_Grid <- c("H4")      #Two-letter StateGrid ID
+Alt_Grid <- c(NA)        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("SLREHSM") #Project code given to data, found in file name
+Start_year <- c("1965")    #Start year (YYYY) of data, found in file name
+End_year <- c("2025")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
-Data_source <- c("Portal") #Required if Folder = compiled.
-Param_name <- c("Temperature, water")#Column/parameter name of interest - from WQ data file.
-Param_name_2 <- c("Monthly")#Additional identifier for parameter: i.e. Annual, Quarterly, Monthly
+Data_source <- c("logger") #Required if Folder = compiled.
+Param_name <- c("Temperature")#Column/parameter name of interest - from WQ data file.
+Param_name_2 <- c("Daily")#Additional identifier for parameter: i.e. Annual, Quarterly, Monthly
 #
 color_temp <- c("cool")    #"warm" or "cool"
 #
@@ -104,7 +105,7 @@ if(color_temp == "warm") {
 ####Summarize data based on parameter of interest - all methods####
 #
 ##Summarize data based on method specified:
-#Time_period - Period of time to group by: Year, Month, Quarter, YearMonth, YearQuarter
+#Time_period - Period of time to group by: Year, Month, Quarter, Week, YearMonth, YearQuarter, YearWeek
 #Year_range - Range of years of data to include. Blank/enter "NA" for all years, 4-digit year for one year, or enter a character string of 4-digit start year followed by 4-digit end year, separated by a dash "-"
 #Quarter_start - Starting month of quarter 1, entered as an integer corresponding to month. NA if January (1) start. Not needed if not wokring with quarters.
 #Month_range - Start and end month to include in final data, specified by month's integer value c(#, #)
@@ -112,12 +113,16 @@ if(color_temp == "warm") {
 #Threshold_parameters - Required if Summ_method = Threshold: two parameters to enter: [1] above or below, [2] value to reference entered as numeric
 #
 #library(lubridate)
+if (!"Estuary" %in% names(WQ_data)) {
+  WQ_data$Estuary <- Site_code
+}
+#
 WQ_summ <- WQ$summarize_data(WQ_data %>% drop_na(Value), 
-                          Time_period = "YearMonth", Summ_method = "Threshold",
-                          Threshold_parameters = c("below", 20), Month_range = c(5, 10)) # 
+                          Time_period = "YearWeek", Summ_method = "Means")
+                          #Threshold_parameters = c("below", 20), Month_range = c(5, 10)) # 
 #
 head(WQ_summ)
-stat <- c("ThresholdB20") #used for file naming: Means, Mins, ThresholdA35, etc.
+stat <- c("Means") #used for file naming: Means, Mins, ThresholdA35, etc.
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,"_", stat,".xlsx"), format_headers = TRUE)
 #
 #
@@ -136,8 +141,8 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitu
 ####Interpolation models####
 #
 #
-##Inverse distance weighted - updated for Month, Year
-idw_data <- WQ$perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
+##Inverse distance weighted - updated for Month, Year, Week, YearWeek
+idw_data <- WQ$perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "YearWeek")
 #saveRDS(idw_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
 #idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
 #
