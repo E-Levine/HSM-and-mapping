@@ -381,7 +381,10 @@ summarize_data <- function(data_frame = WQ_data,
     if ("ActivityStartDate" %in% names(temp)) {
       temp <- temp %>%
         rename(Date = ActivityStartDate)
-    } else if (!"Date" %in% names(temp)) {
+    } else if("Activitystartdate" %in% names(temp)) {
+      temp <- temp %>%
+        rename(Date = Activitystartdate)
+      } else if (!"Date" %in% names(temp)) {
       stop("No ActivityStartDate or Date column found.")
     }
     temp %>% 
@@ -610,7 +613,6 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
   if (Individual == "Week" && !"Week" %in% colnames(Site_data_spdf@data)) {
     stop("Site_data_spdf must have a 'Week' column when Individual = 'Week'.")
   }
-  
   if (Individual == "YearWeek" && !"YearWeek" %in% colnames(Site_data_spdf@data)) {
     stop("Site_data_spdf must have a 'YearWeek' column when Individual = 'YearWeek'.")
   }
@@ -694,8 +696,9 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         filtered_data <- Site_data_spdf[Site_data_spdf@data$Week == loop_vars$Week[i] &
                                           Site_data_spdf@data$Statistic == loop_vars$Statistic[i], ]
       } else if (Individual == "YearWeek") {
-        filtered_data <- Site_data_spdf[Site_data_spdf@data$YearWeek == loop_vars$YearWeek[i] &
-                                          Site_data_spdf@data$Statistic == loop_vars$Statistic[i], ]
+        idx <- Site_data_spdf@data$YearWeek == loop_vars$YearWeek[i] &
+          Site_data_spdf@data$Statistic == loop_vars$Statistic[i]
+        filtered_data <- Site_data_spdf[idx, ]
       } else {
         filtered_data <- Site_data_spdf[Site_data_spdf@data$Statistic == loop_vars[i], ]
       }
@@ -705,6 +708,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         next
       }
       #
+      tryCatch({
       # IDW interpolation (power=2 by default)
       idw_model <- suppressMessages(idw(formula = Working_Param ~ 1, locations = filtered_data, newdata = grid, idp = 2))
       #
@@ -745,7 +749,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
       } else if (Individual == "Year") {
         col_name <- paste0("Pred_Value_", loop_vars$Year[i], "_", loop_vars$Statistic[i])
       } else if (Individual == "Week") {
-        col_name <- paste0("Pred_Value_", format(loop_vars$Week[i], "%Y%m%d"), "_", loop_vars$Statistic[i])
+        col_name <- paste0("Pred_Value_", loop_vars$Week[i], "_", loop_vars$Statistic[i])
       } else if (Individual == "YearWeek") {
         col_name <- paste0("Pred_Value_", loop_vars$YearWeek[i], "_", loop_vars$Statistic[i])
       } else {
@@ -765,18 +769,28 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
           key <- paste(loop_vars$YearWeek[i], loop_vars$Statistic[i], sep = "_")
         } else {
           key <- as.character(loop_vars[i])
-          }
+        }
+      #
       idw_results[[key]] <- centroids_joined
+      #
+      }, error = function(e) {
+        warning(paste0(
+            "Interpolation failed for iteration ",
+            i,
+            ": ",
+            conditionMessage(e)))
+        NULL
+      })
       #Join centroid predictions back to Site_Grid polygons by row order (assuming same order)
       #site_sf_temp <- site_sf %>% left_join(st_drop_geometry(centroids_joined)[, c("PGID", "Pred_Value_idw")], by = "PGID") %>%
       #  mutate(Statistic = stats[i])
       #idw_Site[[i]] <- site_sf_temp
       #
     }
+    
     # Combine results into one sf object
     if (length(idw_results) == 0) {
-      warning("No valid interpolations performed.")
-      return(NULL)
+      stop("No valid interpolations performed.")
     }
     
     # Start with the first result
@@ -786,6 +800,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
     for (i in 2:length(idw_results)) {
       combined_sf <- left_join(combined_sf, st_drop_geometry(idw_results[[i]])[, c("PGID", names(idw_results[[i]])[grep("Pred_Value_", names(idw_results[[i]]))])], by = "PGID")
     }
+    
     # Add combined column if Individual == "Month"
     if (Individual == "Month") {
       # Group monthly columns by statistic and compute mean per statistic
@@ -818,7 +833,7 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         yearly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
         if (length(yearly_cols) > 0) {
           # Ensure monthly columns are numeric
-          if (!all(sapply(combined_sf[yearly_cols], is.numeric))) {
+          if (!all(sapply(st_drop_geometry(combined_sf[weekly_cols]), is.numeric))) {
             stop("Yearly prediction columns must be numeric.")
           }
           combined_sf <- combined_sf %>%
@@ -841,8 +856,8 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         weekly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
         if (length(weekly_cols) > 0) {
           # Ensure monthly columns are numeric
-          if (!all(sapply(combined_sf[weekly_cols], is.numeric))) {
-            stop("Yearly prediction columns must be numeric.")
+          if (!all(sapply(st_drop_geometry(combined_sf[weekly_cols]), is.numeric))) {
+            stop("Weekly prediction columns must be numeric.")
           }
           combined_sf <- combined_sf %>%
             mutate(!!paste0("Pred_Value_Combined_",stat) := {
@@ -864,8 +879,8 @@ perform_idw_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Para
         weekly_cols <- grep(paste0("Pred_Value_.*_", stat, "$"), names(combined_sf), value = TRUE)
         if (length(weekly_cols) > 0) {
           # Ensure monthly columns are numeric
-          if (!all(sapply(combined_sf[weekly_cols], is.numeric))) {
-            stop("Yearly prediction columns must be numeric.")
+          if (!all(sapply(st_drop_geometry(combined_sf[weekly_cols]), is.numeric))) {
+            stop("Year_weekly prediction columns must be numeric.")
           }
           combined_sf <- combined_sf %>%
             mutate(!!paste0("Pred_Value_Combined_",stat) := {
@@ -1158,8 +1173,8 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
   Param_name <- Parameter
   #
   # ---- Validate Individual parameter ----
-  if (!Individual %in% c("Month", "Year", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
-    stop("Individual must be 'Month', 'Year', 'Statistic'.")
+  if (!Individual %in% c("Month", "Year", "Week", "YearWeek", "Statistic")) {  # Assuming "Statistic" for original behavior; adjust as needed
+    stop("Individual must be 'Month', 'Year', 'Week', 'YearWeek', or 'Statistic'.")
   }
   # Check for Month column if Individual == "Month"| "Year"
   if (Individual == "Month" && !"Month" %in% colnames(Site_data_spdf@data)) {
@@ -1167,6 +1182,12 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
   }
   if (Individual == "Year" && !"Year" %in% colnames(Site_data_spdf@data)) {
     stop("Site_data_spdf must have a 'Year' column when Individual = 'Year'.")
+  }
+  if (Individual == "Week" && !"Week" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'Week' column when Individual = 'Week'.")
+  }
+  if (Individual == "YearWeek" && !"YearWeek" %in% colnames(Site_data_spdf@data)) {
+    stop("Site_data_spdf must have a 'YearWeek' column when Individual = 'YearWeek'.")
   }
   # Ensure months in order
   if (Individual == "Month") {
@@ -1198,7 +1219,19 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       dplyr::arrange(Year, Statistic)
     
     loop_name <- "Year-Statistic"
-  } else {
+  } else if (Individual == "Week") {
+    loop_vars <- Site_data_spdf@data %>% 
+      dplyr::select(Week, Statistic) %>% 
+      distinct() %>%
+      dplyr::arrange(Week, Statistic)
+    loop_name <- "Week-Statistic"
+  } else if (Individual == "YearWeek") {
+    loop_vars <- Site_data_spdf@data %>% 
+      dplyr::select(YearWeek, Statistic) %>% 
+      distinct() %>%
+      dplyr::arrange(YearWeek, Statistic)
+    loop_name <- "YearWeek-Statistic"
+  }else {
     loop_vars <- sort(unique(Site_data_spdf@data$Statistic))
     loop_name <- "Statistic"
   }
@@ -1206,7 +1239,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
   # ---- Minimum observations per group check ----
   skipped_groups <- NULL  # initialize
   #
-  if (Individual %in% c("Month", "Year")) {
+  if (Individual %in% c("Month", "Year", "Week", "YearWeek")) {
     time_col <- Individual
     min_obs <- 3
     #
@@ -1237,7 +1270,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
   # ---- Progress bar ---- 
   #
   # Create a progress bar
-  total_steps <- if (Individual %in% c("Month", "Year")){
+  total_steps <- if (Individual %in% c("Month", "Year", "Week", "YearWeek")){
     nrow(loop_vars) * 5 + 2
   } else {
     length(loop_vars) * 5 + 2
@@ -1277,7 +1310,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
   # Main loop ----
   tryCatch({
     #
-    for (i in seq_len(if (Individual %in% c("Month", "Year")) nrow(loop_vars) else length(loop_vars))) {
+    for (i in seq_len(if (Individual %in% c("Month", "Year", "Week", "YearWeek")) nrow(loop_vars) else length(loop_vars))) {
       #
       pb$tick(tokens = list(step = "Modeling"))
       Sys.sleep(1/1000)
@@ -1285,7 +1318,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       #Initiate lists ok_results <- list()
       #
       # ---- Filter data ----
-      if (Individual %in% c("Month", "Year")) {
+      if (Individual %in% c("Month", "Year", "Week", "YearWeek")) {
         #
         time_col <- Individual
         #
@@ -1363,7 +1396,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       pb$tick(tokens = list(step = "Finalize"))
       Sys.sleep(1/1000)
       # Rename column
-      if (Individual %in% c("Month", "Year")) {
+      if (Individual %in% c("Month", "Year", "Week", "YearWeek")) {
         col_name <- paste0("Pred_Value_", 
                            loop_vars[[time_col]][i], "_", 
                            loop_vars$Statistic[i])
@@ -1374,7 +1407,7 @@ perform_ok_interpolation <- function(Site_data_spdf, grid, Site_Grid_spdf, Param
       names(centroids_joined)[names(centroids_joined) == "Pred_Value"] <- col_name #centroids_joined <- centroids_joined %>% rename(!!col_name := Pred_Value)
       
       # Store result
-      key <- if (Individual %in% c("Month", "Year")) {
+      key <- if (Individual %in% c("Month", "Year", "Week", "YearWeek")) {
         paste(loop_vars[[time_col]][i], 
               loop_vars$Statistic[i], sep = "_") 
       } else {
@@ -1490,6 +1523,7 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
   # Starting data ----
   output <- Site_Grid_df
   #
+  
   # List of potential input SF objects to check for ----
   sf_objects <- c("idw_data", "nn_data", "tps_data", "ok_data")
   existing_objects <- sf_objects[sapply(sf_objects, exists, envir = .GlobalEnv)]
@@ -1498,11 +1532,24 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
     stop("Error: None of the model outputs exist in the global environment.")
   }
   if (length(existing_objects) == 1) {
+    # Get single model info:
+    sf_cache <- mget(existing_objects, envir = .GlobalEnv)
+    all_extracted <- lapply(sf_cache, extract_time_stat)
+    statistic <- unique(unlist(lapply(all_extracted, `[[`, "Statistics")))
+    model_name <- strsplit(names(sf_cache), "_")[[1]][1]
+    #
+    result_name <- paste0("result_", statistic)
+    final_result <- sf_cache[[1]]
+    final_result <- final_result %>% 
+      rename_with(
+      ~ str_replace(.x, "^Pred_Value", model_name),
+      starts_with("Pred_Value"))
+    assign(result_name, final_result, envir = .GlobalEnv)
     stop(
       paste(
-        "Error: Only one model output exists:",
+        "Warning: Only one model output exists:",
         existing_objects[1],
-        "Creation of ensemble model not applicable"
+        "\nCreation of combined ensemble model not applicable. Returning single model as final model."
       )
     )
   }
@@ -1582,11 +1629,7 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
         },
         .groups = "drop"
         )
-      #dplyr::rename_with(~ sub("^[^.]+\\.", "", .), everything()) %>%
-      #dplyr::arrange(desc(.data[[pred_col]])) %>% 
-      #dplyr::slice(1) %>%
-      #dplyr::rename(!!paste0(model_name, "_", params[i]) := !!pred_col)
-      
+     
       param_data <- dplyr::left_join(param_data, temp_data, by = "PGID") #temp_results[[sf_obj]] <- suppressMessages(output %>% left_join(temp_data, by = "PGID"))
     } 
     all_combined[[i]] <- param_data
@@ -1604,7 +1647,7 @@ join_interpolation <- function(Site_Grid_df, RangeValues = NULL){
   # Final merge ---- 
   # Merge all combined results into one final object
   final_result <- Reduce(
-    function(x, y) dplyr::left_join(x, y, by = intersect(names(x), names(y))),#merge(x, y, by = intersect(names(x), names(y)), all = TRUE), 
+    function(x, y) dplyr::left_join(x, y, by = intersect(names(x), names(y))),
     all_combined)
   #
   # Name result ----
@@ -2050,7 +2093,7 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
   #model_regex <- paste0("^(", paste(matched_models, collapse = "|"), ")")
   #base_cols   <- c("PGID", "Latitude", "Longitude", "MGID", "State_Ref", "County")
   #Determine column names to match and limit to desired columns:
-  result_data_final <- results_data %>% 
+  result_data_final <- results_data %>% as.data.frame() %>%
     dplyr::select(PGID, Latitude, Longitude, MGID, dplyr::matches(paste0("^(", paste(matched_models, collapse = "|"), ")")))
   #
   #
@@ -2162,10 +2205,20 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
   #
   ## Plotting ----
   pb$tick(tokens = list(step = "Generating individual plots"))
-  temp <- plot_interpolations2(
-    Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), 
+  if(model == "ensemble"){
+    temp <- plot_interpolations2(
+    #filter to plot ens_*
+      Site_Grid_interp %>% dplyr::select(PGID, contains("ens")), 
     Site_Grid
-  ) #filter to plot ens_*
+  )
+  } else {
+    temp <- plot_interpolations2(
+      #filter to plot ens_*
+      Site_Grid_interp %>% dplyr::select(PGID, contains(selected_models)), 
+      Site_Grid
+    )
+  }
+   
   ## Grouped plot ----
   pb$tick(tokens = list(step = "Generating grouped plot"))
   grp_temp <- grouped_plot_interpolations(temp)
@@ -2181,6 +2234,7 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
     Site_Grid_interp,
     sf_column_name = attr(Site_Grid_interp, "sf_column")
   )
+  
   ##Return plots, grid, and shapefile
   result <- list()
   result$plots <- temp
@@ -2202,7 +2256,7 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
   
   invisible(result)
 }
-#Updated 25/11/20
+#Updated 26/05/13
 model_weighting <- function(final_data, weighting) {
   #Patterns to search for:
   patterns <- "(idw|nn|tps|ok)_*"
@@ -2449,6 +2503,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
                "_", Start_year, "_", End_year)
       }
       #
+      
       # Rename columns:
       names(shape_file) <- names(shape_file) %>% 
         stringr::str_replace_all(c("Mean" = "E", 
@@ -2486,6 +2541,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
     if(result == "No"){
       message("Interpolation data will not be saved in an Excel file.")
     } else {
+      Stat_type_clean <- unique(gsub(".*_", "", Stat_type))
       shp_name <- if (any(!is.na(Month_range))) {
         paste0(Param_name, "_", Param_name_2, "_", Stat_type,
                "_", Start_year, "_", End_year, "_", Start_month, "_", End_month)
@@ -2525,7 +2581,7 @@ save_model_output <- function(output_data, Month_range = NA, threshold_val = thr
                               Type = Param_name_2,
                               Statistic = Stat_type,
                               Models = paste(final_output_data$spatialData %>% as.data.frame() %>% dplyr::select(matches("(idw|nn|tps|ok|ens)_*")) %>% colnames() %>% sub("_.*", "", .) %>% unique(), collapse = ", "),
-                              Weights = paste(as.vector(unique(weight_values)), collapse = ", "),
+                              Weights = if(exists("weight_values") == TRUE){paste(as.vector(unique(weight_values)), collapse = ", ")} else(paste("NA")),
                               Date_range = paste0(Start_year, "-", End_year),
                               Months = if(all(!is.na(Month_range))){paste0(Start_month, "-", End_month)} else {paste("All")},
                               Threshold_value = threshold_val,
