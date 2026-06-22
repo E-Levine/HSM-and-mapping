@@ -16,10 +16,10 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being created. Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("WI") #two-letter site code
 Version <- c("v1") #Model version
-State_Grid <- c("H4")
-Alt_Grid <- c(NA) #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
+State_Grid <- c("F2")
+Alt_Grid <- c("E2") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
 #
 ##Parameters
 Sections_designated <- c("Y") #Y/N are section designations used
@@ -44,10 +44,26 @@ get_base_grid(Site_Code, Version, Sections_designated, Save_data = "N", Save_fig
 #
 #Refer to Parameter_Order Excel sheet, Parameter column for names to reference data:
 df_list[3]
-#Use Parameter name and date range to gather data needed
+#Use Parameter name and date range identify possible data and to gather data needed
 find_folder_names("Oysters")
 #
 #If folders match, load shape files:
 Start_date <- "2020-01-01"
 End_date <- "2024-12-31"
 load_matching_shp("Oysters")
+#
+#
+# Apply data to grid cells
+modelGrid_sp <- Site_Grid
+
+for (polygonData in files_loaded) {
+  
+  modelGrid_sp <- apply_polygon_overlap(
+    modelGrid = modelGrid_sp,
+    polygonData = polygonData,
+    dataColumn = "OYSTER",
+    fillValue = "Live",
+    df_list = df_list
+  )
+  
+}

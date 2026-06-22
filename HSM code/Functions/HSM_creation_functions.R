@@ -58,7 +58,10 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
                                        #Add Site code and Sections as NA
                                        mutate(Site = SiteCode, Section = NA) %>% 
                                        #Add site long name
-                                       left_join(df_list[[1]] %>% filter(Type == "Site") %>% dplyr::select(Designation, LongName) %>% rename(Site = Designation))) 
+                                       left_join(df_list[[1]] %>% 
+                                                   filter(Type == "Site") %>% 
+                                                   dplyr::select(Designation, LongName) %>% 
+                                                   rename(Site = Designation))) 
     ##Output head of updated data frame and map of sections
     head(Section_grid)
     Section_plot <<- tm_shape(Section_grid) + tm_fill(col = "Section")
@@ -67,22 +70,40 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
     #Create empty list
     temp_sections <- list()
     for (i in mget(ls(pattern = "Section[0-9]"))) {
-      #Assign grid cells to section based on overlap with section layer
-      temp <- suppressMessages(Site_Grid[lengths(st_intersects(Site_Grid, i)) > 0,] %>% #Limit to section area
-                                 mutate(Site = SiteCode, #Add Site code, section code
-                                        Section = OrderSections$Section[OrderSections$KML_Name == i$Name]) %>%
-                                 #Add site long name
-                                 left_join(df_list[[1]] %>% filter(Type == "Site") %>% mutate(Site = Designation) %>% dplyr::select(Site, LongName)) %>%
-                                 #Add section long names from KML file names
-                                 left_join(df_list[[2]] %>% mutate(Section_Name = str_extract(KML_Name, "(?<=-).*")) %>% dplyr::select(Section, Section_Name)))
       #
-      temp_sections[[length(temp_sections) + 1]] <- temp
+      #Check for overlap
+      overlap <- Site_Grid[lengths(st_intersects(Site_Grid, i)) > 0, ]
+      #
+      if (nrow(overlap) == 0) {
+        message("No overlap found for Section ", i$Name, ". Skipping.")
+      } else {
+        #Assign grid cells to section based on overlap with section layer
+        temp <- suppressMessages(overlap %>% #Limit to section area
+                                   mutate(Site = SiteCode, #Add Site code, section code
+                                          Section = OrderSections$Section[OrderSections$KML_Name == i$Name]) %>%
+                                   #Add site long name
+                                   left_join(df_list[[1]] %>% 
+                                               filter(Type == "Site") %>% 
+                                               mutate(Site = Designation) %>% 
+                                               dplyr::select(Site, LongName)) %>%
+                                   #Add section long names from KML file names
+                                   left_join(df_list[[2]] %>% 
+                                               mutate(Section_Name = str_extract(KML_Name, "(?<=-).*")) %>% 
+                                               dplyr::select(Section, Section_Name)))
+        #
+        temp_sections[[length(temp_sections) + 1]] <- temp
+      }
       #Add all data together into one output
-      Section_grid <- do.call(rbind, temp_sections) %>% 
-        #Re-level Section based on specified order
-        mutate(Section = factor(Section, levels = unique(df_list[[2]]$Section[order(df_list[[2]]$Order)]), ordered = TRUE)) %>% 
-        #Keep only one Section-assignment per grid cell
-        arrange(Section) %>% group_by(PGID) %>% slice(1) 
+      if (length(temp_sections) > 0) {
+        Section_grid <- do.call(rbind, temp_sections) %>% 
+          #Re-level Section based on specified order
+          mutate(Section = factor(Section, levels = unique(df_list[[2]]$Section[order(df_list[[2]]$Order)]), ordered = TRUE)) %>% 
+          #Keep only one Section-assignment per grid cell
+          arrange(Section) %>% group_by(PGID) %>% slice(1) 
+      } else {
+        message("No overlapping sections were found.")
+        Section_grid <- NULL
+      }
     }
     rm(temp, i, temp_sections)
     gc()  
@@ -201,4 +222,94 @@ load_matching_shp <- function(Parameter_name, StartDate = Start_date, EndDate = 
   }
   files_loaded <<- loaded_files
 }
-
+#
+#
+# Function to apply data to grid cells based on overlapping polygons with most overlap. Assigns only one data value per cell based on largest overlap.
+#modelGrid = grid object to apply data to
+#polygonData = polygon data object with data to be applied
+#dataColumn = name of data column to be added
+#fillValue = value to fill if polygons have data of NA (i.e., OYSTERS = NA, fill with "Live")
+#df_list = df_list returned from load_working_info function
+#poly_name
+apply_polygon_overlap <- function(modelGrid,
+                                  polygonData,
+                                  dataColumn,
+                                  fillValue,
+                                  df_list) {
+  #
+  sf_use_s2(FALSE)
+  #
+  # Identify model column name to be used:
+  modelColName <- (df_list[[3]] %>% filter(Column_name == dataColumn))$Model_column_name
+  #
+  # Convert to sf for efficiency
+  polygon_sf <- st_as_sf(get(polygonData))
+  modelGrid_sf <- st_as_sf(modelGrid)
+  #
+  # Ensure both layers use the same CRS
+  polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
+  #
+  # Make valid
+  polygon_sf <- st_make_valid(polygon_sf)
+  modelGrid_sf <- st_make_valid(modelGrid_sf)
+  #
+  # Add IDs
+  modelGrid_sf$grid_id <- seq_len(nrow(modelGrid_sf))
+  polygon_sf$oyster_id <- seq_len(nrow(polygon_sf))
+  #
+  # Identify overlaps
+  idx <- st_intersects(modelGrid_sf, polygon_sf, sparse = TRUE)
+  nonempty <- which(lengths(idx) > 0)
+  #
+  # Intersection loop
+  results <- vector("list", length(nonempty))
+  
+  for (k in seq_along(nonempty)) {
+    
+    i <- nonempty[k]
+    os <- idx[[i]]
+    
+    inter <- st_intersection(
+      modelGrid_sf[i, ],
+      polygon_sf[os, ]
+    )
+    
+    inter$grid_id <- i
+    inter$overlap_area <- st_area(inter)
+    
+    results[[k]] <- inter
+  }
+  
+  inters <- do.call(rbind, results)
+  #
+  sf_use_s2(TRUE)
+  #
+  # Best overlap
+  best <- inters %>%
+    group_by(grid_id) %>%
+    slice_max(overlap_area, n = 1,  with_ties = FALSE) %>%
+    ungroup()
+  #
+  # Replace NA
+  best[[dataColumn]][is.na(best[[dataColumn]])] <- fillValue
+  #
+  # Keep only needed columns safely
+  best_drop <- st_drop_geometry(best %>%
+                                  dplyr::select(PGID, Lat_DD_Y, Long_DD_X, all_of(dataColumn)))
+  #
+  browser()
+  modelGrid_sf <- modelGrid_sf  %>%
+    dplyr::left_join(best_drop, by = "grid_id") %>%
+    dplyr::select(-grid_id)
+  # Rename column safely
+  suffix <- stringr::str_extract(polygonData, "(?<=_)[^_]{1,2}")
+  #
+  names(modelGrid_sf)[names(modelGrid_sf) == dataColumn] <-
+    paste0(modelColName, suffix)
+  
+  as(modelGrid_sf, "Spatial")
+  #
+}
+#
+#
+#
