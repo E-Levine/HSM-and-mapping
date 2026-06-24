@@ -172,6 +172,7 @@ find_folder_names <- function(Parameter_name){
   Ref_info <- data.frame(df_list[3])
   #ID parameter in summary table
   if(Parameter_name == "Oysters"){Param_find <- "Oysters"}
+  if(Parameter_name == "Seagrass"){Param_find <- "Seagrass"}
   #
   #Check if Param to find is included in summary
   if (!Param_find %in% unique(Ref_info$Parameter)) {
@@ -198,6 +199,7 @@ load_matching_shp <- function(Parameter_name, StartDate = Start_date, EndDate = 
   data_dir <- "Data layers/"
   #ID parameter in summary table
   if(Parameter_name == "Oysters"){Param_file <- "/Oyster_Beds_in_Florida.shp"}
+  if(Parameter_name == "Seagrass"){Param_file <- "/Seagrass_Habitat_in_Florida.shp"}
   #
   StartDate <- as.Date(Start_date)
   EndDate <- as.Date(End_date)
@@ -210,9 +212,11 @@ load_matching_shp <- function(Parameter_name, StartDate = Start_date, EndDate = 
     if(folder_date > Start_date & folder_date < End_date){
       print(paste0("Loading: ", folder))
       #Load shapefile, assign name
-      shape_obj <- crop(as(st_read(paste0(data_dir, folder, Param_file)), "Spatial"),
-                        extent(Site_Grid))
-      obj_name <- paste0("Oyster_", substr(folder, nchar(folder) - 5, nchar(folder)))
+      shp_t <- st_read(paste0(data_dir, folder, Param_file))
+      shp_t <- st_transform(shp_t, st_crs(Site_Grid))
+      #shp_t <- sf::st_make_valid(shp_t)
+      shape_obj <- crop(as(shp_t, "Spatial"), extent(Site_Grid))
+      obj_name <- paste0(sub("_.*", "", folder), "_", substr(folder, nchar(folder) - 5, nchar(folder)))
       assign(obj_name, shape_obj, envir = .GlobalEnv)
       #Add to loaded list
       loaded_files[[folder]] <- paste0(str_extract(folder, "[^_]+"), "_", str_extract(folder, "[^_]+$"))
@@ -231,85 +235,199 @@ load_matching_shp <- function(Parameter_name, StartDate = Start_date, EndDate = 
 #fillValue = value to fill if polygons have data of NA (i.e., OYSTERS = NA, fill with "Live")
 #df_list = df_list returned from load_working_info function
 #poly_name
+#
+# Function to process all polygon data of specified type:
 apply_polygon_overlap <- function(modelGrid,
-                                  polygonData,
+                                  files_loaded,
                                   dataColumn,
                                   fillValue,
                                   df_list) {
+  
+  library(progress)
+  suppressWarnings(sf_use_s2(FALSE))
   #
-  sf_use_s2(FALSE)
+  # Progress bar setup
+  total_steps <- length(files_loaded) + 2
   #
-  # Identify model column name to be used:
-  modelColName <- (df_list[[3]] %>% filter(Column_name == dataColumn))$Model_column_name
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = total_steps,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
   #
-  # Convert to sf for efficiency
-  polygon_sf <- st_as_sf(get(polygonData))
+  # ---- model grid built once ----
   modelGrid_sf <- st_as_sf(modelGrid)
-  #
-  # Ensure both layers use the same CRS
-  polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
-  #
-  # Make valid
-  polygon_sf <- st_make_valid(polygon_sf)
   modelGrid_sf <- st_make_valid(modelGrid_sf)
-  #
-  # Add IDs
   modelGrid_sf$grid_id <- seq_len(nrow(modelGrid_sf))
-  polygon_sf$oyster_id <- seq_len(nrow(polygon_sf))
-  #
-  # Identify overlaps
-  idx <- st_intersects(modelGrid_sf, polygon_sf, sparse = TRUE)
-  nonempty <- which(lengths(idx) > 0)
-  #
-  # Intersection loop
-  results <- vector("list", length(nonempty))
+  pb$tick(tokens = list(step = "Model grid build"))
+  Sys.sleep(1/1000)
   
-  for (k in seq_along(nonempty)) {
+  # ---- column naming helper ----
+  modelColName <- (df_list[[3]] %>%
+                     dplyr::filter(Column_name == dataColumn))$Model_column_name
+  
+  # LOOP PER FILE → EACH FILE CREATES ONE OUTPUT COLUMN
+  for (f in files_loaded) {
+    #
+    pb$tick(tokens = list(
+    step = paste0("Processing ", f)
+    ))
+    Sys.sleep(1/1000)
+    # Build polygons
+    polygon_sf <- st_as_sf(get(f))
+    polygon_sf <- st_make_valid(polygon_sf)
+    polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
+    #
+    # Spatial index for overlap
+    idx <- suppressMessages(
+      suppressWarnings(
+        st_intersects(modelGrid_sf, polygon_sf, sparse = TRUE)
+      ))
+    nonempty <- which(lengths(idx) > 0)
+    #
+    # Intersection loop
+    results <- vector("list", length(nonempty))
     
-    i <- nonempty[k]
-    os <- idx[[i]]
+    for (k in seq_along(nonempty)) {
+      
+      i <- nonempty[k]
+      os <- idx[[i]]
+      
+      inter <- suppressMessages(
+        suppressWarnings(
+          st_intersection(
+            modelGrid_sf[i, , drop = FALSE],
+            polygon_sf[os, , drop = FALSE])
+        ))
+      
+      inter$grid_id <- i
+      inter$overlap_area <- st_area(inter)
+      
+      results[[k]] <- inter
+    }
     
-    inter <- st_intersection(
-      modelGrid_sf[i, ],
-      polygon_sf[os, ]
+    inters <- dplyr::bind_rows(results)
+    #
+    # Best overlap
+    best <- inters %>%
+      dplyr::group_by(grid_id) %>%
+      dplyr::slice_max(overlap_area, n = 1, with_ties = FALSE) %>%
+      dplyr::ungroup()
+    #
+    # Replace NA
+    best[[dataColumn]][is.na(best[[dataColumn]])] <- fillValue
+    #
+    # Keep only needed columns & rename data column
+    best_drop <- sf::st_drop_geometry(best)
+    suffix <- stringr::str_sub(stringr::str_extract(f, "(?<=_).*"), 3, 4)
+    newColName <- paste0(modelColName, suffix)
+    # 
+    modelGrid_sf <- modelGrid_sf %>%
+      dplyr::left_join(
+        best_drop %>%
+          dplyr::select(PGID, Lat_DD_Y, Long_DD_X, all_of(dataColumn)),
+        by = c("PGID", "Long_DD_X", "Lat_DD_Y")
+      )
+    
+    names(modelGrid_sf)[names(modelGrid_sf) == dataColumn] <- newColName
+    
+    message(
+      sprintf(
+        "Added '%s' from polygon layer '%s' as model grid column '%s'.",
+        dataColumn,
+        f,
+        newColName
+      )
     )
-    
-    inter$grid_id <- i
-    inter$overlap_area <- st_area(inter)
-    
-    results[[k]] <- inter
   }
-  
-  inters <- do.call(rbind, results)
   #
-  sf_use_s2(TRUE)
-  #
-  # Best overlap
-  best <- inters %>%
-    group_by(grid_id) %>%
-    slice_max(overlap_area, n = 1,  with_ties = FALSE) %>%
-    ungroup()
-  #
-  # Replace NA
-  best[[dataColumn]][is.na(best[[dataColumn]])] <- fillValue
-  #
-  # Keep only needed columns safely
-  best_drop <- st_drop_geometry(best %>%
-                                  dplyr::select(PGID, Lat_DD_Y, Long_DD_X, all_of(dataColumn)))
-  #
-  browser()
-  modelGrid_sf <- modelGrid_sf  %>%
-    dplyr::left_join(best_drop, by = "grid_id") %>%
-    dplyr::select(-grid_id)
-  # Rename column safely
-  suffix <- stringr::str_extract(polygonData, "(?<=_)[^_]{1,2}")
-  #
-  names(modelGrid_sf)[names(modelGrid_sf) == dataColumn] <-
-    paste0(modelColName, suffix)
-  
+  suppressWarnings(sf_use_s2(TRUE))
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  if (!pb$finished) {
+    pb$tick(0, tokens = list(step = "Completed processing"))
+  }
+  pb$terminate()
+  pb_active <- FALSE
   as(modelGrid_sf, "Spatial")
-  #
 }
 #
 #
 #
+apply_polygon_buffers <- function(modelGrid,
+                                  files_loaded,
+                                  buffer_breaks = c(200, 400),
+                                  df_list = NULL,
+                                  output_prefix = "Buffer") {
+  
+  library(sf)
+  library(dplyr)
+  library(progress)
+  
+  suppressWarnings(sf_use_s2(FALSE))
+  
+  modelGrid_sf <- st_as_sf(modelGrid)
+  original_crs <- st_crs(modelGrid_sf)
+  # Convert for buffer distances
+  if (st_is_longlat(modelGrid_sf)) {
+    # use a projected CRS for buffering/distances
+    work_crs <- 3857
+    modelGrid_sf <- st_transform(modelGrid_sf, work_crs)
+    polygon_sf <- st_transform(polygon_sf, work_crs)
+  }
+  modelGrid_sf <- st_make_valid(modelGrid_sf)
+  
+  # ensure projected CRS in meters
+  if (st_is_longlat(modelGrid_sf)) {
+    stop("modelGrid must be in a projected CRS with meter units.")
+  }
+  
+  total_steps <- length(files_loaded) + 1
+  
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step",
+    total = total_steps,
+    clear = FALSE
+  )
+  
+  for (f in files_loaded) {
+    
+    pb$tick(tokens = list(step = paste("Processing", f)))
+    
+    polygon_sf <- st_as_sf(get(f))
+    polygon_sf <- st_make_valid(polygon_sf)
+    polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
+    
+    # distance to nearest polygon
+    d <- st_distance(modelGrid_sf, polygon_sf)
+    
+    nearest_dist <- apply(d, 1, min)
+    
+    nearest_dist <- as.numeric(nearest_dist)
+    
+    buffer_value <- rep(NA_real_, length(nearest_dist))
+    
+    for (b in sort(buffer_breaks)) {
+      buffer_value[nearest_dist <= b] <- b
+    }
+    
+    suffix <- stringr::str_sub(
+      stringr::str_extract(f, "(?<=_).*"),
+      3, 4
+    )
+    
+    newColName <- paste0(output_prefix, suffix)
+    
+    modelGrid_sf[[newColName]] <- buffer_value
+  }
+  
+  suppressWarnings(sf_use_s2(TRUE))
+  
+  # Convert output back to original CRS
+  if (st_crs(modelGrid_sf) != original_crs) {
+    modelGrid_sf <- st_transform(modelGrid_sf, original_crs)
+  }
+  
+  as(modelGrid_sf, "Spatial")
+}

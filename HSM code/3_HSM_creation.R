@@ -55,15 +55,20 @@ load_matching_shp("Oysters")
 #
 # Apply data to grid cells
 modelGrid_sp <- Site_Grid
-
-for (polygonData in files_loaded) {
-  
-  modelGrid_sp <- apply_polygon_overlap(
-    modelGrid = modelGrid_sp,
-    polygonData = polygonData,
-    dataColumn = "OYSTER",
-    fillValue = "Live",
-    df_list = df_list
-  )
-  
-}
+#
+modelGrid_sp2 <- apply_polygon_overlap(modelGrid = modelGrid_sp, 
+                                       files_loaded = files_loaded, 
+                                       dataColumn =  "OYSTER", 
+                                       fillValue = "Live", 
+                                       df_list = df_list)
+#
+rm(list = ls(pattern = "^Oyster_"))
+#
+#
+find_folder_names("Seagrass")
+load_matching_shp("Seagrass")
+modelGrid_sp2 <- apply_polygon_overlap(modelGrid = modelGrid_sp2, 
+                                       files_loaded = files_loaded, 
+                                       dataColumn =  "SEAGRASS", 
+                                       fillValue = "Present", 
+                                       df_list = df_list)
