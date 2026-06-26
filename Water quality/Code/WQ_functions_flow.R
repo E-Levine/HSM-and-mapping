@@ -78,7 +78,7 @@ clean_save_existing_data <- function(fileName, dataType){
 }
 #
 # Load Excel data files:
-load_WQ_data <- function() {
+load_WQ_data <- function(include_flow = "Y", include_rain = "Y") {
   
   Stations <- openxlsx::read.xlsx(
     file.path("Data/Raw-data/Flow_logger_locations.xlsx"),
@@ -121,11 +121,29 @@ load_WQ_data <- function() {
     dplyr::bind_rows(dat_list)
   }
   #
-  # Read and combine all matching flow files
-  flow_raw <- read_and_bind(
-    pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$"),
-    file_type = "flow"
-  )
+  if(include_flow == "Y"){
+    # Read and combine all matching flow files
+    flow_raw <- read_and_bind(
+      pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$"),
+      file_type = "flow"
+      )
+    # Assign outputs to global environment
+    assign("flow_raw", flow_raw, envir = .GlobalEnv)
+  } else {
+    message("Flow data not loaded")
+  }
+  
+  if(include_rain == "Y"){
+    # Read and combine all matching rain files
+    rain_raw <- read_and_bind(
+      pattern = paste0(Site_code, "_logger_rain_.*\\.xlsx$"),
+      file_type = "rain"
+    )
+    # Assign outputs to global environment
+    assign("rain_raw", rain_raw, envir = .GlobalEnv)
+  } else {
+    message("Rain data not loaded")
+  }
   
   # Read and combine all matching salinity files
   salinity_raw <- read_and_bind(
@@ -135,7 +153,6 @@ load_WQ_data <- function() {
   #
   # Assign outputs to global environment
   assign("Loggers", Stations, envir = .GlobalEnv)
-  assign("flow_raw", flow_raw, envir = .GlobalEnv)
   assign("salinity_raw", salinity_raw, envir = .GlobalEnv)
   
   invisible(NULL)
@@ -324,16 +341,33 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
   # - Requires at least 4 data points for fitting (to avoid underdetermined models)
   station_col <- "Station"
   time_col <- "Date"
-  # Get unique station IDs
+  # Get unique station IDs& Names
   salinity_stations <- unique(salinity_data[[station_col]])
   flow_stations <- unique(flow_data[[station_col]])
+  
+  salinity_names <- salinity_data %>%
+    dplyr::distinct(.data[[station_col]], Name)
+  flow_names <- flow_data %>%
+    dplyr::distinct(.data[[station_col]], Name)
+  
+  sal_name_lookup <- setNames(salinity_names$Name, salinity_names[[station_col]])
+  flow_name_lookup <- setNames(flow_names$Name, flow_names[[station_col]])
+  
   # Initialize a list to store results
   results <- list()
   data_lookup <- list()
   
   # Loop over each combination
   for (sal_station in salinity_stations) {
+    
+    # Get salinity station name
+    sal_name <- sal_name_lookup[[sal_station]]
+    
     for (flow_station in flow_stations) {
+      
+      # Get flow station name
+      flow_name <- flow_name_lookup[[flow_station]]
+      
       # Subset salinity data for the current station
       sal_sub <- salinity_data %>%
         dplyr::filter(.data[[station_col]] == sal_station) %>%
@@ -349,8 +383,8 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
       
       # Get model name
       model_name <- paste(
-        stringr::str_replace_all(sal_station, "_", ""),
-        stringr::str_replace_all(flow_station, "_", ""),
+        stringr::str_replace_all(sal_name, "_", ""),
+        stringr::str_replace_all(flow_name, "_", ""),
         sep = "_"
       )
       
@@ -361,6 +395,11 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
       
       # Check if there are enough data points (at least 4 for NLS)
       if (nrow(combined) >= 4) {
+        #
+        # Handling zero-flow days 
+        if (any(combined[[flow_col]] == 0, na.rm = TRUE)) {
+          combined[[flow_col]] <- combined[[flow_col]] + 0.001
+        }
         # Build the formula dynamically
         formula_str <- paste0(salinity_col, " ~ y0 + (a * b) / (b + ", flow_col, ")")
         
@@ -370,8 +409,8 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
             as.formula(formula_str),
             data = combined,
             start = list(
-              y0 = min(combined[[salinity_col]], na.rm = TRUE),
-              a  = max(combined[[salinity_col]], na.rm = TRUE) - min(combined[[salinity_col]], na.rm = TRUE),
+              y0 = quantile(combined[[salinity_col]], 0.01, na.rm = TRUE)[[1]], #min(combined[[salinity_col]], na.rm = TRUE),
+              a  = quantile(combined[[salinity_col]], 0.99, na.rm = TRUE)[[1]] - quantile(combined[[salinity_col]], 0.01, na.rm = TRUE)[[1]], #max(combined[[salinity_col]], na.rm = TRUE) - min(combined[[salinity_col]], na.rm = TRUE),
               b  = median(combined[[flow_col]], na.rm = TRUE)
             )
           ),
@@ -382,10 +421,10 @@ fit_salinity_flow_models <- function(flow_data, salinity_data, flow_col = "Mean_
         if (!inherits(fit, "try-error")) {
           results[[model_name]] <- summary(fit)
         } else {
-          results[[model_name]] <- paste("Fit failed for salinity station", sal_station, "and flow station", flow_station, ":", attr(fit, "condition")$message)
+          results[[model_name]] <- paste("Fit failed for salinity station", sal_name, "and flow station", flow_name, ":", attr(fit, "condition")$message)
         }
       } else {
-        results[[model_name]] <- paste("Insufficient data for salinity station", sal_station, "and flow station", flow_station, "(only", nrow(combined), "matching time points)")
+        results[[model_name]] <- paste("Insufficient data for salinity station", sal_name, "and flow station", flow_name, "(only", nrow(combined), "matching time points)")
       }
     }
   }
@@ -522,52 +561,116 @@ flow_at_salinity_hyp2 <- function(results, target_sal, data_lookup) {
 #
 #
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
-ggplot_hyperbolic_fit <- function(resultsdf, results, model_name, flow_col = "Flow", value_col = "Salinity", 
-                                  Salinity_min = NULL, Salinity_max = NULL, Flow_min = NULL, Flow_max = NULL) {
-  df <- resultsdf[[model_name]]
-  # Check if the model exists and is successful
+ggplot_hyperbolic_fit <- function(resultsdf, 
+                                  results, 
+                                  model_name,
+                                  flow_col = "Flow",
+                                  value_col = "Salinity",
+                                  Salinity_min = NULL, Salinity_max = NULL,
+                                  Flow_min = NULL, Flow_max = NULL) {
+  #
+  #
+  make_plot <- function(model_name) {
+    #
+    fit <- results[[model_name]]
+    #
+    if (!(model_name %in% names(resultsdf))) {
+      stop("Model name not found in results.")
+    }
+    # Skip models that failed to fit
+    if (!inherits(fit, "summary.nls")) {
+      message("Skipping ", model_name, " (fit unsuccessful).")
+      return(NULL)
+    }
+    #
+    df <- resultsdf[[model_name]]
+    
+    if (!all(c(flow_col, value_col) %in% names(df)))
+      return(NULL)
+    
+    p <- coef(fit)
+    y0 <- p[1]
+    a  <- p[2]
+    b  <- p[3]
+    
+    xseq <- seq(min(df[[flow_col]]),
+                max(df[[flow_col]]),
+                length.out = 300)
+    
+    pred_df <- data.frame(
+      flow = xseq,
+      fitted = y0 + (a * b)/(b + xseq)
+    ) %>%
+      rename(!!flow_col := flow)
+    
+    ggplot(df,
+           aes(x = .data[[flow_col]],
+               y = .data[[value_col]])) +
+      {if(!is.null(Salinity_min) && !is.null(Salinity_max))
+        annotate("rect",
+                 xmin=-Inf,xmax=Inf,
+                 ymin=Salinity_min,ymax=Salinity_max,
+                 alpha=.6,fill="#B8FFB8")} +
+      {if(!is.null(Flow_min) && !is.null(Flow_max))
+        annotate("rect",
+                 xmin=Flow_min,xmax=Flow_max,
+                 ymin=-Inf,ymax=Inf,
+                 alpha=.6,fill="#97FFFF")} +
+      geom_point(color="gray30", size=2) +
+      geom_line(data=pred_df,
+                aes(x=.data[[flow_col]], y=fitted),
+                color="blue",
+                linewidth=1.2) +
+      scale_y_continuous(expand=c(.005,.1)) +
+      scale_x_continuous(expand=c(.005,.1)) +
+      labs(
+        title=model_name,
+        subtitle=paste0(
+          "y = ", round(y0,2),
+          " + (", round(a,2),
+          " × ", round(b,2),
+          ")/(", round(b,2), " + x)"
+        ),
+        x=flow_col,
+        y=value_col
+      ) +
+      theme_classic()
+  }
+  #
+  ## HANDLE "all" FIRST
+  ## =========================
+  ## Return a grid of all models
+  if (tolower(model_name) == "all") {
+    
+    plots <- lapply(names(resultsdf), make_plot)
+    
+    ## remove failed models
+    plots <- plots[!sapply(plots, is.null)]
+    
+    n <- length(plots)
+    
+    if (n == 0)
+      stop("No successful models to plot.")
+    
+    ncol <- ceiling(sqrt(n))
+    nrow <- ceiling(n / ncol)
+    
+    return(
+      patchwork::wrap_plots(
+        plots,
+        ncol = ncol,
+        nrow = nrow
+      )
+    )
+  }
+  
+  ## SINGLE MODEL PATH
+  ## =========================
   if (!(model_name %in% names(resultsdf))) {
     stop("Model name not found in results.")
   }
-  fit <- results[[model_name]]
-  # Input validation
-  if (!all(c(flow_col, value_col) %in% names(df))) {
-    stop("Data frame must contain the specified flow and value columns.")
-  }
-  coefs <- coef(fit)
-  if (!is.numeric(df[[flow_col]]) || !is.numeric(df[[value_col]])) {
-    stop("Specified columns must be numeric.")
-  }
-  # Extract parameters
-  p <- coef(fit)
-  y0 <- p[1]
-  a  <- p[2]
-  b  <- p[3]
   
-  # Build prediction grid
-  xseq <- seq(min(df[[flow_col]]), max(df[[flow_col]]), length.out = 300)
-  pred <- y0 + (a * b) / (b + xseq)
-  
-  pred_df <- data.frame(
-    flow = xseq,
-    fitted = pred
-  ) %>% rename(!!flow_col := flow)
-  
-  ggplot(df, aes(x = .data[[flow_col]], y = .data[[value_col]])) +
-    {if(!is.null(Salinity_min) && !is.null(Salinity_max)) annotate("rect", xmin=-Inf, xmax=Inf, ymin=Salinity_min, ymax=Salinity_max, alpha=0.6, fill="#B8FFB8")}+
-    {if(!is.null(Flow_min) && !is.null(Flow_max)) annotate("rect", xmin=Flow_min, xmax=Flow_max, ymin=-Inf, ymax=Inf, alpha=0.6, fill="#97FFFF")}+
-    geom_point(color = "gray30", size = 2) +
-    geom_line(data = pred_df,
-              aes(x = .data[[flow_col]], y = fitted),
-              color = "blue", linewidth = 1.2) +
-    scale_y_continuous(expand = c(0.005,0.1))+ scale_x_continuous(expand = c(0.005,0.1))+
-    labs(
-      x = flow_col,
-      y = value_col,
-      title = paste(model_name),
-      subtitle = paste0("Hyperbolic Fit: y =",round(y0,2), " + (", round(a,2), "*", round(b,2), ")/(",round(b,2)," + x)", collapse = "")
-    ) +
-    theme_classic()
+  make_plot(model_name)
 }
 #
 #

@@ -85,10 +85,36 @@ flow_sum <- flow_raw %>%
   rename("Date" = Timestamp) %>%
   mutate(Site = Site_code, Date = as.Date(Date), Value = as.numeric(Value)) %>% 
   # If using all stations as 1 run next line, if stations should be separate, remove line
-  mutate(Station = "ALL") %>%
+  #mutate(Station = "ALL") %>%
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Flow = sum(Value, na.rm = T)) %>% 
-  ungroup()
+  ungroup() %>%
+  left_join(Loggers %>% dplyr::select(StationID, Name) %>% rename("Station" = StationID))
+#
+unique(flow_sum$Station); unique(flow_sum$Name)
+#
+flow_sum <- flow_sum  %>%
+  # Filter stations
+  filter(Station != "GORDY_S")
+#
+#
+# Total daily rain for each logger (mean among methods (timeseries ID))
+rain_sum <- rain_raw %>%
+  rename_with(~str_to_title(.x)) %>%
+  rename("Date" = Timestamp) %>%
+  mutate(Site = Site_code, Date = as.Date(Date), Value = as.numeric(Value)) %>% 
+  group_by(Station, Parameter, Date, Site) %>%
+  summarise(Value = mean(Value, na.rm = T)) %>%
+  ungroup() %>%
+  # If using all stations as 1 run next line, if stations should be separate, remove line
+  #mutate(Station = "ALL") %>%
+  group_by(Site, Date, Station, Parameter) %>% 
+  summarise(Rain = sum(Value, na.rm = T)) %>% 
+  ungroup() %>%
+  left_join(Loggers %>% dplyr::select(StationID, Name) %>% rename("Station" = StationID))
+#
+unique(rain_sum$Station); unique(rain_sum$Name)
+#
 #
 # Clean conductance data if needed:
 sal_raw_temp <- salinity_raw %>% 
@@ -122,7 +148,10 @@ salinity_ave <- salinity_raw %>% #sali_grps$data %>%
   mutate(Site = Site_code, Date = as.Date(Date), Value = as.numeric(Value)) %>% 
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Salinity = mean(Value, na.rm = T)) %>% 
-  ungroup()
+  ungroup() %>%
+  left_join(Loggers %>% dplyr::select(StationID, Name) %>% rename("Station" = StationID))
+#
+unique(salinity_ave$Station); unique(salinity_ave$Name)
 #
 # Add 14day average (previous 14 days)
 salinity_ave <-  salinity_ave %>%
@@ -142,6 +171,12 @@ salinity_ave <-  salinity_ave %>%
 (sal_monthly <- WQ$calculate_monthly_value(salinity_ave, "Salinity"))
 (flow_monthly <- WQ$calculate_monthly_value(flow_sum, "Flow"))
 #
+#
+# 
+## Save cleaned data files:
+write_xlsx(flow_sum, path = paste0("../", Site_code, "_", Version,"/Data/", Site_code, "_", Version, "_flow_model_data.xlsx"))
+write_xlsx(rain_sum, path = paste0("../", Site_code, "_", Version,"/Data/", Site_code, "_", Version, "_rain_model_data.xlsx"))
+write_xlsx(salinity_ave, path = paste0("../", Site_code, "_", Version,"/Data/", Site_code, "_", Version, "_salinity_model_data.xlsx"))
 #
 #
 ### 
@@ -173,8 +208,8 @@ ggplot()+
   #geom_point(data = salinity_raw, aes(Longitude, Latitude),  color = "#666666", shape = 8, size = 4)+
   geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType, shape = DataType), alpha = 0.8, size = 4)+
   theme_classic()+
-  scale_color_manual(values = c("#333333", "#D55E00"))+
-  scale_shape_manual(values = c(16, 15))+
+  scale_color_manual(values = c("#333333", "darkblue", "#D55E00"))+
+  scale_shape_manual(values = c(16, 17, 15))+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 12, color = "black"), 
         axis.text =  element_text(size = 10, color = "black"))+
@@ -189,15 +224,14 @@ ggplot()+
 #monthly_data <- left_join(sal_monthly, flow_monthly)
 #head(monthly_data)
 #
-flow_train <- flow_sum %>% filter(Date >= "1997-01-01" & Date <= "2015-12-31")
-sal_train <- salinity_ave %>% filter(Date >= "1997-01-01" & Date <= "2015-12-31")
+flow_train <- flow_sum %>% filter(Date >= "1965-01-01" & Date <= "2016-12-31")
+rain_train <- rain_sum %>% filter(Date >= "1965-01-01" & Date <= "2016-12-31")
+sal_train <- salinity_ave %>% filter(Date >= "1965-01-01" & Date <= "2016-12-31")
 ## Fit curve
 #library(stringr, minpack.lm, dplyr)
-models <- WQ$fit_salinity_flow_models(flow_monthly, sal_monthly)
-#Fit fails unless means used: models <- fit_salinity_flow_models(flow_ave, sal_monthly, flow_col = "Flow")
 models <- WQ$fit_salinity_flow_models(flow_train, sal_train, flow_col = "Flow", salinity_col = "Salinity")
 #
-#
+# Function to limit to selected (listed) models
 models <- WQ$filter_models(models, c("USGS-02313700-USGS-02313700", 
                                      "USGS-02313272_USGS-02313700", 
                                      "USGS-285447082445100_USGS-02313700", 
@@ -211,6 +245,25 @@ models <- WQ$filter_models(models, c("USGS-02313700-USGS-02313700",
                                      "USGS-285447082445100_USGS-02310750",
                                      "USGS-284506082435801_USGS-02310750"))
 #
+# Models: "HR1_S49" "HR1_S80" "HR1_S97" "A1A_S49" "A1A_S80" "A1A_S97" "US1_S49" "US1_S80" "US1_S97"
+#
+# Plot fit - option to add green fill over optimal salinity range and/or flow range
+names(models$models)
+# Individual plots: names(models$models)[9] OR "HR1_S49"
+# All plots: "all"
+WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models, 
+                         "all", #names(models$models)[9], 
+                         "Flow", "Salinity")#, 
+                         #Salinity_min = 11.98, Salinity_max = 38.95)
+#
+#ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+#       filename = paste("Flow_salinity_curve_", "SS2_WC",".tiff", sep = ""), dpi = 1000)
+#
+#ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
+#                     Salinity_min = 11.98, Salinity_max = 35.98,
+#                    Flow_min = 0, Flow_max = 907.26)
+#
+#
 # Calculate flow at specified salinity (from HSM curves)
 adult <- rbind(
   WQ$flow_at_salinity_hyp2(models$models, 11.98, models$data_lookup) %>% mutate(Sal = "min", Flow = "max"), 
@@ -220,24 +273,18 @@ larvae <- rbind(
   WQ$flow_at_salinity_hyp2(models$models, 10.01, models$data_lookup) %>% mutate(Sal = "min", Flow = "max"), 
   WQ$flow_at_salinity_hyp2(models$models, 31.49, models$data_lookup) %>% mutate(Sal = "max", Flow = "min")) %>% mutate(Type = "Larave")
 #
-# Plot fit - option to add green fill over optimal salinity range and/or flow range
-names(models$models)
-WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models, 
-                         names(models$models)[11], 
-                         "Mean_Flow", "Mean_Salinity", 
-                         Salinity_min = 11.98, Salinity_max = 38.95)
-#
-#ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-#       filename = paste("Flow_salinity_curve_", "SS2_WC",".tiff", sep = ""), dpi = 1000)
-#
-#ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
- #                     Salinity_min = 11.98, Salinity_max = 35.98,
-  #                    Flow_min = 0, Flow_max = 907.26)
 #
 #
 #
 #
-### Parameter values and saving ####
+### Model predictions ####
+#
+
+#
+#
+#
+#
+### Parameter values and saving - optimal and nonoptimal model data ####
 #
 #Number of days of data per year
 flow_ave %>% 
