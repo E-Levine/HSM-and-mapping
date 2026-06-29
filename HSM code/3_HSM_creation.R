@@ -50,12 +50,11 @@ find_folder_names("Oysters")
 #If folders match, load shape files:
 Start_date <- "2020-01-01"
 End_date <- "2024-12-31"
-load_matching_shp("Oysters")
-#
 #
 # Apply data to grid cells
 modelGrid_sp <- Site_Grid
 #
+load_matching_shp("Oysters", StartDate = Start_date, EndDate = End_date)
 modelGrid_sp2 <- apply_polygon_overlap(modelGrid = modelGrid_sp, 
                                        files_loaded = files_loaded, 
                                        dataColumn =  "OYSTER", 
@@ -66,9 +65,20 @@ rm(list = ls(pattern = "^Oyster_"))
 #
 #
 find_folder_names("Seagrass")
-load_matching_shp("Seagrass")
+load_matching_shp("Seagrass", StartDate = Start_date, EndDate = End_date)
 modelGrid_sp2 <- apply_polygon_overlap(modelGrid = modelGrid_sp2, 
                                        files_loaded = files_loaded, 
                                        dataColumn =  "SEAGRASS", 
                                        fillValue = "Present", 
+                                       df_list = df_list)
+#
+# Working code ----
+rm(list = ls(pattern = "^Seagrass_"))
+find_folder_names("Oysters")
+load_matching_shp("Oysters", StartDate = "2023-01-01", EndDate = "2024-12-31")
+modelGrid_sp2 <- apply_polygon_buffers(modelGrid = modelGrid_sp2, 
+                                       files_loaded = files_loaded, 
+                                       LayerName = "Buffers",
+                                       dataColumn =  "OYSTER", 
+                                       buffer_breaks = c(200, 400, 1000), 
                                        df_list = df_list)

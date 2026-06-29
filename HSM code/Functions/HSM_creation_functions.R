@@ -195,14 +195,13 @@ find_folder_names <- function(Parameter_name){
 }
 #
 #Load data from all matching folders
-load_matching_shp <- function(Parameter_name, StartDate = Start_date, EndDate = End_date){
+load_matching_shp <- function(Parameter_name, StartDate, EndDate){
   data_dir <- "Data layers/"
   #ID parameter in summary table
   if(Parameter_name == "Oysters"){Param_file <- "/Oyster_Beds_in_Florida.shp"}
   if(Parameter_name == "Seagrass"){Param_file <- "/Seagrass_Habitat_in_Florida.shp"}
+  if(Parameter_name == "Channels"){Param_file <- "/Waterways_Florida.shp"}
   #
-  StartDate <- as.Date(Start_date)
-  EndDate <- as.Date(End_date)
   loaded_files <- list()
   #
   ##For each matching folder:
@@ -247,7 +246,7 @@ apply_polygon_overlap <- function(modelGrid,
   suppressWarnings(sf_use_s2(FALSE))
   #
   # Progress bar setup
-  total_steps <- length(files_loaded) + 2
+  total_steps <- length(files_loaded)*4 + 2
   #
   pb <- progress_bar$new(
     format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
@@ -279,6 +278,10 @@ apply_polygon_overlap <- function(modelGrid,
     polygon_sf <- st_make_valid(polygon_sf)
     polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
     #
+    pb$tick(tokens = list(
+      step = paste0("Processing: ", f, " : Overlap indexing")
+    ))
+    Sys.sleep(1/1000)
     # Spatial index for overlap
     idx <- suppressMessages(
       suppressWarnings(
@@ -286,29 +289,59 @@ apply_polygon_overlap <- function(modelGrid,
       ))
     nonempty <- which(lengths(idx) > 0)
     #
+    pb$tick(tokens = list(
+      step = paste0("Processing: ", f, " : Overlap intersecting")
+    ))
+    Sys.sleep(1/1000)
     # Intersection loop
     results <- vector("list", length(nonempty))
     
-    for (k in seq_along(nonempty)) {
+    ## Original method
+    #for (k in seq_along(nonempty)) {
+      #i <- nonempty[k]
+      #os <- idx[[i]]
+      #inter <- suppressMessages(suppressWarnings(st_intersection(modelGrid_sf[i, , drop = FALSE], polygon_sf[os, , drop = FALSE])))
+      #inter$grid_id <- i
+      #results[[k]] <- inter
+    #}
+    ## Chunking method
+    # Size of each chunk
+    chunk_size <- 1000
+    # Split the nonempty grid IDs into chunks
+    chunks <- split(
+      nonempty,
+      ceiling(seq_along(nonempty) / chunk_size)
+    )
+    for (j in seq_along(chunks)) {
       
-      i <- nonempty[k]
-      os <- idx[[i]]
+      grid_ids <- chunks[[j]]
+      
+      # Candidate polygons for every grid cell in this chunk
+      poly_ids <- unique(unlist(idx[grid_ids]))
       
       inter <- suppressMessages(
         suppressWarnings(
           st_intersection(
-            modelGrid_sf[i, , drop = FALSE],
-            polygon_sf[os, , drop = FALSE])
-        ))
+            modelGrid_sf[grid_ids, , drop = FALSE],
+            polygon_sf[poly_ids, , drop = FALSE]
+          )
+        )
+      )
       
-      inter$grid_id <- i
-      inter$overlap_area <- st_area(inter)
-      
-      results[[k]] <- inter
+      results[[j]] <- inter
     }
     
+    # Combine all intersections and compute areas
     inters <- dplyr::bind_rows(results)
+    if (nrow(inters) == 0) {
+      next
+    }
+    inters$overlap_area <- st_area(inters)
     #
+    pb$tick(tokens = list(
+      step = paste0("Processing: ", f, " : Overlap selection & cleaning")
+    ))
+    Sys.sleep(1/1000)
     # Best overlap
     best <- inters %>%
       dplyr::group_by(grid_id) %>%
@@ -357,9 +390,10 @@ apply_polygon_overlap <- function(modelGrid,
 #
 apply_polygon_buffers <- function(modelGrid,
                                   files_loaded,
+                                  LayerName, #Name of data layer output/type
+                                  dataColumn, #Name of column of data to use
                                   buffer_breaks = c(200, 400),
-                                  df_list = NULL,
-                                  output_prefix = "Buffer") {
+                                  df_list = NULL) {
   
   library(sf)
   library(dplyr)
@@ -367,6 +401,19 @@ apply_polygon_buffers <- function(modelGrid,
   
   suppressWarnings(sf_use_s2(FALSE))
   
+  # Progress bar setup ----
+  total_steps <- length(files_loaded) * (2 + length(buffer_breaks) - 1) + 2
+  #
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = total_steps,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  # Model grid ----
+  pb$tick(tokens = list(step = "Building model grid"))
+  Sys.sleep(1/1000)
   modelGrid_sf <- st_as_sf(modelGrid)
   original_crs <- st_crs(modelGrid_sf)
   # Convert for buffer distances
@@ -374,7 +421,6 @@ apply_polygon_buffers <- function(modelGrid,
     # use a projected CRS for buffering/distances
     work_crs <- 3857
     modelGrid_sf <- st_transform(modelGrid_sf, work_crs)
-    polygon_sf <- st_transform(polygon_sf, work_crs)
   }
   modelGrid_sf <- st_make_valid(modelGrid_sf)
   
@@ -383,41 +429,65 @@ apply_polygon_buffers <- function(modelGrid,
     stop("modelGrid must be in a projected CRS with meter units.")
   }
   
-  total_steps <- length(files_loaded) + 1
+  # Column naming helper ----
+  modelColName <- (df_list[[3]] %>%
+                     dplyr::filter(Column_name == dataColumn & Parameter == LayerName))$Model_column_name
   
-  pb <- progress_bar$new(
-    format = "[:bar] :percent | Step: :step",
-    total = total_steps,
-    clear = FALSE
-  )
-  
+  # Buffer processing ----
   for (f in files_loaded) {
-    
+    #
     pb$tick(tokens = list(step = paste("Processing", f)))
-    
+    Sys.sleep(1/1000)
+    # Build polygons
     polygon_sf <- st_as_sf(get(f))
     polygon_sf <- st_make_valid(polygon_sf)
     polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
-    
+    #
+    pb$tick(tokens = list(
+      step = paste0("Processing: ", f, " : Buffering")
+    ))
+    Sys.sleep(1/1000)
     # distance to nearest polygon
-    d <- st_distance(modelGrid_sf, polygon_sf)
+    #d <- st_distance(modelGrid_sf, polygon_sf) #ori
+    #nearest_dist <- apply(d, 1, min) #ori
+    #nearest_dist <- as.numeric(nearest_dist) #ori
+    nearest_geom <- st_nearest_feature(modelGrid_sf, polygon_sf)
     
-    nearest_dist <- apply(d, 1, min)
-    
-    nearest_dist <- as.numeric(nearest_dist)
-    
-    buffer_value <- rep(NA_real_, length(nearest_dist))
-    
-    for (b in sort(buffer_breaks)) {
-      buffer_value[nearest_dist <= b] <- b
-    }
-    
-    suffix <- stringr::str_sub(
-      stringr::str_extract(f, "(?<=_).*"),
-      3, 4
+    nearest_dist <- as.numeric(
+      st_distance(
+        modelGrid_sf,
+        polygon_sf[nearest_geom, ],
+        by_element = TRUE
+      )
     )
     
-    newColName <- paste0(output_prefix, suffix)
+    if (is.null(buffer_breaks)) {
+      buffer_breaks <- c(200, 400)
+    }
+    buffer_breaks <- as.numeric(buffer_breaks)
+    if (any(is.na(buffer_breaks))) {
+      stop("buffer_breaks must be numeric")
+    }
+    buffer_breaks <- sort(unique(buffer_breaks)) #added
+    buffer_value <- rep(NA_real_, length(nearest_dist))
+    buffer_value[nearest_dist <= buffer_breaks[1]] <- buffer_breaks[1] #added
+    
+    for (i in 2:length(buffer_breaks)) { #for (b in sort(buffer_breaks)) {
+      pb$tick(tokens = list(
+        step = paste0("Buffering: ", f, " // " , buffer_breaks[i])
+      ))
+      Sys.sleep(1/1000)
+      
+      #buffer_value[nearest_dist <= b] <- b #ori
+      buffer_value[
+        nearest_dist > buffer_breaks[i - 1] &
+          nearest_dist <= buffer_breaks[i]
+      ] <- buffer_breaks[i]
+    }
+    
+    suffix <- stringr::str_sub(stringr::str_extract(f, "(?<=_).*"), 3, 4)
+    
+    newColName <- paste0(modelColName, suffix)
     
     modelGrid_sf[[newColName]] <- buffer_value
   }
@@ -428,6 +498,24 @@ apply_polygon_buffers <- function(modelGrid,
   if (st_crs(modelGrid_sf) != original_crs) {
     modelGrid_sf <- st_transform(modelGrid_sf, original_crs)
   }
+  
+  message(
+    sprintf(
+      "Added '%s' from polygon layer '%s' as model grid column '%s'.",
+      dataColumn,
+      f,
+      newColName
+    )
+  )
+  
+  suppressWarnings(sf_use_s2(TRUE))
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  if (!pb$finished) {
+    pb$tick(0, tokens = list(step = "Completed processing"))
+  }
+  pb$terminate()
+  pb_active <- FALSE
   
   as(modelGrid_sf, "Spatial")
 }
