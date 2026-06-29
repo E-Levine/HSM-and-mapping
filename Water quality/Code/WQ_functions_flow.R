@@ -674,6 +674,165 @@ ggplot_hyperbolic_fit <- function(resultsdf,
 }
 #
 #
+#
+## Predictions based on models:
+predict_salinity_from_models <- function(model_output,
+                                         test_flow,
+                                         test_salinity,
+                                         flow_col = "Flow",
+                                         salinity_col = "Salinity") {
+  
+  library(dplyr)
+  library(ggplot2)
+  
+  models <- model_output$models
+  
+  station_col <- "Station"
+  time_col <- "Date"
+  
+  # Helper: extract parameters from nls summary or fit
+  extract_params <- function(model_obj) {
+    
+    # If model failed or is character
+    if (is.character(model_obj)) return(NULL)
+    
+    # If summary(nls) object
+    if ("summary.nls" %in% class(model_obj)) {
+      coefs <- model_obj$coefficients[,1]
+      return(list(y0 = coefs["y0"],
+                  a  = coefs["a"],
+                  b  = coefs["b"]))
+    }
+    
+    return(NULL)
+  }
+  
+  results_list <- list()
+  metrics_list <- list()
+  comp_plots_list <- list()
+  plots_list <- list()
+  
+  model_names <- names(models)
+
+  for (m in model_names) {
+    
+    params <- extract_params(models[[m]])
+    if (is.null(params)) next
+    
+    # parse station names from model_name
+    # assumes: salName_flowName
+    parts <- strsplit(m, "_")[[1]]
+    if (length(parts) < 2) next
+    
+    sal_station_name <- parts[1]
+    flow_station_name <- parts[2]
+    
+    # subset test data
+    sal_test <- test_salinity %>%
+      filter(Name == sal_station_name) %>%
+      dplyr::select(-any_of("Parameter"))
+    
+    flow_test <- test_flow %>%
+      filter(Name == flow_station_name) %>%
+      dplyr::select(-any_of("Parameter"))
+    
+    if (nrow(sal_test) == 0 || nrow(flow_test) == 0) next
+    
+    if ("Site" %in% names(sal_test) && "Site" %in% names(flow_test)) {
+      # Join by both time and Site
+      join_cols <- c(time_col, "Site")
+    } else {
+      # Fallback: Join by time only
+      join_cols <- time_col
+    }
+    
+    combined <- inner_join(sal_test, flow_test, 
+                           by = join_cols, suffix = c("_s", "_f")) %>%
+      drop_na()
+    
+    if (nrow(combined) == 0) next
+    
+    # PREDICTIONS ---------------------------
+    # predict using model formula:
+    # y = y0 + (a*b)/(b + flow)
+    combined$Predicted_salinity <-
+      params$y0 + (params$a * params$b) / (params$b + combined[[flow_col]])
+    
+    combined$Actual_salinity <- combined[[salinity_col]]
+    combined$Flow <- combined[[flow_col]]
+    combined$model <- m
+    
+    results_list[[m]] <- combined
+    
+    # METRICS ---------------------------
+    obs <- combined$Actual_salinity
+    pred <- combined$Predicted_salinity
+    
+    rmse <- sqrt(mean((obs - pred)^2, na.rm = TRUE))
+    mae  <- mean(abs(obs - pred), na.rm = TRUE)
+    r2 <- 1 - sum((obs - pred)^2, na.rm = TRUE) /
+      sum((obs - mean(obs, na.rm = TRUE))^2, na.rm = TRUE)
+    bias <- mean(pred - obs, na.rm = TRUE)
+    
+    metrics_list[[m]] <- data.frame(
+      model = m,
+      n = length(obs),
+      RMSE = rmse,
+      MAE = mae,
+      R2 = r2,
+      Bias = bias
+    )
+     
+    # PLOT ---------------------------
+    p <- ggplot(combined, aes(x = Actual_salinity, y = Predicted_salinity)) +
+      geom_point(alpha = 0.7) +
+      geom_abline(slope = 1, intercept = 0, size = 1.5, color = "red") +
+      scale_x_continuous(expand = c(0,0), limits = c(0, 35)) +
+      scale_y_continuous(expand = c(0,0), limits = c(0, 35))+
+      theme_classic() +
+      labs(
+        title = paste("Predicted vs Actual -", m),
+        x = "Actual Salinity",
+        y = "Predicted Salinity"
+      )
+     
+     p2 <- combined %>%
+       ggplot() +
+       geom_point(aes(Flow, Actual_salinity), alpha = 0.7) +
+       geom_point(aes(Flow, Predicted_salinity), alpha = 0.7, color = "red")  +
+       scale_x_continuous(expand = c(0,0)) +
+       scale_y_continuous(expand = c(0,0), limits = c(0, 35))+
+       theme_classic() +
+       labs(
+         title = paste("Predicted vs Actual -", m),
+         x = "Flow (cfs)",
+         y = "Salinity"
+       )
+    
+     comp_plots_list[[m]] <- p
+     plots_list[[m]] <- p2
+    
+    print(p)  # optional auto-display
+  }
+  
+  # OUTPUT TABLES ---------------------------
+  
+  predictions_df <- bind_rows(results_list)
+  metrics_df <- bind_rows(metrics_list)
+  
+  print(metrics_df)
+  
+  list(
+    predictions = predictions_df,
+    metrics = metrics_df,
+    comp_plots = comp_plots_list,
+    plots = plots_list
+  )
+}
+#
+#
+#
+#
 ## Determine mean number of days in year within range 
 #min and max Dates to include
 optimal_flow_days <- function(df, Station_name, minDate, maxDate, minFlow, maxFlow){

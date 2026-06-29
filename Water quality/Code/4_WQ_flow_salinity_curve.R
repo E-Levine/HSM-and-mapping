@@ -264,6 +264,8 @@ WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models,
 #                    Flow_min = 0, Flow_max = 907.26)
 #
 #
+#
+#
 # Calculate flow at specified salinity (from HSM curves)
 adult <- rbind(
   WQ$flow_at_salinity_hyp2(models$models, 11.98, models$data_lookup) %>% mutate(Sal = "min", Flow = "max"), 
@@ -279,7 +281,21 @@ larvae <- rbind(
 #
 ### Model predictions ####
 #
-
+## Use developed curves to predict values and compare to test data set:
+## Predictions
+flow_test <- flow_sum %>% filter(Date > "2016-12-31")
+rain_test <- rain_sum %>% filter(Date > "2016-12-31")
+sal_test <- salinity_ave %>% filter(Date > "2016-12-31")
+#
+sal_preds <- WQ$predict_salinity_from_models(model_output = models,
+                                             test_flow = flow_test,
+                                             test_salinity = sal_test, 
+                                             flow_col = "Flow",
+                                             salinity_col = "Salinity")
+#
+sal_preds$comp_plots[3]
+sal_preds$plots[3]
+#
 #
 #
 #
