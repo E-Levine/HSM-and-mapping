@@ -19,19 +19,50 @@ load_working_info <- function(SiteCode, VersionID){
 #
 #
 #### Function to load grid(s) and site area, clips to overlap, saves final grid, and keeps final grid for use
+# Updated 7/1/26 to allow for more AltGrids and better loading/error messaging
 get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Save_figure){
   #
   StateGrid <- State_Grid
   AltGrid <- Alt_Grid
-  #Load StateGrid(s) of picogrid
-  PicoGrid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",StateGrid,"/Florida_PicoGrid_WGS84_",StateGrid,"_clip.shp"), quiet = TRUE)
-  if(!is.na(AltGrid)){Alt_PicoGrid <- st_read(paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",AltGrid,"/Florida_PicoGrid_WGS84_",AltGrid,"_clip.shp"), quiet = TRUE)}
+  # Combine and identify all StateGrids needed
+  grid_names <- c(StateGrid, AltGrid)
+  grid_names <- unique(grid_names[!is.na(grid_names)])
   #
-  #Check grid(s), to confirm area
-  head(PicoGrid)
-  if(!is.na(AltGrid)){head(AltGrid)} else {print("No additional grid is being used.")}
+  if (length(grid_names) > 1) {
+    print("Additional grids:")
+    print(grid_names[-1])
+  } else {
+    print("No additional grids are being used.")
+  }
+  # Get full list of StateGrids
+  grid_list <- vector("list", length(grid_names))
+  # Load StateGrid(s)
+  for (i in seq_along(grid_names)) {
+    #
+    g <- grid_names[i]
+    #
+    shp <- paste0(
+      "Reference files/Grids/Florida_PicoGrid_WGS84_",
+      g,
+      "/Florida_PicoGrid_WGS84_",
+      g,
+      "_clip.shp"
+    )
+    #
+    message(sprintf("Loading grid %d of %d: %s", i, length(grid_names), g))
+    #
+    grid_list[[i]] <- tryCatch(
+      st_read(shp, quiet = TRUE),
+      error = function(e) {
+        stop(sprintf(
+          "Failed to load grid %d (%s)\nPath: %s\n\n%s", i, g, shp, e$message),
+          call. = FALSE)}
+    )}
   #
-  ##Load site KML and section KMLs as needed
+  PicoGrid <- do.call(rbind, grid_list)
+  #
+  #
+  ## Load site KML and section KMLs as needed
   OrderSections <- df_list[[2]]
   Site_area <- st_read(paste0(SiteCode, "_", VersionID,"/Data/Layers/KML/", SiteCode, ".kml"), quiet = TRUE)
   #plot(Site_area[1]) #Output site area plot
@@ -42,17 +73,12 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
     assign(paste0("Section",i), temp)
   }
   #
-  ##Limit to site area
-  if(!is.na(AltGrid)){
-    Site_Grid <<- rbind(PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,], 
-                        Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, Site_area))> 0,])
-    rm(PicoGrid, Alt_PicoGrid)
-  } else {
-    Site_Grid <<- PicoGrid[lengths(st_intersects(PicoGrid, Site_area))> 0,] 
-    rm(PicoGrid)
-  }
   #
-  ##Assign Site and Section information if designated
+  ## Limit to site area
+  Site_Grid <- PicoGrid[lengths(st_intersects(PicoGrid, Site_area)) > 0, ]
+  #
+  #
+  ## Assign Site and Section information if designated
   if(SectionsDesignated == "N"){
     Section_grid <- suppressMessages(Site_Grid %>% 
                                        #Add Site code and Sections as NA
@@ -115,7 +141,8 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
   #
   Section_grid <<- Section_grid
   #
-  ##Save data file and shape file if requested:
+  #
+  ## Save data file and shape file if requested:
   if(Save_data == "Y"){
     Datafile_name <- paste0(SiteCode, "_", VersionID, "/Output/Data files/", SiteCode, "_", VersionID, "_GridData_Sections.xlsx")
     Shapefile_name <- paste0(SiteCode, "_", VersionID, "/Output/Shapefiles/", SiteCode, "_", VersionID,"_Sections.shp")
@@ -173,6 +200,7 @@ find_folder_names <- function(Parameter_name){
   #ID parameter in summary table
   if(Parameter_name == "Oysters"){Param_find <- "Oysters"}
   if(Parameter_name == "Seagrass"){Param_find <- "Seagrass"}
+  if(Parameter_name == "Channels"){Param_find <- "Channels"}
   #
   #Check if Param to find is included in summary
   if (!Param_find %in% unique(Ref_info$Parameter)) {
@@ -195,7 +223,9 @@ find_folder_names <- function(Parameter_name){
 }
 #
 #Load data from all matching folders
-load_matching_shp <- function(Parameter_name, StartDate, EndDate){
+# Site_Grid: gridded object to apply data to
+# Parameter_name: name of parameter being added (found in Parameter column of the Parameter Order set up sheet)
+load_matching_shp <- function(Site_Grid, Parameter_name, StartDate, EndDate){
   data_dir <- "Data layers/"
   #ID parameter in summary table
   if(Parameter_name == "Oysters"){Param_file <- "/Oyster_Beds_in_Florida.shp"}
@@ -208,7 +238,20 @@ load_matching_shp <- function(Parameter_name, StartDate, EndDate){
   for(folder in matched_folders){
     #Get date of folder, skip if outside range:
     folder_date <- as.Date(paste0(substr(folder, nchar(folder) - 5, nchar(folder)), "01"), format = "%Y%m%d")
-    if(folder_date > Start_date & folder_date < End_date){
+    if(is.na(folder_date)){
+      print("No date associated with folder.")
+      #Load shapefile, assign name
+      shp_t <- st_read(paste0(data_dir, folder, Param_file))
+      shp_t <- st_transform(shp_t, st_crs(Site_Grid))
+      #shp_t <- sf::st_make_valid(shp_t)
+      shape_obj <- crop(as(shp_t, "Spatial"), extent(Site_Grid))
+      obj_name <- paste0(sub("_.*", "", folder))
+      assign(obj_name, shape_obj, envir = .GlobalEnv)
+      #Add to loaded list
+      loaded_files[[folder]] <- paste0(str_extract(folder, "[^_]+"), "_", str_extract(folder, "[^_]+$"))
+      #
+      #
+    } else if(folder_date > StartDate & folder_date < EndDate){
       print(paste0("Loading: ", folder))
       #Load shapefile, assign name
       shp_t <- st_read(paste0(data_dir, folder, Param_file))
@@ -219,6 +262,8 @@ load_matching_shp <- function(Parameter_name, StartDate, EndDate){
       assign(obj_name, shape_obj, envir = .GlobalEnv)
       #Add to loaded list
       loaded_files[[folder]] <- paste0(str_extract(folder, "[^_]+"), "_", str_extract(folder, "[^_]+$"))
+      #
+      #
     } else {
       print(paste0("Skipping: ", folder))
     }
@@ -239,6 +284,7 @@ load_matching_shp <- function(Parameter_name, StartDate, EndDate){
 apply_polygon_overlap <- function(modelGrid,
                                   files_loaded,
                                   dataColumn,
+                                  Parameter_name,
                                   fillValue,
                                   df_list) {
   
@@ -259,13 +305,13 @@ apply_polygon_overlap <- function(modelGrid,
   modelGrid_sf <- st_as_sf(modelGrid)
   modelGrid_sf <- st_make_valid(modelGrid_sf)
   modelGrid_sf$grid_id <- seq_len(nrow(modelGrid_sf))
+  grid_crs <- st_crs(modelGrid_sf)
   pb$tick(tokens = list(step = "Model grid build"))
   Sys.sleep(1/1000)
-  
   # ---- column naming helper ----
   modelColName <- (df_list[[3]] %>%
-                     dplyr::filter(Column_name == dataColumn))$Model_column_name
-  
+                     dplyr::filter(Parameter == Parameter_name & Column_name == dataColumn))$Model_column_name
+
   # LOOP PER FILE → EACH FILE CREATES ONE OUTPUT COLUMN
   for (f in files_loaded) {
     #
@@ -296,14 +342,6 @@ apply_polygon_overlap <- function(modelGrid,
     # Intersection loop
     results <- vector("list", length(nonempty))
     
-    ## Original method
-    #for (k in seq_along(nonempty)) {
-      #i <- nonempty[k]
-      #os <- idx[[i]]
-      #inter <- suppressMessages(suppressWarnings(st_intersection(modelGrid_sf[i, , drop = FALSE], polygon_sf[os, , drop = FALSE])))
-      #inter$grid_id <- i
-      #results[[k]] <- inter
-    #}
     ## Chunking method
     # Size of each chunk
     chunk_size <- 1000
@@ -363,7 +401,11 @@ apply_polygon_overlap <- function(modelGrid,
         by = c("PGID", "Long_DD_X", "Lat_DD_Y")
       )
     
-    names(modelGrid_sf)[names(modelGrid_sf) == dataColumn] <- newColName
+    if (is.na(st_crs(modelGrid_sf))) {
+      st_crs(modelGrid_sf) <- grid_crs
+    }
+    
+    modelGrid_sf <- dplyr::rename(modelGrid_sf, !!newColName := all_of(dataColumn))
     
     message(
       sprintf(
@@ -388,7 +430,7 @@ apply_polygon_overlap <- function(modelGrid,
 #
 #
 #
-apply_polygon_buffers <- function(modelGrid,
+apply_distance_buffers_ori <- function(modelGrid,
                                   files_loaded,
                                   LayerName, #Name of data layer output/type
                                   dataColumn, #Name of column of data to use
@@ -439,24 +481,20 @@ apply_polygon_buffers <- function(modelGrid,
     pb$tick(tokens = list(step = paste("Processing", f)))
     Sys.sleep(1/1000)
     # Build polygons
-    polygon_sf <- st_as_sf(get(f))
-    polygon_sf <- st_make_valid(polygon_sf)
-    polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
+    feature_sf <- st_as_sf(get(f))
+    feature_sf <- st_make_valid(feature_sf)
+    feature_sf <- st_transform(feature_sf, st_crs(modelGrid_sf))
     #
     pb$tick(tokens = list(
       step = paste0("Processing: ", f, " : Buffering")
     ))
     Sys.sleep(1/1000)
-    # distance to nearest polygon
-    #d <- st_distance(modelGrid_sf, polygon_sf) #ori
-    #nearest_dist <- apply(d, 1, min) #ori
-    #nearest_dist <- as.numeric(nearest_dist) #ori
-    nearest_geom <- st_nearest_feature(modelGrid_sf, polygon_sf)
+    nearest_geom <- st_nearest_feature(modelGrid_sf, feature_sf)
     
     nearest_dist <- as.numeric(
       st_distance(
         modelGrid_sf,
-        polygon_sf[nearest_geom, ],
+        feature_sf[nearest_geom, ],
         by_element = TRUE
       )
     )
@@ -468,17 +506,16 @@ apply_polygon_buffers <- function(modelGrid,
     if (any(is.na(buffer_breaks))) {
       stop("buffer_breaks must be numeric")
     }
-    buffer_breaks <- sort(unique(buffer_breaks)) #added
+    buffer_breaks <- sort(unique(buffer_breaks)) 
     buffer_value <- rep(NA_real_, length(nearest_dist))
-    buffer_value[nearest_dist <= buffer_breaks[1]] <- buffer_breaks[1] #added
+    buffer_value[nearest_dist <= buffer_breaks[1]] <- buffer_breaks[1] 
     
-    for (i in 2:length(buffer_breaks)) { #for (b in sort(buffer_breaks)) {
+    for (i in seq_along(buffer_breaks)[-1]) { 
       pb$tick(tokens = list(
         step = paste0("Buffering: ", f, " // " , buffer_breaks[i])
       ))
       Sys.sleep(1/1000)
       
-      #buffer_value[nearest_dist <= b] <- b #ori
       buffer_value[
         nearest_dist > buffer_breaks[i - 1] &
           nearest_dist <= buffer_breaks[i]
@@ -501,7 +538,7 @@ apply_polygon_buffers <- function(modelGrid,
   
   message(
     sprintf(
-      "Added '%s' from polygon layer '%s' as model grid column '%s'.",
+      "Added '%s' from feature layer '%s' as model grid column '%s'.",
       dataColumn,
       f,
       newColName
@@ -518,4 +555,294 @@ apply_polygon_buffers <- function(modelGrid,
   pb_active <- FALSE
   
   as(modelGrid_sf, "Spatial")
+}
+#
+#
+#
+#
+apply_distance_buffers <- function(
+    modelGrid, #grid to apply top
+    files_loaded, #files to use
+    LayerName, #Name of data layer output/type
+    dataColumn, #Name of column of data to use
+    df_list = NULL,
+    buffer_method = c("fixed","lookup"), #Fixed = specified numbers, lookup = use of reference table
+    buffer_breaks = NULL, #Option to specify fixed breaks (distance in meters)
+    Ref_table = NULL, #Option to supply reference table for lookup 
+    buffer_multiplier = 100, #Multiplier for scoring to value conversion 
+    buffer_units = c("ft","m","km","mi","keep") #Assumes the reference is in meters so buffer_units = "m" is 1:1
+){
+  # Packages
+  library(sf)
+  library(dplyr)
+  library(progress)
+  library(stringr)
+  #
+  suppressWarnings(sf_use_s2(FALSE))
+  #
+  # Progress bar setup ----
+  total_steps <- length(files_loaded) * 2 + 3
+  #
+  pb <- progress_bar$new(
+    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    total = total_steps,
+    complete = "=", incomplete = "-", current = ">",
+    clear = FALSE, width = 100, show_after = 0, force = TRUE)
+  pb_active <- TRUE
+  #
+  # Checks ----
+  pb$tick(tokens = list(step = "Function checks"))
+  Sys.sleep(1/1000)
+  #
+  buffer_method <- match.arg(buffer_method)
+  buffer_units  <- match.arg(buffer_units)
+  #
+  if(buffer_method=="fixed"){
+    if(is.null(buffer_breaks))
+      stop("'buffer_breaks' must be supplied.")
+    buffer_breaks <- sort(unique(as.numeric(buffer_breaks)))
+  }
+  #
+  if(buffer_method=="lookup"){
+    if(is.null(Ref_table))
+      stop("'Ref_table' must be supplied.")
+    if(!all(c("Param","Value") %in% names(Ref_table)))
+      stop("Ref_table must contain Param and Value columns.")
+  }
+  #
+  if(buffer_units == "keep"){
+    conv <- 1
+  } else {
+    conv <- switch(buffer_units,
+                   m=1,
+                   ft=0.3048,
+                   km=1000,
+                   mi=1609.344)
+  }
+  #
+  # Model grid ----
+  pb$tick(tokens = list(step = "Building model grid"))
+  Sys.sleep(1/1000)
+  #
+  modelGrid_sf <- st_as_sf(modelGrid)
+  original_crs <- st_crs(modelGrid_sf)
+  # Convert for buffer distances
+  if(st_is_longlat(modelGrid_sf)){
+    # use a projected CRS for buffering/distances
+    modelGrid_sf <- st_transform(modelGrid_sf,3857)
+  }
+  modelGrid_sf <- st_make_valid(modelGrid_sf)
+  #
+  modelColName <- df_list[[3]] %>%
+    dplyr::filter(Column_name==dataColumn,
+                  Parameter==LayerName) %>%
+    dplyr::pull(Model_column_name)
+  #
+  #
+  # Buffer processing ----
+  for(f in files_loaded){
+    #
+    pb$tick(tokens = list(step = paste("Processing", f)))
+    Sys.sleep(1/1000)
+    # Build features
+    feature_sf <- st_as_sf(get(f))
+    feature_sf <- st_make_valid(feature_sf)
+    feature_sf <- st_transform(feature_sf, st_crs(modelGrid_sf))
+    #
+    #
+    pb$tick(tokens = list(
+      step = paste0("Processing: ", f, " : Buffering")
+    ))
+    Sys.sleep(1/1000)
+    # Column naming -Check if 'f' ends in a number
+    if (stringr::str_detect(f, "[0-9]$")) {
+      # Extract numbers if it ends in numbers
+      suffix <- stringr::str_sub(stringr::str_extract(f, "(?<=_).*"), 3, 4)
+    } else {
+      # Leave suffix as blank if it ends in letters (or anything else)
+      suffix <- ""
+    }
+    #
+    newColName <- paste0(modelColName,suffix)
+    #
+    buffer_value <- rep(NA_real_, nrow(modelGrid_sf))
+    #
+    if(buffer_method == "fixed"){
+      #
+      assigned <- rep(FALSE,nrow(modelGrid_sf))
+      #
+      for(b in buffer_breaks){
+        buf <- st_buffer(feature_sf,b)
+        inside <- lengths(
+          st_intersects(modelGrid_sf,buf)
+        )>0
+        idx <- inside & !assigned
+        buffer_value[idx] <- b
+        assigned[idx] <- TRUE
+      }
+    } else {
+      if(!(dataColumn %in% names(feature_sf)))
+        stop(sprintf("%s not found.",dataColumn))
+      
+      ## Initialize Value column
+      feature_sf$Value <- rep(0, nrow(feature_sf))
+      
+      for (i in seq_len(nrow(Ref_table))) {
+        
+        ## Split comma-separated search terms
+        terms <- trimws(
+          strsplit(Ref_table$Param[i], ",")[[1]]
+        )
+        
+        ## Match any whole word (case-insensitive)
+        pattern <- paste0(
+          "\\b(",
+          paste(terms, collapse = "|"),
+          ")\\b"
+        )
+        
+        matches <- grepl(
+          pattern,
+          feature_sf[[dataColumn]],
+          ignore.case = TRUE,
+          perl = TRUE
+        )
+        
+        ## Maximum Value wins
+        feature_sf$Value[matches] <-
+          pmax(
+            feature_sf$Value[matches],
+            Ref_table$Value[i]
+          )
+      }
+      
+      ## Replace Inf values created by pmax(NA, ..., na.rm=TRUE)
+      feature_sf$Value[feature_sf$Value == 0] <- NA
+      #feature_sf <- feature_sf %>%
+      #  left_join(Ref_table,
+      #            by=setNames("Param",dataColumn))
+      feature_sf$buffer_m <- feature_sf$Value * buffer_multiplier * conv
+      buf <- st_buffer(feature_sf,
+                       dist=feature_sf$buffer_m)
+      hits <- st_intersects(modelGrid_sf,buf)
+      for(i in seq_along(hits)){
+        if(length(hits[[i]])>0){
+          buffer_value[i] <- max(buf$buffer_m[hits[[i]]], na.rm=TRUE)
+        }
+      }
+    }
+    #
+    modelGrid_sf[[newColName]] <- buffer_value
+    #
+    message(
+      sprintf(
+        "Added '%s' from feature layer '%s' as model grid column '%s'.",
+        dataColumn,
+        f,
+        newColName
+      )
+    )
+    #
+  }
+  # Convert output back to original CRS
+  if(st_crs(modelGrid_sf)!=original_crs)
+    modelGrid_sf <- st_transform(modelGrid_sf,
+                                 original_crs)
+  
+  suppressWarnings(sf_use_s2(TRUE))
+  #
+  pb$tick(tokens = list(step = "Completed processing"))
+  Sys.sleep(1/1000)
+  if (!pb$finished) {
+    pb$tick(0, tokens = list(step = "Completed processing"))
+  }
+  pb$terminate()
+  pb_active <- FALSE
+  #
+  as(modelGrid_sf,"Spatial")
+  #
+}
+
+# Example fixed:
+# apply_distance_buffers(
+#   modelGrid, files_loaded,
+#   LayerName="Wetlands",
+#   dataColumn="Distance",
+#   df_list=df_list,
+#   buffer_method="fixed",
+#   buffer_breaks=c(200,400)
+# )
+
+# Example lookup:
+# Ref_table <- data.frame(
+#   Param=c("Offshore","Primary","Large Vessel"),
+#   Value=c(1,2,5)
+# )
+#
+# apply_distance_buffers(
+#   modelGrid, files_loaded,
+#   LayerName="Shipping",
+#   dataColumn="Distance",
+#   df_list=df_list,
+#   buffer_method="lookup",
+#   Ref_table=Ref_table,
+#   type_column="TYPE",
+#   buffer_multiplier=100,
+#   buffer_units="ft"
+# )
+#
+#
+#
+# Function to split specified column into new columns based on original column values. Names new columns using value split.
+split_column_by_value <- function(x, column, remove_original = FALSE) {
+  
+  # Get attribute table
+  dat <- if (inherits(x, "Spatial")) {
+    x@data
+  } else if (inherits(x, "sf")) {
+    sf::st_drop_geometry(x)
+  } else if (is.data.frame(x)) {
+    x
+  } else {
+    stop("x must be a data.frame, Spatial* object, or sf object.")
+  }
+  
+  # Check column exists
+  if (!column %in% names(dat)) {
+    stop(sprintf("Column '%s' not found.", column))
+  }
+  
+  # Unique non-NA values
+  vals <- unique(dat[[column]])
+  vals <- vals[!is.na(vals)]
+  
+  # Create new columns
+  for (v in vals) {
+    
+    new_name <- paste0(column, str_replace(make.names(v), "^X(?=\\d)", ""))
+    
+    dat[[new_name]] <- ifelse(
+      dat[[column]] == v,
+      dat[[column]],
+      NA
+    )
+  }
+  
+  # Optionally remove original column
+  if (remove_original) {
+    dat[[column]] <- NULL
+  }
+  
+  # Put data back into original object
+  if (inherits(x, "Spatial")) {
+    x@data <- dat
+  } else if (inherits(x, "sf")) {
+    geom <- sf::st_geometry(x)
+    x <- sf::st_as_sf(dat)
+    sf::st_geometry(x) <- geom
+  } else {
+    x <- dat
+  }
+  
+  return(x)
 }
