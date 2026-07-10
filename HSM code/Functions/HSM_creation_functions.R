@@ -28,7 +28,7 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
   grid_names <- c(StateGrid, AltGrid)
   grid_names <- unique(grid_names[!is.na(grid_names)])
   #
-  if (length(grid_names) > 1) {
+  if (length(grid_names) > 1) {#print("Primary grid:") print(grid_names[1])
     print("Additional grids:")
     print(grid_names[-1])
   } else {
@@ -41,13 +41,9 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
     #
     g <- grid_names[i]
     #
-    shp <- paste0(
-      "Reference files/Grids/Florida_PicoGrid_WGS84_",
-      g,
-      "/Florida_PicoGrid_WGS84_",
-      g,
-      "_clip.shp"
-    )
+    shp <- paste0("Reference files/Grids/Florida_PicoGrid_WGS84_",g,
+                  "/Florida_PicoGrid_WGS84_",g,
+                  "_clip.shp")
     #
     message(sprintf("Loading grid %d of %d: %s", i, length(grid_names), g))
     #
@@ -61,24 +57,42 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
   #
   PicoGrid <- do.call(rbind, grid_list)
   #
-  #
   ## Load site KML and section KMLs as needed
   OrderSections <- df_list[[2]]
   Site_area <- st_read(paste0(SiteCode, "_", VersionID,"/Data/Layers/KML/", SiteCode, ".kml"), quiet = TRUE)
   #plot(Site_area[1]) #Output site area plot
   #
   SectionList <- unlist((OrderSections %>% arrange(Order))[,"KML_Name"]) #Output list of names
-  for (i in seq_along(unique(SectionList))) {
-    temp <- st_read(paste0(SiteCode, "_", VersionID, "/Data/Layers/KML/", unique(SectionList)[i], ".kml"), quiet = TRUE)
-    assign(paste0("Section",i), temp)
-  }
+  #for (i in seq_along(unique(SectionList))) {
+  #  temp <- st_read(paste0(SiteCode, "_", VersionID, "/Data/Layers/KML/", unique(SectionList)[i], ".kml"), quiet = TRUE)
+  #  assign(paste0("Section",i), temp)
+  #}
+  unique_sections <- unique(SectionList)
+  section_list <- lapply(unique_sections, function(x) {
+    s <- st_read(
+      paste0(SiteCode, "_", VersionID,"/Data/Layers/KML/",x,".kml"),
+      quiet = TRUE)
+    s$KML_Name <- x
+    s
+  })
+  sections_sf <- bind_rows(section_list)
   #
   #
-  ## Limit to site area
-  Site_Grid <- PicoGrid[lengths(st_intersects(PicoGrid, Site_area)) > 0, ]
+  ## Limit to site area & add Site column
+  Site_Grid <- st_filter(PicoGrid, Site_area) %>% #Site_Grid <- PicoGrid[lengths(st_intersects(PicoGrid, Site_area)) > 0, ]
+    mutate(Site = SiteCode) #Add Site code, section code
   #
   #
   ## Assign Site and Section information if designated
+  site_lookup <- df_list[[1]] %>%
+    filter(Type == "Site") %>%
+    transmute(Site = Designation, LongName)
+  #
+  section_lookup <- df_list[[2]] %>%
+    mutate(Section_Name = str_extract(KML_Name, "(?<=-).*")) %>%
+    dplyr::select(Section, KML_Name, Section_Name, Order)
+  #
+  
   if(SectionsDesignated == "N"){
     Section_grid <- suppressMessages(Site_Grid %>% 
                                        #Add Site code and Sections as NA
@@ -93,51 +107,33 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
     Section_plot <<- tm_shape(Section_grid) + tm_fill(col = "Section")
     #
   } else if(SectionsDesignated == "Y"){
-    #Create empty list
-    temp_sections <- list()
-    for (i in mget(ls(pattern = "Section[0-9]"))) {
-      #
-      #Check for overlap
-      overlap <- Site_Grid[lengths(st_intersects(Site_Grid, i)) > 0, ]
-      #
-      if (nrow(overlap) == 0) {
-        message("No overlap found for Section ", i$Name, ". Skipping.")
-      } else {
-        #Assign grid cells to section based on overlap with section layer
-        temp <- suppressMessages(overlap %>% #Limit to section area
-                                   mutate(Site = SiteCode, #Add Site code, section code
-                                          Section = OrderSections$Section[OrderSections$KML_Name == i$Name]) %>%
-                                   #Add site long name
-                                   left_join(df_list[[1]] %>% 
-                                               filter(Type == "Site") %>% 
-                                               mutate(Site = Designation) %>% 
-                                               dplyr::select(Site, LongName)) %>%
-                                   #Add section long names from KML file names
-                                   left_join(df_list[[2]] %>% 
-                                               mutate(Section_Name = str_extract(KML_Name, "(?<=-).*")) %>% 
-                                               dplyr::select(Section, Section_Name)))
-        #
-        temp_sections[[length(temp_sections) + 1]] <- temp
-      }
-      #Add all data together into one output
-      if (length(temp_sections) > 0) {
-        Section_grid <- do.call(rbind, temp_sections) %>% 
-          #Re-level Section based on specified order
-          mutate(Section = factor(Section, levels = unique(df_list[[2]]$Section[order(df_list[[2]]$Order)]), ordered = TRUE)) %>% 
-          #Keep only one Section-assignment per grid cell
-          arrange(Section) %>% group_by(PGID) %>% slice(1) 
-      } else {
-        message("No overlapping sections were found.")
-        Section_grid <- NULL
-      }
+    ## Spatial join (one operation instead of looping over sections)
+    Section_grid <- st_join(
+      Site_Grid,
+      sections_sf %>% dplyr::select(KML_Name),
+      join = st_intersects, left = FALSE) %>%
+      left_join(OrderSections %>% dplyr::select(KML_Name, Section), by = "KML_Name") %>%
+      left_join(site_lookup, by = "Site") %>%
+      left_join(section_lookup %>% dplyr::select(Section, Section_Name, Order), by = "Section") %>%
+      mutate(Site = SiteCode,
+             Section = factor(Section, levels = OrderSections %>% arrange(Order) %>% pull(Section), ordered = TRUE)
+             ) %>%
+      arrange(Section) %>%
+      group_by(PGID) %>%
+      slice(1) %>%
+      ungroup()
+    
+    if (nrow(Section_grid) == 0) {
+      message("No overlapping sections were found.")
+      Section_grid <- NULL
     }
-    rm(temp, i, temp_sections)
-    gc()  
     #
     ##Output head of updated data frame and map of sections
     head(Section_grid)
     Section_plot <<- tm_shape(Section_grid) + tm_fill(col = "Section")
-  } else {paste("Incorrect specification of if sections should be designated in data.")}
+  } else {
+    paste("Incorrect specification of if sections should be designated in data.")
+    }
   #
   Section_grid <<- Section_grid
   #

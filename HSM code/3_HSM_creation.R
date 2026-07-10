@@ -19,12 +19,10 @@ source("HSM code/Functions/HSM_Creation_Functions.R")
 Site_Code <- c("WI") #two-letter site code
 Version <- c("v1") #Model version
 State_Grid <- c("F2")
-Alt_Grid <- c("E2") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
+Alt_Grid <- c("E3", "F3") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
 #
 ##Parameters
 Sections_designated <- c("Y") #Y/N are section designations used
-##Polygon data:
-#FL_Oysters <- c("Y") #Oyster beds in Florida: Include Oyster layer data ("Data"), include layer data and scoring ("Score"), or don't include data or scoring ("None")
 #
 #
 #
@@ -53,14 +51,13 @@ End_date <- "2024-12-31"
 #
 # Apply data to grid cells:
 # Oysters
-modelGrid_sp <- Site_Grid
-#
-load_matching_shp("Oysters", StartDate = Start_date, EndDate = End_date)
-modelGrid_sp2 <- apply_polygon_overlap(modelGrid = modelGrid_sp, 
-                                       files_loaded = files_loaded, 
-                                       dataColumn =  "OYSTER", 
-                                       fillValue = "Live", 
-                                       df_list = df_list)
+load_matching_shp(Section_grid, "Oysters", StartDate = Start_date, EndDate = End_date)
+modelGrid_sp <- apply_polygon_overlap(modelGrid = Section_grid, 
+                                      files_loaded = files_loaded, 
+                                      dataColumn =  "OYSTER",
+                                      Parameter_name = "Oysters",
+                                      fillValue = "Live", 
+                                      df_list = df_list)
 #
 rm(list = ls(pattern = "^Oyster_"))
 #
@@ -68,12 +65,13 @@ rm(list = ls(pattern = "^Oyster_"))
 #
 # Seagrass
 find_folder_names("Seagrass")
-load_matching_shp("Seagrass", StartDate = Start_date, EndDate = End_date)
-modelGrid_sp2 <- apply_polygon_overlap(modelGrid = modelGrid_sp2, 
-                                       files_loaded = files_loaded, 
-                                       dataColumn =  "SEAGRASS", 
-                                       fillValue = "Present", 
-                                       df_list = df_list)
+load_matching_shp(Section_grid, "Seagrass", StartDate = Start_date, EndDate = End_date)
+modelGrid_sp <- apply_polygon_overlap(modelGrid = modelGrid_sp, 
+                                      files_loaded = files_loaded, 
+                                      dataColumn =  "SEAGRASS", 
+                                      Parameter_name = "Seagrass",
+                                      fillValue = "Present", 
+                                      df_list = df_list)
 #
 rm(list = ls(pattern = "^Seagrass_"))
 #
