@@ -79,8 +79,8 @@ rm(list = ls(pattern = "^Seagrass_"))
 #
 # Oyster buffers
 find_folder_names("Oysters")
-load_matching_shp("Oysters", StartDate = "2023-01-01", EndDate = "2024-12-31")
-modelGrid_sp2 <- apply_distance_buffers(modelGrid = modelGrid_sp2, 
+load_matching_shp(Section_grid, "Oysters", StartDate = "2023-01-01", EndDate = "2024-12-31")
+modelGrid_sp2 <- apply_distance_buffers(modelGrid = modelGrid_sp, 
                                         files_loaded = files_loaded, 
                                         LayerName = "Buffers",
                                         dataColumn =  "OYSTER", 
@@ -89,7 +89,7 @@ modelGrid_sp2 <- apply_distance_buffers(modelGrid = modelGrid_sp2,
                                         df_list = df_list)
 #
 # Plot to check data application 
-ggplot(st_as_sf(modelGrid_sp3))+
+ggplot(st_as_sf(modelGrid_sp2))+
   geom_sf(aes(fill = Buff24))+
   geom_sf(aes(color = Oyst24), fill = NA)+
   coord_sf(xlim = c(-82.825, -82.799),
@@ -98,32 +98,33 @@ ggplot(st_as_sf(modelGrid_sp3))+
 rm(list = ls(pattern = "^Oyster_"))
 #
 #
-# Working ----
 # Navigational channel buffers
 find_folder_names("Channels")
-load_matching_shp("Channels", StartDate = "2024-01-01", EndDate = "2024-12-31")
+load_matching_shp(Section_grid, "Channels", StartDate = "2024-01-01", EndDate = "2024-12-31")
 #
+files_loaded[1] <- "Waterways"
+names(files_loaded) <- "Waterways"
 # Reference table:
 (Reference_t <- df_list[[12]] %>%
-  filter(Curve == "Channel buffer") %>%
-  mutate(Param = str_replace_all(Param, "[\r\n]+", "")) %>%
-  dplyr::select(-Date_Updated))
+    filter(Curve == "Channel buffer") %>%
+    mutate(Param = str_replace_all(Param, "[\r\n]+", "")) %>%
+    dplyr::select(-Date_Updated))
 #
-modelGrid_sp2 <- apply_distance_buffers(modelGrid = modelGrid_sp2, 
-                                       files_loaded = files_loaded, 
-                                       LayerName = "Channels",
-                                       dataColumn =  "TYPE", 
-                                       buffer_method ="lookup",
-                                       Ref_table = Reference_t,
-                                       buffer_multiplier = 100,
-                                       buffer_units = "keep",
-                                       df_list = df_list)
+modelGrid_sp3 <- apply_distance_buffers(modelGrid = modelGrid_sp2, 
+                                        files_loaded = files_loaded, 
+                                        LayerName = "Channels",
+                                        dataColumn =  "TYPE", 
+                                        buffer_method ="lookup",
+                                        Ref_table = Reference_t,
+                                        buffer_multiplier = 100,
+                                        buffer_units = "keep",
+                                        df_list = df_list)
 #
 # Plot to check data application 
 ggplot(st_as_sf(modelGrid_sp3))+
   geom_sf(aes(fill = Chnl))+
   #geom_sf(aes(color = Chnl), fill = NA)+
-  geom_sf(data = st_as_sf(Waterways_Florida), aes(color = TYPE), linewidth = 1.5)+
+  geom_sf(data = st_as_sf(Waterways), aes(color = TYPE), linewidth = 1.5)+
   scale_color_discrete()+
   coord_sf(xlim = c(-82.75, -82.738),
            ylim = c(29.005, 29.011))
@@ -131,5 +132,5 @@ ggplot(st_as_sf(modelGrid_sp3))+
 #
 #
 # Divide Chnl column by designation:
-modelGrid_sp2 <- split_column_by_value(modelGrid_sp2, "Chnl", remove_original = FALSE)
-head(modelGrid_sp2@data)
+modelGrid_sp4 <- split_column_by_value(modelGrid_sp3, "Chnl", remove_original = TRUE)
+head(modelGrid_sp4@data)
