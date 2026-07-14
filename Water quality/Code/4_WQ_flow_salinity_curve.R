@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                install = TRUE) 
 #
 #
-Site_code <- c("WI")       #Two letter estuary code
+Site_code <- c("SS")       #Two letter estuary code
 Version <- c("v1")         #For saving plots
 Start_year <- c("2020")
 End_year <- c("2024")
@@ -182,18 +182,10 @@ models <- WQ$fit_salinity_flow_models(flow_monthly, sal_monthly)
 #Fit fails unless means used: models <- fit_salinity_flow_models(flow_ave, sal_monthly, flow_col = "Flow")
 #
 #
-models <- WQ$filter_models(models, c("USGS-02313700-USGS-02313700", 
-                                     "USGS-02313272_USGS-02313700", 
-                                     "USGS-285447082445100_USGS-02313700", 
-                                     "USGS-02313272_USGS-02313250",
-                                     "USGS-02313272_USGS-02313230",
-                                     "USGS-285447082445100_USGS-02313250",
-                                     "USGS-285447082445100_USGS-02313230",
-                                     "USGS-02310750_USGS-02310750",
-                                     "USGS-02310752_USGS-02310750",
-                                     "USGS-285531082412600_USGS-02310750",
-                                     "USGS-285447082445100_USGS-02310750",
-                                     "USGS-284506082435801_USGS-02310750"))
+models <- WQ$filter_models(models, c("SSSal1_USGS-02313700",
+                                     "SSSal3_USGS-02313700",
+                                     "SSSal4_USGS-02313700",
+                                     "SSSal5_USGS-02313700"), mode = "remove")
 #
 # Calculate flow at specified salinity (from HSM curves)
 adult <- rbind(
@@ -207,7 +199,7 @@ larvae <- rbind(
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
 names(models$models)
 WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models, 
-                         names(models$models)[11], 
+                         names(models$models)[6], 
                          "Mean_Flow", "Mean_Salinity", 
                          Salinity_min = 11.98, Salinity_max = 38.95)
 #
