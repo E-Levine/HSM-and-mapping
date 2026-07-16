@@ -400,3 +400,62 @@ save_final_model_output <- function(data = NULL, #good for single output, but no
     message(paste0("CSV of model outcome saved to: ", model_csv_path))
   }
 }
+#
+#
+#
+# Function to save simplified shapefile with just model output scores:
+# Function to save shapefile and split if necessary
+save_model_scores <- function(data = NULL, #good for single output, but not needed
+                              SiteCode = Site_Code, 
+                              VerNum = Version,
+                              model_suffix = NULL) {
+  #
+  if (is.null(model_suffix) || model_suffix == "") {
+    hsm_cols <- names(data)[grepl("HSM", names(data))]
+  } else {
+    hsm_cols <- names(data)[
+      grepl("HSM", names(data)) &
+        grepl(model_suffix, names(data), fixed = TRUE)
+    ]
+  }
+  # Break data by type:
+  model <- data %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X, dplyr::all_of(hsm_cols))
+  # Prepare objects ----
+  Model_scores_csv <- model %>% st_drop_geometry()
+  #
+  # Paths ----
+  CSV_scores_path <- paste0(SiteCode, "_", VerNum, "/Output/Data files/", 
+                            SiteCode, "_", VerNum, "_final_model_only_scores_",Sys.Date(),".csv")
+  shapefile_temp <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/temp.shp")
+  shapefile_path <- paste0(SiteCode, "_", VerNum, "/Output/Shapefiles/", 
+                           SiteCode, "_", VerNum, "_HSM_final_model_scores_",Sys.Date(),".shp")
+  #
+  # ---- Save CSV for "scores" ----
+  data.table::fwrite(Model_scores_csv, CSV_scores_path)
+  message(paste0("CSV of scores saved to: ", CSV_scores_path))
+  
+  # ---- Save shapefile and model CSV ----
+  st_write(model, shapefile_temp, delete_dsn = TRUE)
+  
+  dbf_temp <- sub("\\.shp$", ".dbf", shapefile_temp)
+  file_size <- file.info(dbf_temp)$size
+  
+  if(file_size > (2 * 900^3)) {
+    chunk_size <- 2 * 900^3
+    num_chunks <- ceiling(file_size / chunk_size)
+    rows_per_chunk <- ceiling(nrow(model) / num_chunks)
+    new_path <- sub("\\.shp$", "", shapefile_path)
+    
+          for(i in seq_len(num_chunks)) {
+            start_row <- (i - 1) * rows_per_chunk + 1
+            end_row <- min(i * rows_per_chunk, nrow(model))
+            chunk_data <- model[start_row:end_row, ]
+            chunk_file <- paste0(new_path, "_section", i, ".shp")
+            st_write(chunk_data, chunk_file, delete_dsn = TRUE)
+            }
+    message("Data split into ", num_chunks, " shapefiles.")
+    } else {
+      st_write(model, shapefile_path, delete_dsn = TRUE)
+      message("Shapefile saved successfully.")
+      }
+}
