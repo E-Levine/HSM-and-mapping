@@ -1359,6 +1359,7 @@ save_model_output <- function(data = NULL, #good for single output, but not need
       stop("No 'data' provided and 'temp' and 'HSM_spdf' not found in global environment.")
     }
   }
+  
   # Prepare objects ----
   HSM_shp_output <- model %>% dplyr::select(-ends_with("SC"), -ends_with("SCL"),-contains("Shape"), -ends_with("CO"), -ends_with("TO"))
   HSM_model_csv <- HSM_shp_output %>% st_drop_geometry()

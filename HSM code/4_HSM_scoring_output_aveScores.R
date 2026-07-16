@@ -23,7 +23,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("SS") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -31,7 +31,7 @@ Version <- c("v1") #Model version
 #
 ###Load shape file with data from Arc: default shp_filename = "_datalayer"
 # Also loads files for scoring
-HSMfunc$load_model_files(shp_filename = "datalayers_260106")
+HSMfunc$load_model_files(shp_filename = "datalayers_260217")
 #
 # Check potential file names:
 (datafiles <- HSMfunc$list_files(paste0(Site_Code,"_",Version,"/Output/Data files"),
@@ -43,7 +43,7 @@ HSMfunc$load_model_files(shp_filename = "datalayers_260106")
 # Load model files with updated data:
 HSMfunc$load_model_files(shp_filename = "datalayers_260217")
 # Limit to PGID and data being updated:
-glimpse(WC_v1_data)
+glimpse(SS_v1_data)
 #Combine original data with new data, then skip to scoring
 #t <- st_join(SS_v0_data %>% dplyr::select(PGID:Long_DD_X_, Oyst26, Buff26), 
 #             SS_vori_data%>% dplyr::select(-c(Oyst20, Buff23))) 
@@ -400,7 +400,7 @@ bind_rows(
 #SS_v1_temMonB20$ens_Oct_Threshold <- as.numeric(SS_v1_temMonB20$ens_Oct_Threshold)
 #
 # Base data:
-STemB20 <- SS_v1_temMonT35 %>% 
+STemB20 <- SS_v1_temMonB20 %>% 
   st_drop_geometry() %>%
   dplyr::select(PGID, contains("ens")) %>%
   dplyr::rename_with(
@@ -442,7 +442,7 @@ bind_rows(
       sd   = sd(Value, na.rm = TRUE),
       min  = min(Value, na.rm = TRUE),
       max  = max(Value, na.rm = TRUE)))
-#
+ #
 #
 #
 # Outlier1 flow
@@ -1156,7 +1156,7 @@ HSM_data_grps %>%
   group_by(HSMgrp) %>%
   summarise(n())
 
-ggplot(HSM_data_grps, aes(x = HSMgrp)) +
+ ggplot(HSM_data_grps, aes(x = HSMgrp)) +
   geom_histogram(stat = "count", fill = "gray50", color = "black") +
   labs(
     title = "HSM scores",
@@ -1194,8 +1194,8 @@ jenks.tests(classIntervals(HSM_data$HSM, style = "fixed", fixedBreaks = jenks_br
 #SS: -250000 - repel; ylim - 2500000
 ggplot(HSM_data, aes(x = HSM)) +
   geom_histogram(fill = "gray50", color = "black", bins = 30, boundary = 0) +
-  geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-250000), 
+  geom_vline(xintercept = jenks_breaks2, linetype = "dashed", linewidth = 1, color = "red") +
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks2, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-250000), 
                            aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
