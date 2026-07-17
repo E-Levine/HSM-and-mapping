@@ -284,6 +284,7 @@ HSMmodel %>%
     x = "Suitability score",
     y = "Count"
   ) +
+  base_theme + 
   scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))+#, breaks = seq(0, 36000, 12000))+ #2000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
@@ -892,6 +893,10 @@ dissolve_grid <- function(x,
                           simplify = TRUE,
                           tolerance_size = 20, #20 = 1 grid cell
                           print_plot = FALSE,
+                          fill_by = NULL,
+                          save_shapefile = FALSE,
+                          model_name = NULL,
+                          overwrite = TRUE){
   
   # Check columns exist
   stopifnot(all(group_cols %in% names(x)))
@@ -944,6 +949,33 @@ dissolve_grid <- function(x,
     print(p)
   
   # Save shapefile ----
+  if (save_shapefile) {
+    if (is.null(model_name) || model_name == "") {
+      stop("model_name must be supplied when save_shapefile = TRUE.")
+    }
+    # Create output directory
+    out_dir <- file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles")
+    if (!dir.exists(out_dir))
+      dir.create(out_dir, recursive = TRUE)
+    # Output filename
+    base_name <- paste0(Site_Code, "_", Version, "_final_model_", model_name)
+    shp_file <- file.path(out_dir, paste0(base_name, ".shp"))
+    # Write shapefile
+    if (!overwrite) {
+      i <- 1
+      while (file.exists(shp_file)) {
+        shp_file <- file.path(
+          out_dir,
+          paste0(base_name, "_", i, ".shp")
+        )
+        i <- i + 1
+      }
+    } else {
+      sf::st_write(out, shp_file, delete_layer = overwrite, quiet = TRUE)
+      message("Shapefile written to:\n", shp_file)
+    }
+  }
+  
   return(list(
     sf = out,
     plot = p
@@ -953,6 +985,12 @@ dissolve_grid <- function(x,
 HSM_f_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSMgrp_f")
 #726
 HSM_q4_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSM_q4_f", model_name = "Quartile", save_shapefile = TRUE)
+HSM_q4_simp$plot
+#sf::st_write(HSM_jb_simp$sf, 
+#             file.path(file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"), paste0(paste0(Site_Code, "_", Version, "_final_model_Jenks.shp"))), 
+#             delete_layer = FALSE, 
+#             quiet = TRUE)
+#731
 #
 #' Dissolve and Simplify a Polygon Grid
 #'
