@@ -982,8 +982,6 @@ dissolve_grid <- function(x,
   ))
 }
 #
-HSM_f_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSMgrp_f")
-#726
 HSM_q4_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSM_q4_f", model_name = "Quartile", save_shapefile = TRUE)
 HSM_q4_simp$plot
 #sf::st_write(HSM_jb_simp$sf, 
