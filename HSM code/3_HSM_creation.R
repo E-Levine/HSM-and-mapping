@@ -38,7 +38,7 @@ get_base_grid(Site_Code, Version, Sections_designated, Save_data = "N", Save_fig
 ###END OF SECTION
 #
 #
-####Load data layer files, add to grid####
+####Load and apply polygon layers####
 #
 #Refer to Parameter_Order Excel sheet, Parameter column for names to reference data:
 df_list[3]
@@ -64,8 +64,16 @@ rm(list = ls(pattern = "^Oyster_"))
 #
 #
 # Seagrass
+#
 find_folder_names("Seagrass")
+Start_date <- "2024-01-01"
 load_matching_shp(Section_grid, "Seagrass", StartDate = Start_date, EndDate = End_date)
+# Repair shapefile as needed...
+repair <- repair_geometry(Seagrass_202412,  
+                          snap_tolerance = units::set_units(1, "mm"), 
+                          drop_invalid = FALSE)
+Seagrass_202412 <- repair$data
+#
 modelGrid_sp <- apply_polygon_overlap(modelGrid = modelGrid_sp, 
                                       files_loaded = files_loaded, 
                                       dataColumn =  "SEAGRASS", 
@@ -76,6 +84,9 @@ modelGrid_sp <- apply_polygon_overlap(modelGrid = modelGrid_sp,
 rm(list = ls(pattern = "^Seagrass_"))
 #
 #
+#
+#
+####Load and apply buffer layers####
 #
 # Oyster buffers
 find_folder_names("Oysters")
@@ -92,6 +103,7 @@ modelGrid_sp2 <- apply_distance_buffers(modelGrid = modelGrid_sp,
 ggplot(st_as_sf(modelGrid_sp2))+
   geom_sf(aes(fill = Buff24))+
   geom_sf(aes(color = Oyst24), fill = NA)+
+  #scale_color_discrete()+
   coord_sf(xlim = c(-82.825, -82.799),
            ylim = c(29.12, 29.175))
 #
@@ -100,7 +112,7 @@ rm(list = ls(pattern = "^Oyster_"))
 #
 # Navigational channel buffers
 find_folder_names("Channels")
-load_matching_shp(Section_grid, "Channels", StartDate = "2024-01-01", EndDate = "2024-12-31")
+load_matching_shp(Section_grid, "Channels", StartDate = "2023-12-01", EndDate = "2024-12-31")
 #
 files_loaded[1] <- "Waterways"
 names(files_loaded) <- "Waterways"
@@ -122,9 +134,8 @@ modelGrid_sp3 <- apply_distance_buffers(modelGrid = modelGrid_sp2,
 #
 # Plot to check data application 
 ggplot(st_as_sf(modelGrid_sp3))+
-  geom_sf(aes(fill = Chnl))+
-  #geom_sf(aes(color = Chnl), fill = NA)+
-  geom_sf(data = st_as_sf(Waterways), aes(color = TYPE), linewidth = 1.5)+
+  geom_sf(aes(fill = Chnl24))+
+  geom_sf(data = st_as_sf(Waterways_202401), aes(color = TYPE), linewidth = 1.5)+
   scale_color_discrete()+
   coord_sf(xlim = c(-82.75, -82.738),
            ylim = c(29.005, 29.011))
@@ -132,5 +143,18 @@ ggplot(st_as_sf(modelGrid_sp3))+
 #
 #
 # Divide Chnl column by designation:
-modelGrid_sp4 <- split_column_by_value(modelGrid_sp3, "Chnl", remove_original = TRUE)
+modelGrid_sp4 <- split_column_by_value(modelGrid_sp3, "Chnl24", remove_original = TRUE)
 head(modelGrid_sp4@data)
+#
+#
+#
+#
+
+####Output layer with data applied ####
+#
+# Save model datalayers 
+save_model_data(Site_Code, Version, modelGrid_sp4)
+#
+#
+#
+#

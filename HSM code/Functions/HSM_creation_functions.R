@@ -287,43 +287,50 @@ apply_polygon_overlap <- function(modelGrid,
   library(progress)
   suppressWarnings(sf_use_s2(FALSE))
   #
-  # Progress bar setup
+  # ---- Progress bar setup ----
   total_steps <- length(files_loaded)*4 + 2
   #
   pb <- progress_bar$new(
-    format = "[:bar] :percent | Step: :step | [Elapsed time: :elapsedfull]",
+    format = "[:bar]:percent | :step | [Elapsed time: :elapsedfull]",
     total = total_steps,
     complete = "=", incomplete = "-", current = ">",
     clear = FALSE, width = 100, show_after = 0, force = TRUE)
   pb_active <- TRUE
   #
-  # ---- model grid built once ----
+  # ---- Model grid built once ----
   modelGrid_sf <- st_as_sf(modelGrid)
   modelGrid_sf <- st_make_valid(modelGrid_sf)
   modelGrid_sf$grid_id <- seq_len(nrow(modelGrid_sf))
   grid_crs <- st_crs(modelGrid_sf)
   pb$tick(tokens = list(step = "Model grid build"))
   Sys.sleep(1/1000)
-  # ---- column naming helper ----
+  #
+  # ---- Column naming helper ----
   modelColName <- (df_list[[3]] %>%
-                     dplyr::filter(Parameter == Parameter_name & Column_name == dataColumn))$Model_column_name
-
-  # LOOP PER FILE → EACH FILE CREATES ONE OUTPUT COLUMN
+                     dplyr::filter(Parameter == Parameter_name & 
+                                     Column_name == dataColumn))$Model_column_name
+  #
+  # ---- Loop per file - one column per file ----
   for (f in files_loaded) {
     #
     pb$tick(tokens = list(
-    step = paste0("Processing ", f)
-    ))
+      step = paste0("Processing ", f)))
     Sys.sleep(1/1000)
+    #
     # Build polygons
-    polygon_sf <- st_as_sf(get(f))
-    polygon_sf <- st_make_valid(polygon_sf)
+    name_f <- f    
+    f <- get(f)
+    
+    # Build polygons
+    polygon_sf <- st_make_valid(f)
+    polygon_sf <- st_as_sf(polygon_sf)
     polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
     #
     pb$tick(tokens = list(
-      step = paste0("Processing: ", f, " : Overlap indexing")
+      step = paste0("Processing: ", name_f, " : Indexing")
     ))
     Sys.sleep(1/1000)
+    #
     # Spatial index for overlap
     idx <- suppressMessages(
       suppressWarnings(
@@ -332,12 +339,12 @@ apply_polygon_overlap <- function(modelGrid,
     nonempty <- which(lengths(idx) > 0)
     #
     pb$tick(tokens = list(
-      step = paste0("Processing: ", f, " : Overlap intersecting")
+      step = paste0("Processing: ", name_f, " : Intersecting")
     ))
     Sys.sleep(1/1000)
     # Intersection loop
     results <- vector("list", length(nonempty))
-    
+    #
     ## Chunking method
     # Size of each chunk
     chunk_size <- 1000
@@ -373,9 +380,10 @@ apply_polygon_overlap <- function(modelGrid,
     inters$overlap_area <- st_area(inters)
     #
     pb$tick(tokens = list(
-      step = paste0("Processing: ", f, " : Overlap selection & cleaning")
+      step = paste0("Processing: ", name_f, " : Selection & cleaning")
     ))
     Sys.sleep(1/1000)
+   
     # Best overlap
     best <- inters %>%
       dplyr::group_by(grid_id) %>%
@@ -387,7 +395,7 @@ apply_polygon_overlap <- function(modelGrid,
     #
     # Keep only needed columns & rename data column
     best_drop <- sf::st_drop_geometry(best)
-    suffix <- stringr::str_sub(stringr::str_extract(f, "(?<=_).*"), 3, 4)
+    suffix <- stringr::str_sub(stringr::str_extract(name_f, "(?<=_).*"), 3, 4)
     newColName <- paste0(modelColName, suffix)
     # 
     modelGrid_sf <- modelGrid_sf %>%
@@ -407,13 +415,14 @@ apply_polygon_overlap <- function(modelGrid,
       sprintf(
         "Added '%s' from polygon layer '%s' as model grid column '%s'.",
         dataColumn,
-        f,
+        name_f,
         newColName
       )
     )
   }
   #
   suppressWarnings(sf_use_s2(TRUE))
+  #
   pb$tick(tokens = list(step = "Completed processing"))
   Sys.sleep(1/1000)
   if (!pb$finished) {
@@ -790,7 +799,7 @@ apply_distance_buffers <- function(
 #
 #
 # Function to split specified column into new columns based on original column values. Names new columns using value split.
-split_column_by_value <- function(x, column, remove_original = FALSE) {
+split_column_by_value <- function(x, column, keepAll = FALSE, remove_original = FALSE) {
   
   # Get attribute table
   dat <- if (inherits(x, "Spatial")) {
@@ -812,10 +821,17 @@ split_column_by_value <- function(x, column, remove_original = FALSE) {
   vals <- unique(dat[[column]])
   vals <- vals[!is.na(vals)]
   
+  # Base column naming
+  columnName <- ifelse(
+    keepAll == TRUE, 
+    column, 
+    substr(column, 1, 4)
+  )
+  
   # Create new columns
   for (v in vals) {
     
-    new_name <- paste0(column, str_replace(make.names(v), "^X(?=\\d)", ""))
+    new_name <- paste0(columnName, str_replace(make.names(v), "^X(?=\\d)", ""))
     
     dat[[new_name]] <- ifelse(
       dat[[column]] == v,
@@ -841,4 +857,457 @@ split_column_by_value <- function(x, column, remove_original = FALSE) {
   }
   
   return(x)
+}
+#
+#
+#
+### Check functions####
+#
+#
+#' Check Validity of Polygon Geometries
+#'
+#' Checks the validity of each feature in an `sf` or `SpatialPolygonsDataFrame` 
+#' object individually, identifies invalid geometries, reports the reason for failure, 
+#' and optionally plots invalid polygons.
+#'
+#' The function is designed to avoid failures caused by severely corrupted
+#' geometries by testing each feature independently using `tryCatch()`.
+#'
+#' @param x An `sf` object or `SpatialPolygonsDataFrame` containing polygon
+#' geometries.
+#'
+#' @param plot Logical indicating whether a map highlighting invalid polygons
+#' should be printed. Default is `TRUE`.
+#'
+#' @importFrom progress progress_bar
+#'
+#' @return A named list containing:
+#' \describe{
+#'   \item{summary}{A data.frame containing one row per feature with:
+#'     \itemize{
+#'       \item Feature number
+#'       \item Valid (`TRUE`/`FALSE`)
+#'       \item Reason for invalidity
+#'       \item Bounding box coordinates (`xmin`, `ymin`, `xmax`, `ymax`)
+#'       \item Centroid X coordinate
+#'       \item Centroid Y coordinate
+#'     }
+#'   }
+#'   \item{bad_features}{Integer vector of invalid feature indices.}
+#'   \item{bad_sf}{An `sf` object containing only invalid polygons.}
+#'   \item{plot}{A `ggplot` object highlighting invalid polygons.}
+#' }
+#'
+#' @details
+#' Each geometry is checked independently using `sf::st_is_valid()`. If an
+#' error occurs (for example a GEOS `TopologyException`), the feature is marked
+#' as invalid and the error message is recorded.
+#'
+#' Bounding boxes and centroid coordinates are included to make locating
+#' problematic polygons in GIS software easier.
+#'
+#' @examples
+#' chk <- check_geometry(Seagrass)
+#' chk$summary
+#' chk$bad_features
+#' chk$plot
+#'
+#' @export
+
+check_geometry <- function(x, plot = TRUE){
+  #
+  library(sf)
+  library(ggplot2)
+  #
+  if(inherits(x,"Spatial")) x <- st_as_sf(x)
+  #
+  valid <- logical(nrow(x))
+  reason <- character(nrow(x))
+  #
+  xmin <- ymin <- xmax <- ymax <- rep(NA_real_, nrow(x))
+  centroid_x <- centroid_y <- rep(NA_real_, nrow(x))
+  #
+  # Progress bar
+  pb <- progress::progress_bar$new(
+    format = "  Checking geometry [:bar] :current/:total (:percent) eta: :eta",
+    total = nrow(x),
+    clear = FALSE,
+    width = 70
+  )
+  #
+  for(i in seq_len(nrow(x))){
+    pb$tick()
+    test <- tryCatch({
+      v <- st_is_valid(x[i,])
+      r <- if(v) 
+        "Valid"
+      else
+        st_is_valid(x[i,], reason = TRUE)
+      #
+      bb <- st_bbox(x[i,])
+      cen <- suppressWarnings(
+        st_coordinates(
+          st_centroid(x[i,])
+        )[1,]
+      )
+      list(
+        valid = v,
+        reason = r,
+        bbox = bb,
+        centroid = cen
+      )
+    },
+    error = function(e){
+      bb <- tryCatch(
+        st_bbox(x[i,]),
+        error=function(...) rep(NA,4))
+      #
+      cen <- tryCatch(
+        st_coordinates(
+          st_centroid(x[i,]))[1,],
+        error=function(...) c(NA,NA))
+      #
+      list(
+        valid = FALSE,
+        reason = e$message,
+        bbox = bb,
+        centroid = cen)
+    })
+    #
+    valid[i] <- test$valid
+    reason[i] <- test$reason
+    #
+    xmin[i] <- test$bbox["xmin"]
+    ymin[i] <- test$bbox["ymin"]
+    xmax[i] <- test$bbox["xmax"]
+    ymax[i] <- test$bbox["ymax"]
+    centroid_x[i] <- test$centroid[1]
+    centroid_y[i] <- test$centroid[2]
+  }
+  #
+  summary <- data.frame(
+    Feature = seq_len(nrow(x)),
+    Valid = valid,
+    Reason = reason,
+    xmin = xmin,
+    ymin = ymin,
+    xmax = xmax,
+    ymax = ymax,
+    Centroid_X = centroid_x,
+    Centroid_Y = centroid_y)
+  #
+  message("\nGeometry check complete.\n",
+          sum(valid), " valid, ",
+          sum(!valid), " invalid.")
+  bad <- which(!valid)
+  if(length(bad)==0){
+    message("All geometries are valid.")
+    
+    return(list(
+      summary = summary,
+      bad_features = integer(0),
+      bad_sf = NULL,
+      plot = NULL))
+  }
+  bad_sf <- x[bad,]
+  p <- ggplot() +
+    geom_sf(data=x, fill="grey90", color="grey60") +
+    geom_sf(data=bad_sf, fill="red", color="black", linewidth=.4) +
+    geom_sf_text(data=bad_sf, aes(label=bad), size=3) +
+    theme_bw() +
+    labs(title="Invalid Geometries",
+         subtitle=paste(length(bad),"feature(s) found"))
+  if(plot) print(p)
+  list(
+    summary = summary,
+    bad_features = bad,
+    bad_sf = bad_sf,
+    plot = p
+  )
+}
+
+#' Repair Invalid Polygon Geometries
+#'
+#' Attempts to automatically repair invalid geometries in an \code{sf} object
+#' using a sequence of topology repair operations. This function is intended
+#' for repairing polygon datasets prior to spatial operations such as
+#' intersections, unions, clipping, rasterization, or spatial joins.
+#'
+#' The repair workflow performs the following steps:
+#' \enumerate{
+#'   \item Converts \code{Spatial*} objects to \code{sf}.
+#'   \item Removes empty geometries.
+#'   \item Removes duplicate vertices.
+#'   \item Repairs invalid geometries using
+#'         \code{lwgeom::st_make_valid()}.
+#'   \item Converts GeometryCollections to polygons when possible.
+#'   \item Optionally snaps nearby vertices together.
+#'   \item Applies a zero-width buffer (\code{st_buffer(0)}) as a final
+#'         topology repair.
+#'   \item Optionally removes geometries that remain invalid.
+#' }
+#'
+#' A report comparing geometry validity before and after repair is returned
+#' together with the repaired spatial object.
+#'
+#' @param x An \code{sf} object or legacy \code{sp::Spatial*} object
+#'   containing polygon geometries.
+#' @param snap_tolerance Optional numeric or \code{units} value specifying the
+#'   snapping tolerance passed to \code{sf::st_snap()}. Set to \code{NULL}
+#'   (default) to disable snapping.
+#' @param drop_invalid Logical. If \code{TRUE}, geometries that remain invalid
+#'   after all repair attempts are removed from the returned object.
+#'   Default is \code{FALSE}.
+#' @param verbose Logical indicating whether summary information should be
+#'   printed during processing. Default is \code{TRUE}.
+#'
+#' @return A list containing:
+#' \describe{
+#'   \item{data}{The repaired \code{sf} object.}
+#'   \item{report}{A data frame summarizing geometry validity before and after
+#'   repair.}
+#' }
+#'
+#' @details
+#' Invalid geometries commonly arise from self-intersections, duplicate
+#' vertices, overlapping polygon rings, collapsed edges, or corrupted topology.
+#' Such geometries often produce GEOS topology errors including
+#'
+#' \preformatted{
+#' TopologyException:
+#' side location conflict
+#' }
+#'
+#' which prevent functions such as \code{st_intersection()},
+#' \code{st_union()}, \code{st_intersects()}, and \code{terra::intersect()}
+#' from completing successfully.
+#'
+#' This function attempts to repair these issues while preserving geometry
+#' whenever possible. Some severely corrupted geometries may remain invalid and
+#' should be inspected manually.
+#'
+#' @examples
+#' \dontrun{
+#'
+#' repaired <- repair_geometry(seagrass)
+#'
+#' repaired$data
+#'
+#' repaired$report
+#'
+#' repaired <- repair_geometry(
+#'   seagrass,
+#'   snap_tolerance = units::set_units(1, "mm")
+#' )
+#'
+#' repaired <- repair_geometry(
+#'   seagrass,
+#'   drop_invalid = TRUE
+#' )
+#'
+#' }
+#'
+#' @seealso
+#' \code{\link[sf]{st_is_valid}},
+#' \code{\link[lwgeom]{st_make_valid}},
+#' \code{\link[sf]{st_buffer}},
+#' \code{\link[sf]{st_snap}}
+#'
+#' @importFrom sf st_as_sf st_is_valid st_is_empty st_geometry_type
+#' @importFrom sf st_collection_extract st_buffer st_snap
+#' @importFrom lwgeom st_make_valid st_remove_repeated_points
+#'
+#' @export
+repair_geometry <- function(
+    x,
+    snap_tolerance = NULL,
+    drop_invalid = FALSE,
+    verbose = TRUE
+){
+  
+  library(sf)
+  library(lwgeom)
+  
+  ## Convert Spatial* objects
+  if (inherits(x, "SpatVector")) {
+    x <- sf::st_as_sf(x)
+  } else if (inherits(x, "Spatial")) {
+    x <- tryCatch(
+      sf::st_as_sf(x),
+      error = function(e) {
+        message("st_as_sf() failed. Trying terra conversion...")
+        tmp <- terra::vect(x)
+        v <- terra::makeValid(tmp)
+        sf::st_as_sf(v)
+      }
+    )
+  }
+  
+  ## Remove empty geometries
+  empty <- st_is_empty(x)
+  if(any(empty))
+    x <- x[!empty, ]
+  
+  ## Optional snapping
+  if (!is.null(snap_tolerance)) {
+    if (sf::st_is_longlat(x)) {
+      warning("Skipping st_snap(): object is in geographic coordinates.")
+    } else {
+      x <- suppressWarnings(
+        sf::st_snap(x, x, snap_tolerance))
+    }
+  }
+  
+  ## Final GEOS repair
+  x <- suppressWarnings(
+    st_buffer(x, 0)
+  )
+  
+  ## Final validity
+  after <- suppressWarnings(
+    st_is_valid(x, NA_on_exception = TRUE)
+  )
+  
+  ## Optionally remove unrepaired features
+  if(drop_invalid){
+    x <- x[isTRUE(after) | (!is.na(after) & after), ]
+  }
+  
+  report <- data.frame(
+    Feature = seq_along(after),
+    ValidAfter = after
+  )
+  
+  if(verbose){
+    cat(sum(after, na.rm=TRUE), "valid after\n")
+    cat(sum(!after, na.rm=TRUE), "still invalid\n")
+  }
+  
+  list(
+    data = x,
+    report = report,
+    remaining_invalid = which(is.na(after) | !after),
+    removed_empty = which(empty),
+    n_after = sum(after, na.rm = TRUE)
+  )
+}
+#
+#
+#
+# Function to save model data layers as shapefile and CSV data file
+save_model_data <- function(SiteCode,
+                            VersionNum,
+                            modelData) {
+  
+  # Check object class ----
+  if (!inherits(modelData, c("sf", "SpatialPolygonsDataFrame"))) {
+    stop("modelData must be an sf or SpatialPolygonsDataFrame object.")
+  }
+   # Convert if necesary
+  if (inherits(modelData, "SpatialPolygonsDataFrame")) {
+    modelData <- sf::st_as_sf(modelData)
+  }
+  
+  # Remove unwanted columns ----
+  remove_cols <- c("Order", "grid_id")
+  
+  modelData <- modelData %>%
+    dplyr::select(-dplyr::any_of(remove_cols))
+  
+  # Create output directories ----
+  base_dir <- file.path(paste0(SiteCode, "_", VersionNum), "Output")
+  shp_dir  <- file.path(base_dir, "Shapefiles")
+  data_dir <- file.path(base_dir, "Data files")
+  
+  dir.create(shp_dir, recursive = TRUE, showWarnings = FALSE)
+  dir.create(data_dir, recursive = TRUE, showWarnings = FALSE)
+  
+  # File names ----
+  today <- format(Sys.Date(), "%Y%m%d")
+  
+  shp_file <- file.path(shp_dir, paste0(SiteCode, "_datalayers_", today, ".shp"))
+  csv_file <- file.path(data_dir, paste0(SiteCode, "_", VersionNum, "_model_data_", today, ".csv"))
+  temp_base <- tempfile(tmpdir = shp_dir, pattern = "temp_")
+  temp_shp <- paste0(temp_base, ".shp")
+  
+  # Save CSV attribute table ----
+  readr::write_csv(
+    sf::st_drop_geometry(modelData),
+    csv_file
+  )
+  
+  # Save shapefile ----
+  suppressWarnings(sf::st_write(
+    modelData,
+    temp_shp,
+    delete_layer = TRUE,
+    quiet = TRUE
+  ))
+  
+  temp_dbf <- sub("\\.shp$", ".dbf", temp_shp)
+  dbf_size <- file.info(temp_dbf)$size
+  max_dbf_size = 2 * 900^3
+  
+   # Check file size, divide if necessary
+  if (!is.na(dbf_size) && dbf_size > max_dbf_size) {
+    
+    message("Large shapefile detected (",
+            round(dbf_size / 1024^3, 2),
+            " GB DBF). Splitting...")
+    
+    # Remove temporary files
+    unlink(paste0(temp_base, ".*"))
+    
+    n_chunks <- ceiling(dbf_size / max_dbf_size)
+    rows_per_chunk <- ceiling(nrow(modelData) / n_chunks)
+    
+    base_name <- sub("\\.shp$", "", shp_file)
+    
+    for (i in seq_len(n_chunks)) {
+      start_row <- (i - 1) * rows_per_chunk + 1
+      end_row <- min(i * rows_per_chunk,
+                     nrow(modelData))
+      
+      suppressWarnings(sf::st_write(
+        modelData[start_row:end_row, ],
+        paste0(base_name, "_section", i, ".shp"),
+        delete_layer = TRUE,
+        quiet = TRUE
+      ))
+    }
+    message("Saved ", n_chunks, " shapefiles.")
+  } else {
+    # Rename temporary files to final names
+    extensions <- c(
+      ".shp", ".shx", ".dbf", ".prj",
+      ".cpg", ".qix", ".sbn", ".sbx",
+      ".shp.xml"
+    )
+    
+    final_base <- sub("\\.shp$", "", shp_file)
+    
+    for (ext in extensions) {
+      from <- paste0(temp_base, ext)
+      
+      if (file.exists(from)) {
+        to <- paste0(final_base, ext)
+        
+        if (file.exists(to))
+          file.remove(to)
+        
+        file.rename(from, to)
+      }
+    }
+    message("Shapefile saved successfully.")
+  }
+  
+  
+  # Output/messaging ----
+  message("Shapefile saved to:")
+  message("  ", shp_file)
+  
+  message("CSV saved to:")
+  message("  ", csv_file)
+  
+  invisible(modelData)
 }
