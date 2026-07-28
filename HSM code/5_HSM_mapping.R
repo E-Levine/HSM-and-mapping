@@ -65,7 +65,7 @@ Loggers <- Ref_locs %>% filter(str_detect(Type, "logger"))
 map_basetheme <- theme_classic()+
   theme(
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-    axis.title = element_blank(),#element_text(size = 14, color = "black"), 
+    axis.title = element_blank(), element_text(size = 14, color = "black"), 
     axis.text =  element_text(size = 15, color = "black", family = "Arial"),
     axis.text.x = element_text(angle = 30, vjust = 0.5)
   )
@@ -780,16 +780,17 @@ if(Final_version == "Y"){
 (p10 <- ggplot()+
     geom_sf(data = HSM_scores, aes(color = HSM_q4_f, fill = HSM_q4_f)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    base_theme + legendtheme +
+    map_basetheme + legendtheme + papertheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
     labs(color = "Quartile breaks", fill = "Quartile breaks") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
+    theme(axis.text = element_text(size = 13.5))+
     guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE))+
+    theme(legend.position = "none")+
     SS_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_QuartileBreaks.png"),
     plot = p10,
     width = 9,
     height = 5,
@@ -813,9 +814,9 @@ q4_breaks <- c(0.00, 0.49, 0.51, 0.54)
 (p10.5 <- ggplot(HSM_scores, aes(x = HSM_f)) +
     geom_histogram(fill = "gray50", color = "black", bins = 30, center = 0.05) +
     geom_vline(xintercept = q4_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-    ggrepel::geom_text_repel(data = data.frame(x = q4_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts)), #1500
+    ggrepel::geom_text_repel(data = data.frame(x = q4_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts-20000)), #1500
                              aes(x = x, y = y, label = round(x, 2)), size = 4.75, color = "red", angle = 0, direction = "y", 
-                             nudge_y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                             nudge_y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.22, vjust = 0.5,
                              segment.color = NA)+
     labs(
       title = "Quartile Breakpoints Overlay",

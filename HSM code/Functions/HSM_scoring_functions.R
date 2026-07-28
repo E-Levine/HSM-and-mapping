@@ -8,7 +8,7 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
   output_name <- paste0(SiteCode, "_", VersionNumber, "_data")  
   #
   # Build match pattern:
-  pattern <- paste0("^", SiteCode, ".*", shp_filename, "\\.shp$")
+  pattern <- paste0("^", SiteCode, ".*", shp_filename, ".*\\.shp$")
   # List all matching shape files
   shp_files <- list.files(path = data_dir, pattern = pattern, full.names = TRUE)
   if (length(shp_files) == 0) {
