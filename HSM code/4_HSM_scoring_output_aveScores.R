@@ -23,7 +23,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SS") #two-letter site code
+Site_Code <- c("WI") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -31,11 +31,11 @@ Version <- c("v1") #Model version
 #
 ###Load shape file with data from Arc: default shp_filename = "_datalayer"
 # Also loads files for scoring
-HSMfunc$load_model_files(shp_filename = "datalayers_260217")
+HSMfunc$load_model_files(shp_filename = "datalayers_20260724")
 #
 # Check potential file names:
 (datafiles <- HSMfunc$list_files(paste0(Site_Code,"_",Version,"/Output/Data files"),
-                                 pattern = "\\.xlsx$"))
+                                 pattern = "\\.(xlsx|csv)$"))
 #
 #
 # Data setup, updates ----
@@ -61,11 +61,12 @@ model_scores <- model_data_2 %>% dplyr::select(-c(contains("AV"), contains("HSM"
 #
 # Add and clean interp data ----
 #
+currentsf <- WI_v1_data
 # Add interp data: one call per data column/type
 #
 #Annual mean salinity
 (SL_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
-  existing_sf = SL_v1_data,
+  existing_sf = currentsf,
   excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Salinity_Monthly_Mean_2020_2024.xlsx"),
   join_by = "PGID",
   excel_columns = contains("ens"),
@@ -74,7 +75,7 @@ model_scores <- model_data_2 %>% dplyr::select(-c(contains("AV"), contains("HSM"
 ))
 #
 #
-(SS_v1_salMonMean <- HSMfunc$read_data_files_csv(Site_Code, 
+(WI_v1_salMonMean <- HSMfunc$read_data_files_csv(Site_Code, 
                                                 Version, 
                                                 data_subdir = "Salinity_Monthly_Means_2020_2024") %>%
   as.data.frame())

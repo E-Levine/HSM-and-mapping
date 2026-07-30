@@ -96,6 +96,9 @@ load_WQ_data <- function() {
     stop("No flow file found for Site_code: ", Site_code)
   }
   
+  flow_path <- file.path("Data/Raw-data", flow_file[1])
+  message("Loading flow file: ", flow_path)
+  
   flow_raw <- openxlsx::read.xlsx(
     file.path("Data/Raw-data/", flow_file[1]),
     na.strings = c("NA", " ", "", "Z"),
@@ -110,6 +113,9 @@ load_WQ_data <- function() {
   if (length(salinity_file) == 0) {
     stop("No salinity file found for Site_code: ", Site_code)
   }
+  
+  salinity_path <- file.path("Data/Raw-data", salinity_file[1])
+  message("Loading salinity file: ", salinity_path)
   
   salinity_raw <- openxlsx::read.xlsx(
     file.path("Data/Raw-data/", salinity_file[1]),
@@ -130,17 +136,28 @@ load_WQ_data <- function() {
 # distance_threshold in meters (e.g., 2000)
 cluster_points <- function(df, distance_threshold, Site = Site_code) {
   SiteCode <- Site
+  
+  # Limit data to work with
+  df <- df %>% 
+    drop_na()
+  
   # Extract coordinates
   coords <- df[, c("Longitude", "Latitude")]
   
+  n <- nrow(coords)
+  
+  cat("Number of unique locations:", n, "\n")
+  cat("Distance matrix size:", round((n^2 * 8) / 1024^3, 2), "GB\n")
+  
   # Compute pairwise distances using Haversine formula (in meters)
   dist_mat <- geosphere::distm(coords, fun = geosphere::distHaversine)
-  
+
   # Ability to check number of groups based on distance and change distance if desired:
   repeat{
     # Create adjacency matrix: TRUE if distance < threshold
     adj_mat <- dist_mat < distance_threshold
     diag(adj_mat) <- FALSE  # No self-connections
+    adj_mat <- (adj_mat + t(adj_mat)) > 0
     
     # Build undirected graph
     g <- graph_from_adjacency_matrix(adj_mat, mode = "undirected")
