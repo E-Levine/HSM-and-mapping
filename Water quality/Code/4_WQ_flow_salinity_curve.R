@@ -481,12 +481,12 @@ p_fast <- p +
 ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".tiff", sep = ""), 
-       dpi = 450,
+       dpi = 300,
        device = ragg::agg_tiff,
        width = 8,
        height = 8,
        units = "in",
-       compression = "lzw")
+       compression = "none")
 #
 #
 ##
@@ -506,31 +506,31 @@ Outlier2_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_s
 #
 p <- WQ$plot_flow_interp(Outlier_idw_data, "meanOut1")
 p_fast <- p +
-  ggrastr::rasterise(geom_sf(), dpi = 450)
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
-ggsave(plot = p,
+ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), 
-       dpi = 450,
+       dpi = 300,
        device = ragg::agg_tiff,
        width = 8,
        height = 8,
        units = "in",
-       compression = "lzw")
+       compression = "none")
 #
 p <- WQ$plot_flow_interp(Outlier2_idw_data, "meanOut2")
 p_fast <- p +
-  ggrastr::rasterise(geom_sf(), dpi = 450)
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
 ggsave(plot = p, 
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), 
-       dpi = 450,
+       dpi = 300,
        device = ragg::agg_tiff,
        width = 8,
        height = 8,
        units = "in",
-       compression = "lzw")
+       compression = "none")
 
 #
 #
@@ -573,12 +573,12 @@ write_csv_chunks <- function(
   invisible(length(split_df))
 }
 #
-(temp_data <- st_drop_geometry(AOP_idw_data) %>% #UPDATE WITH NEW DATA
+(temp_data <- st_drop_geometry(Outlier2_idw_data) %>% #UPDATE WITH NEW DATA
   as.data.frame() %>%
   dplyr::rename("Long_DD_X" = Longitude, "Lat_DD_Y" = Latitude) %>%
   mutate(Long_DD_X = as.numeric(Long_DD_X),
          Lat_DD_Y = as.numeric(Lat_DD_Y),
-         meanOptimal = as.numeric(meanOptimal), #UPDATE WITH NEW DATA
+         meanOut2 = as.numeric(meanOut2), #UPDATE WITH NEW DATA
          dplyr::across(
            where(is.character),
            ~ na_if(trimws(.x), "")
@@ -587,8 +587,8 @@ write_csv_chunks(
   df = temp_data,
   out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                    #File name
-                   paste0(Site_code, "_", paste("flow_optimal_adult"))), #UPDATE WITH NEW DATA
-  prefix = "flow_optimal_adult" #UPDATE WITH NEW DATA
+                   paste0(Site_code, "_", paste("flow_outlier2"))), #UPDATE WITH NEW DATA
+  prefix = "flow_outlier2" #UPDATE WITH NEW DATA
 )
 #
 #
