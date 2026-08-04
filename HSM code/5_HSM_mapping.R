@@ -21,7 +21,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SS") #two-letter site code
+Site_Code <- c("WI") #two-letter site code
 Version <- c("v1") #Model version
 Final_version <- c("Y") #Final model output? Y/N
 #
@@ -30,7 +30,7 @@ Final_version <- c("Y") #Final model output? Y/N
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_final_model"
-model_scores_date <- c("2026-07-15")#c("2026-04-27")#c("2026-03-04") #
+model_scores_date <- c("2026-08-03")#c("2026-04-27")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -73,15 +73,15 @@ map_basetheme <- theme_classic()+
 base_theme <- ggplot2::theme_classic() +
   ggplot2::theme(
     axis.title = element_text(size = 20, face = "bold", color = "black", family = "Arial"),
-    axis.text = ggplot2::element_text(size = 18, family = "Arial", color = "black"),
+    axis.text = element_text(size = 18, family = "Arial", color = "black"),
     axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
     axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
     axis.ticks = element_line(color = "black", linewidth = 0.1),
     axis.ticks.length = unit(-0.15, "cm"),
-    panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.1),
     plot.margin = grid::unit(c(0.05, 0, 0, 0), "cm"),
-    plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
-    plot.caption = ggplot2::element_text(face = "italic", size = 9),
+    plot.title = element_text(margin = margin(b = 5), family = "Arial"),
+    plot.caption = element_text(face = "italic", size = 9),
     legend.title = element_text(size = 12, family = "Arial"),
     legend.text = element_text(size = 10, family = "Arial"))
 #
@@ -107,6 +107,11 @@ SS_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.015, st_bbox(Site_area
                     ylim = c(st_bbox(Site_area)["ymin"]-0.005, st_bbox(Site_area)["ymax"]+0.010))
 SS_logger_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.17),
                              ylim = c(st_bbox(Site_area)["ymin"]-0.02, st_bbox(Site_area)["ymax"]+0.02))
+WI_overview_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.095, st_bbox(Site_area)["xmax"]+0.085),
+                             ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.03))
+WI_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.035),
+                    ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.05))
+
 #
 #
 #
@@ -274,10 +279,10 @@ write_xlsx(Suit_summ,
 HSMmodel %>% 
   st_drop_geometry() %>%
   #mutate(HSM_r = round(HSMround, 1)) %>%
-  group_by(HSMgrp_f) %>%
+  group_by(HSMgrp) %>%
   summarise(n())
 #
-(p0 <- ggplot(HSMmodel, aes(x = HSMgrp_f)) +
+(p0 <- ggplot(HSMmodel, aes(x = HSMgrp)) +
   geom_histogram(stat = "count", fill = "gray50", color = "black") +
   labs(
     title = "HSM scores",
@@ -285,10 +290,10 @@ HSMmodel %>%
     y = "Count"
   ) +
   base_theme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))+#, breaks = seq(0, 36000, 12000))+ #2000000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 800000), labels = scales::label_comma())+#, breaks = seq(0, 36000, 12000))+ #2000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
-  papertheme + theme(axis.text.x = element_text(size = 11, angle = 20)))
+  papertheme + theme(axis.text.x = element_text(angle = 20, vjust = 0.8)))
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_grp_hist.png"),
@@ -315,7 +320,7 @@ ggsave(
            fontface = "italic", size = 5, family = "Arial")+
    map_basetheme +
    theme(panel.background = element_rect(fill = "#CCFFFF"))+
-  SS_overview_zoom)
+  WI_overview_zoom)
 #
 ggsave(
   filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_area_map.png"),
@@ -375,11 +380,12 @@ ggsave(
    geom_text(aes(-82.87, 29.13, label = "Waccasassa\nBay", fontface = "italic"), color = "black", size = 3.5)+
    geom_text(aes(-82.87, 29.26, label = "Waccasassa\nRiver", fontface = "italic"), color = "black", size = 4.25)+
    geom_segment(aes(x = -82.80, y = 29.175, xend = -82.83, yend = 29.25), linewidth = 1)+
+   geom_text(aes(-82.83, 28.80, label = "Homosassa\nBay", fontface = "italic"), color = "black", size = 3.5)+
    # Formatting
    theme_classic()+ map_basetheme + legendtheme +
    scale_color_manual(values = c("#333333", "#D55E00"))+
    scale_shape_manual(values = c(16, 15))+
-   SS_logger_zoom
+   WI_zoom
 )
 #
 ggsave(
@@ -404,7 +410,7 @@ ggsave(
    scale_color_viridis_c(limits = c(0,1))+
    labs(color = "Oyster habitat") + # UPDATE AS NEEDED
    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-   SS_zoom)
+   WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
@@ -435,7 +441,7 @@ if(Final_version == "Y"){
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Oyster buffer") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
@@ -466,7 +472,7 @@ if(Final_version == "Y"){
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Seagrass habitat") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
@@ -497,7 +503,7 @@ if(Final_version == "Y"){
     scale_color_viridis_c()+
     labs(color = "Channels") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
@@ -530,7 +536,7 @@ if(Final_version == "Y"){
    scale_color_viridis_c(limits = c(0,1))+
    labs(color = "Salinity") + # UPDATE AS NEEDED
    theme(axis.text.x = element_text(angle = 0, vjust = 0)) +
-   SS_zoom)
+   WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
@@ -561,7 +567,7 @@ if(Final_version == "Y"){
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Temperature") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
