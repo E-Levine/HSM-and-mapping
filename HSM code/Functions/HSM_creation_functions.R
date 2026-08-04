@@ -575,7 +575,7 @@ apply_distance_buffers <- function(
     buffer_breaks = NULL, #Option to specify fixed breaks (distance in meters)
     Ref_table = NULL, #Option to supply reference table for lookup 
     buffer_multiplier = 100, #Multiplier for scoring to value conversion 
-    buffer_units = c("ft","m","km","mi","keep") #Assumes the reference is in meters so buffer_units = "m" is 1:1
+    buffer_units = c("ft","m","km","mi") #Assumes the reference is in meters so buffer_units = "m" is 1:1
 ){
   # Packages
   library(sf)
@@ -615,7 +615,7 @@ apply_distance_buffers <- function(
       stop("Ref_table must contain Param and Value columns.")
   }
   #
-  if(buffer_units == "keep"){
+  if(buffer_units == "m"){
     conv <- 1
   } else {
     conv <- switch(buffer_units,
@@ -670,19 +670,21 @@ apply_distance_buffers <- function(
     #
     newColName <- paste0(modelColName,suffix)
     #
-    buffer_value <- rep(NA_real_, nrow(modelGrid_sf))
+    buffer_value <- rep(NA_character_, nrow(modelGrid_sf))#buffer_value <- rep(NA_real_, nrow(modelGrid_sf))
     #
     if(buffer_method == "fixed"){
       #
       assigned <- rep(FALSE,nrow(modelGrid_sf))
       #
       for(b in buffer_breaks){
-        buf <- st_buffer(feature_sf,b)
+        # Convert user-specified units to meters for buffering
+        b_m <- b * conv
+        buf <- st_buffer(feature_sf,b_m)
         inside <- lengths(
           st_intersects(modelGrid_sf,buf)
         )>0
         idx <- inside & !assigned
-        buffer_value[idx] <- b
+        buffer_value[idx] <- paste0(b_m, buffer_units)#b
         assigned[idx] <- TRUE
       }
     } else {
@@ -732,7 +734,10 @@ apply_distance_buffers <- function(
       hits <- st_intersects(modelGrid_sf,buf)
       for(i in seq_along(hits)){
         if(length(hits[[i]])>0){
-          buffer_value[i] <- max(buf$buffer_m[hits[[i]]], na.rm=TRUE)
+          buffer_value[i] <- paste0(
+            max(buf$buffer_m[hits[[i]]], na.rm = TRUE),
+            buffer_units
+          )#max(buf$buffer_m[hits[[i]]], na.rm=TRUE)
         }
       }
     }
