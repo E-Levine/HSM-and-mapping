@@ -193,20 +193,10 @@ WQ$save_model_output(final_data, threshold_val = NA, Month_range = c(5, 10)) #, 
 #If continuing to work, good practice to remove objects to make sure correct data is used:
 rm(final_data, plotting, ok_data, tps_data, nn_data, idw_data, Site_data_spdf, WQ_summ, list = ls(pattern = "result_"))
 
-####Save large files####
+####Save large data files####
 #
-##Get Site area  
-Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
-Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
-idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
-ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
-#Run join, run final
-#
-#library(qs)
-#final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"),
-#                    nthreads = parallel::detectCores())
 naming <- paste0(Param_name, "_", Param_name_2, "_", stat,
-                 "_", Start_year, "_", End_year)
+"_", Start_year, "_", End_year)
 naming
 #
 temp_data <- st_drop_geometry(final_data$spatialData) %>% 
@@ -223,3 +213,14 @@ WQ$write_csv_chunks(
   prefix = paste(naming)
 )
 #rm(naming, temp_data, final_data, list = ls(pattern = "result_"), Site_data_spdf)
+##Get Site area  
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
+Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
+idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
+ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
+#Run join, run final
+#
+#library(qs)
+#final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"),
+#                    nthreads = parallel::detectCores())
+#

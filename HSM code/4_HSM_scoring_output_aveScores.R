@@ -1289,7 +1289,6 @@ manu_theme <- theme_bw()+
 #
 ### Add scores to data
 assign(paste0(Site_Code, "_", Version, "_scores_data"), HSMfunc$join_score_dataframes(temp))
-assign(paste0(Site_Code, "_", Version, "_scores_data"), HSMfunc$join_score_dataframes(temp))
 assign(
   paste0(Site_Code, "_", Version, "_scores_data"),
   get(paste0(Site_Code, "_", Version, "_scores_data")) %>%
@@ -1528,7 +1527,7 @@ jenks.tests(classIntervals(HSM_data$HSM_f, style = "fixed", fixedBreaks = jenks_
 ggplot(HSM_data, aes(x = HSM_f)) +
   geom_histogram(fill = "gray50", color = "black", bins = 30, boundary = 0) +
   geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts)), #250000
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts-250000)), #250000
                            aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
@@ -1539,7 +1538,7 @@ ggplot(HSM_data, aes(x = HSM_f)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1000000)) + #60000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 750000), breaks = seq(0, 750000, 250000)) + #60000
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0, 1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme
@@ -1562,7 +1561,7 @@ summary(HSM_data_grps$HSM_q4)
 ggplot(HSM_data, aes(HSM_f)) +
   geom_histogram(bins = 30, fill = "grey50", color = "black", boundary = 0) +
   geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts)), 
+  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts-250000)), 
                            aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.35,
                            segment.color = NA)+
@@ -1573,7 +1572,7 @@ ggplot(HSM_data, aes(HSM_f)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1000000)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 750000), breaks = seq(0, 750000, 250000)) +
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0,1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))+
   papertheme
@@ -1676,7 +1675,7 @@ jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenk
 (jb_plot <- ggplot(final_data, aes(x = HSM_f)) +
     geom_histogram(fill = "gray50", color = "black", bins = 30,  center = 0.05) +
     geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-    ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)), #-300000, 1000
+    ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(final_data$HSM_f, plot = FALSE)$counts-100000)), #-300000, 1000
                              aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
                              nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                              segment.color = NA)+
@@ -1687,7 +1686,7 @@ jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenk
       y = "Count"
     ) +
     base_theme + plot_theme +
-   scale_y_continuous(expand = c(0,0), limits = c(0, 1250000))+ #1250000, 20000 
+   scale_y_continuous(expand = c(0,0), limits = c(0, 750000), breaks = seq(0, 750000, 250000))+ #1250000, 20000 
     scale_x_continuous(limits = c(0,1), expand = c(0,0.0025)))
 #
 ggsave(
@@ -1715,7 +1714,7 @@ summary(final_data$HSM_q4)
 (q4_plot <- ggplot(final_data, aes(HSM_f)) +
     geom_histogram(bins = 40, fill = "grey50", color = "black") +
     geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
-    ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-250000), #300000, 1000
+    ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-100000), #300000, 1000
                              aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
                              nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                              segment.color = NA)+
