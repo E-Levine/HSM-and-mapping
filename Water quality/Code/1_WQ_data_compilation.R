@@ -20,7 +20,7 @@ source("Code/WQ_functions.R")
 ####Compilation setup####
 #
 #Set parameters - run for each data source type
-Site_code <- c("WC")       #Two letter estuary code
+Site_code <- c("PE")       #Two letter estuary code
 Version <- c("v1")         #Version ID for the model data will be used in
 Data_source <- c("Portal") #Source of data: "Portal", "WA" , or "FIM"
 #
@@ -53,7 +53,7 @@ Location_data_clean <- process_location_data()
 #
 #
 ##Select results data
-Results_data_clean <- process_results_data(Data_source, Results_data)
+Results_data_clean <- process_results_data(Data_source, Results_data, StartYear = 2020, EndYear = 2024)
 #
 #
 #

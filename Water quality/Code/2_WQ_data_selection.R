@@ -19,7 +19,7 @@ source("Code/WQ_functions.R")
 #
 #
 ###Setup - specs####
-Site_code <- c("WC")    #Two letter estuary code
+Site_code <- c("PE")    #Two letter estuary code
 Version <- c("v1")      #Version of HSM
 Data_source <- c("Portal") #Source of data: "Portal", "WA", "FIM"
 #
@@ -161,19 +161,21 @@ bbox <- NA
 #
 #
 #ProjectCode = short code to specify project data gathered for: CAGE, TBWQ (general)
-WQ_stations_selected <- location_boundary(Selection_Method, Selected_WQ_stations, bbox, ProjectCode = "WCHSM", WidgetSave = "N")
+WQ_stations_selected <- location_boundary(Selection_Method, Selected_WQ_stations, 
+                                          bbox, 
+                                          ProjectCode = "PEHSM", WidgetSave = "N")
 WQ_stations_selected$BoundedMap #Confirm stations, can chose to include or exclude stations
 #
 #
 #
 # List of any stations to include or exclude from selection by name of station
 #If no stations need to be included or excluded, replace with NA
-To_include <- data.frame(StationID = c("21FLWPB_WQX-G2SE0048"))
+To_include <- data.frame(StationID = c("21FLPNS_WQX-G4NW0264"))
 To_exclude <- data.frame(StationID = c("21FLSFWM_WQX-18967", "	21FLSFWM_WQX-28220"))
 #
 ##Run to include/exclude stations as specified above and save output of final data:
 #Use same project code from above.
-Modified_data(Selection_Method, ProjectCode = "WCHSM")
+Modified_data(Selection_Method, ProjectCode = "PEHSM")
 #
 #
 #
