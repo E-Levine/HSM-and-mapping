@@ -21,7 +21,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("PE") #two-letter site code
 Version <- c("v1") #Model version
 Final_version <- c("Y") #Final model output? Y/N
 #
@@ -30,7 +30,7 @@ Final_version <- c("Y") #Final model output? Y/N
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_final_model"
-model_scores_date <- c("2026-04-27")#c("2026-03-04") #
+model_scores_date <- c("2026-08-17")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -107,6 +107,11 @@ SS_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.015, st_bbox(Site_area
                     ylim = c(st_bbox(Site_area)["ymin"]-0.005, st_bbox(Site_area)["ymax"]+0.010))
 SS_logger_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.17),
                              ylim = c(st_bbox(Site_area)["ymin"]-0.02, st_bbox(Site_area)["ymax"]+0.02))
+WI_overview_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.095, st_bbox(Site_area)["xmax"]+0.085),
+                             ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.03))
+WI_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.035),
+                    ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.05))
+
 #
 #
 #
@@ -878,3 +883,200 @@ Ave_scores %>%
 # Cells >= 0.9
 Ave_scores %>%
   summarise(across(OystAV:FAV, ~ round(sum(.x >= 0.9, na.rm = TRUE),3)))
+
+# Shapefile simplification output ----
+#
+library(sf)
+library(dplyr)
+library(rmapshaper)
+library(ggplot2)
+
+dissolve_grid <- function(x,
+                          group_cols,
+                          round_col = NULL,
+                          round_digits = NULL,
+                          simplify = TRUE,
+                          tolerance_size = 20, #20 = 1 grid cell
+                          print_plot = FALSE,
+                          fill_by = NULL,
+                          save_shapefile = FALSE,
+                          model_name = NULL,
+                          overwrite = TRUE){
+  
+  # Check columns exist
+  stopifnot(all(group_cols %in% names(x)))
+  
+  if (!is.null(round_col))
+    stopifnot(round_col %in% names(x))
+  
+  # Repair geometries
+  x <- st_make_valid(x)
+  
+  # Optional rounding of a continuous variable
+  if (!is.null(round_col) & !is.null(round_digits)) {
+    x[[round_col]] <- round(x[[round_col]], round_digits)
+  }
+  
+  # Dissolve polygons
+  crs_orig <- sf::st_crs(x)
+  
+  out <- x %>%
+    group_by(across(all_of(group_cols))) %>%
+    summarise(do_union = TRUE, .groups = "drop") %>%
+    # Simplify geometry 
+    sf::st_transform(5070) %>%
+    sf::st_simplify(dTolerance = tolerance_size,          
+                    preserveTopology = TRUE) %>%
+    sf::st_transform(crs_orig)
+  
+  # Basetheme for maps
+  map_basetheme <- theme_classic()+
+    theme(
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      axis.title = element_blank(),#element_text(size = 14, color = "black"), 
+      axis.text =  element_text(size = 15, color = "black", family = "Arial"),
+      axis.text.x = element_text(angle = 30, vjust = 0.5)
+    )
+  
+  # Create ggplot object
+  if (!is.null(fill_by)) {
+    p <- ggplot(out) +
+      geom_sf(aes(fill = .data[[fill_by]])) +
+      map_basetheme
+  } else {
+    fill_by <- group_cols[1]
+    p <- ggplot(out) +
+      geom_sf(aes(fill = .data[[fill_by]])) +
+      map_basetheme
+  }
+  
+  if (print_plot)
+    print(p)
+  
+  # Save shapefile ----
+  if (save_shapefile) {
+    if (is.null(model_name) || model_name == "") {
+      stop("model_name must be supplied when save_shapefile = TRUE.")
+    }
+    # Create output directory
+    out_dir <- file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles")
+    if (!dir.exists(out_dir))
+      dir.create(out_dir, recursive = TRUE)
+    # Output filename
+    base_name <- paste0(Site_Code, "_", Version, "_final_model_", model_name)
+    shp_file <- file.path(out_dir, paste0(base_name, ".shp"))
+    # Write shapefile
+    if (!overwrite) {
+      i <- 1
+      while (file.exists(shp_file)) {
+        shp_file <- file.path(
+          out_dir,
+          paste0(base_name, "_", i, ".shp")
+        )
+        i <- i + 1
+      }
+    } else {
+      sf::st_write(out, shp_file, delete_layer = overwrite, quiet = TRUE)
+      message("Shapefile written to:\n", shp_file)
+    }
+  }
+  
+  return(list(
+    sf = out,
+    plot = p
+  ))
+}
+#
+HSM_q4_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSM_q4_f", model_name = "Quartile", save_shapefile = TRUE)
+HSM_q4_simp$plot
+#sf::st_write(HSM_jb_simp$sf, 
+#             file.path(file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"), paste0(paste0(Site_Code, "_", Version, "_final_model_Jenks.shp"))), 
+#             delete_layer = FALSE, 
+#             quiet = TRUE)
+#731
+#
+#' Dissolve and Simplify a Polygon Grid
+#'
+#' Dissolves adjacent polygons sharing one or more attribute values into
+#' multipart polygons, optionally rounds a continuous variable prior to
+#' dissolving, simplifies the resulting geometries to reduce file size, and
+#' creates a ggplot object for visualization.
+#'
+#' This function is useful for reducing the size of regular grid-based habitat
+#' suitability model (HSM) outputs while preserving the spatial extent of areas
+#' with the same attribute values.
+#'
+#' @param x An `sf` object containing polygon geometries.
+#'
+#' @param group_cols Character vector of one or more column names used to
+#' dissolve polygons. Polygons sharing identical values across all specified
+#' columns will be merged.
+#'
+#' @param round_col Optional character string specifying a numeric column to
+#' round prior to dissolving. Useful for continuous variables (e.g., HSM scores)
+#' where small numeric differences prevent adjacent polygons from being merged.
+#' Default is `NULL`.
+#'
+#' @param round_digits Integer specifying the number of decimal places used when
+#' rounding `round_col`. Ignored if `round_col = NULL`.
+#'
+#' @param simplify_keep Numeric between 0 and 1 specifying the proportion of vertices to
+#' retain during simplification. Smaller values produce smaller files but less
+#' detailed geometry. Passed to `rmapshaper::ms_simplify()`. Default is `0.05`.
+#'
+#' @param keep_shapes Logical indicating whether all polygon features should be
+#' preserved during simplification, even if they are very small. Passed to
+#' `rmapshaper::ms_simplify()`. Default is `TRUE`.
+#'
+#' @param print_plot Logical indicating whether the generated ggplot object should be
+#' printed to the active graphics device. Regardless of this option, the plot
+#' object is returned. Default is `FALSE`.
+#'
+#' @param fill_by Optional character string specifying the attribute used for
+#' polygon fill colours in the ggplot object. If `NULL`, polygons are drawn
+#' without a fill aesthetic.
+#'
+#' @return A named list containing:
+#' \describe{
+#'   \item{data}{An `sf` object containing the dissolved and optionally
+#'   simplified polygons.}
+#'   \item{plot}{A `ggplot` object displaying the resulting polygons.}
+#' }
+#'
+#' @details
+#' The function performs the following operations:
+#' \enumerate{
+#'   \item Optionally repairs invalid geometries.
+#'   \item Optionally rounds a continuous attribute.
+#'   \item Dissolves adjacent polygons sharing identical attribute values.
+#'   \item Optionally simplifies polygon geometry to reduce file size.
+#'   \item Creates a ggplot object for visualization.
+#' }
+#'
+#' Geometry simplification uses
+#' `rmapshaper::ms_simplify()`, which generally preserves polygon topology
+#' better than `sf::st_simplify()` while substantially reducing file size.
+#'
+#' @examples
+#' ## Dissolve by HSM class
+#' result <- dissolve_grid(
+#'   x = HSM_grid,
+#'   group_cols = "HSM_class",
+#'   fill_col = "HSM_class"
+#' )
+#'
+#' ## Dissolve by Estuary and rounded HSM score
+#' result <- dissolve_grid(
+#'   x = HSM_grid,
+#'   group_cols = c("Estuary", "HSM_score"),
+#'   round_col = "HSM_score",
+#'   round_digits = 2,
+#'   fill_col = "HSM_score"
+#' )
+#'
+#' ## Access outputs
+#' result$data
+#' result$plot
+#'
+#' @export
+#' 
