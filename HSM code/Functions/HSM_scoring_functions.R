@@ -8,7 +8,7 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
   output_name <- paste0(SiteCode, "_", VersionNumber, "_data")  
   #
   # Build match pattern:
-  pattern <- paste0("^", SiteCode, ".*", shp_filename, "\\.shp$")
+  pattern <- paste0("^", SiteCode, ".*", shp_filename, "(?:_section[1-9])?", "\\.shp$")
   # List all matching shape files
   shp_files <- list.files(path = data_dir, pattern = pattern, full.names = TRUE)
   if (length(shp_files) == 0) {
@@ -307,6 +307,150 @@ read_data_files_csv <- function(Site_Code,
     fill = TRUE
   )
 }
+#
+#
+#
+#Function to load shapefiles and apply specified data 
+load_shapefile_columns <- function(Site_Code,
+                                   Version,
+                                   sf_object,
+                                   shapefile_name,
+                                   columns,
+                                   id_col = "PGID",
+                                   check_geometry = FALSE) {
+  
+  #
+  # Set base path
+  base_path <- file.path(
+    paste0(Site_Code, "_", Version),
+    "Output",
+    "Shapefiles"
+  )
+  # Locate shapefile
+  shp_file <- list.files(
+    path = base_path,
+    pattern = paste0(shapefile_name,".shp"),
+    full.names = TRUE
+  )
+  
+  if (length(shp_file) == 0) {
+    stop("No shapefile found matching: ", shapefile_name)
+  }
+  
+  if (length(shp_file) > 1) {
+    warning(
+      "Multiple shapefiles found. Using:\n",
+      basename(shp_file[1])
+    )
+  }
+  
+  message("Loading shapefile: ", sub(paste0("^.*?(?=", Site_Code, ")"), "", shp_file[1], perl = TRUE))
+  
+  # Read shapefile
+  shp <- sf::st_read(shp_file[1], quiet = TRUE)
+  
+  if (interactive()) {
+    cat("\n--- Loaded shapefile ---\n")
+    cat("Available columns:\n")
+    print(names(shp))
+    
+    # Determine initial columns
+    cols <- names(tidyselect::eval_select(rlang::expr({{ columns }}), data = shp))
+    
+    cat("\nCurrently selected columns:\n")
+    print(cols)
+    
+    # Ask user whether to change selection
+    change_cols <- readline(prompt = "\nChange selected columns? (y/n): ")
+    
+    if (tolower(trimws(change_cols)) == "y") {
+      cat(
+        "\nEnter column name or a tidyselect expression.\n",
+        "Examples:\n",
+        '  contains("ens")\n',
+        '  starts_with("HSM")\n',
+        '  ends_with("e")\n',
+        '  starts_with("HSM") & ends_with("e")\n',
+        '  matches("^HSM.*e$")\n',
+        '  c("HSM_score", "Depth", "Salinity")\n\n',
+        sep = ""
+      )
+      
+      new_columns <- readline(prompt = "Columns to select: ")
+      
+      # Convert entered text to an R expression
+      new_expr <- rlang::parse_expr(new_columns)
+      
+      # Evaluate tidyselect expression against shapefile
+      cols <- names(tidyselect::eval_select(new_expr, data = shp))
+      
+      cat("\nUpdated columns selected:\n")
+      print(cols)
+    }
+    
+  } else {
+    # Non-interactive use
+    cols <- names(tidyselect::eval_select(rlang::expr({{ columns }}), data = shp))
+  }
+  
+  # Check required columns
+  #cols <- names(tidyselect::eval_select(rlang::expr({{ columns }}), shp))
+  missing_cols <- setdiff(c(id_col, cols), names(shp))
+  if (length(missing_cols) > 0) {
+    stop(
+      "The following columns are missing from the shapefile: ",
+      paste(missing_cols, collapse = ", ")
+    )
+  }
+  
+  # Check CRS
+  if (sf::st_crs(sf_object) != sf::st_crs(shp)) {
+    shp <- sf::st_transform(shp, sf::st_crs(sf_object))
+  }
+  
+  # Optional geometry check
+  if (check_geometry) {
+    
+    if (nrow(sf_object) != nrow(shp)) {
+      warning("Objects have different numbers of features.")
+    } else {
+      
+      same_geom <- all(
+        sf::st_equals_exact(
+          sf::st_geometry(sf_object),
+          sf::st_geometry(shp),
+          par = 0
+        ) %>%
+          lengths() > 0
+      )
+      
+      if (!same_geom) {
+        warning("Geometries are not identical. Joining only by ", id_col, ".")
+      }
+    }
+  }
+  
+  # Keep only PGID and geometry from existing sf object
+  sf_object <- sf_object %>%
+    dplyr::select(dplyr::all_of(id_col), geometry)
+  
+  # Keep only requested columns from shapefile
+  shp_join <- shp %>%
+    sf::st_drop_geometry() %>%
+    dplyr::select(dplyr::all_of(id_col), {{ cols }})
+  
+  # Join requested columns to the sf object
+  sf_object <- sf_object %>%
+    dplyr::left_join(shp_join, by = id_col)
+  
+  # Return joined sf object
+  print(head(sf_object))
+  return(sf_object)
+}
+#
+#
+#
+#
 #
 #Function to average across specified columns (cols) and return only specified columms (keep_columns) with new aver co;l:
 row_average <- function(data,
