@@ -575,7 +575,7 @@ apply_distance_buffers <- function(
     buffer_breaks = NULL, #Option to specify fixed breaks (distance in meters)
     Ref_table = NULL, #Option to supply reference table for lookup 
     buffer_multiplier = 100, #Multiplier for scoring to value conversion 
-    buffer_units = c("ft","m","km","mi") #Assumes the reference is in meters so buffer_units = "m" is 1:1
+    buffer_units = c("m") #Assumes the reference is in meters so buffer_units = "m" is 1:1
 ){
   # Packages
   library(sf)
@@ -600,7 +600,7 @@ apply_distance_buffers <- function(
   Sys.sleep(1/1000)
   #
   buffer_method <- match.arg(buffer_method)
-  buffer_units  <- match.arg(buffer_units)
+  buffer_units  <- match.arg(buffer_units, choices = c("ft","m","km","mi"))
   #
   if(buffer_method=="fixed"){
     if(is.null(buffer_breaks))
@@ -679,12 +679,12 @@ apply_distance_buffers <- function(
       for(b in buffer_breaks){
         # Convert user-specified units to meters for buffering
         b_m <- b * conv
-        buf <- st_buffer(feature_sf,b_m)
+        buf <- st_buffer(feature_sf, dist = b_m)
         inside <- lengths(
           st_intersects(modelGrid_sf,buf)
         )>0
         idx <- inside & !assigned
-        buffer_value[idx] <- paste0(b_m, buffer_units)#b
+        buffer_value[idx] <- paste0(b_m, "m")#b
         assigned[idx] <- TRUE
       }
     } else {
@@ -725,9 +725,6 @@ apply_distance_buffers <- function(
       
       ## Replace Inf values created by pmax(NA, ..., na.rm=TRUE)
       feature_sf$Value[feature_sf$Value == 0] <- NA
-      #feature_sf <- feature_sf %>%
-      #  left_join(Ref_table,
-      #            by=setNames("Param",dataColumn))
       feature_sf$buffer_m <- feature_sf$Value * buffer_multiplier * conv
       buf <- st_buffer(feature_sf,
                        dist=feature_sf$buffer_m)
@@ -736,8 +733,8 @@ apply_distance_buffers <- function(
         if(length(hits[[i]])>0){
           buffer_value[i] <- paste0(
             max(buf$buffer_m[hits[[i]]], na.rm = TRUE),
-            buffer_units
-          )#max(buf$buffer_m[hits[[i]]], na.rm=TRUE)
+            "m"
+          )
         }
       }
     }
@@ -1017,7 +1014,7 @@ check_geometry <- function(x, plot = TRUE){
   bad_sf <- x[bad,]
   p <- ggplot() +
     geom_sf(data=x, fill="grey90", color="grey60") +
-    geom_sf(data=bad_sf, fill="red", color="black", linewidth=.4) +
+    geom_sf(data=bad_sf, fill="red", color="red", linewidth=.4) +
     geom_sf_text(data=bad_sf, aes(label=bad), size=3) +
     theme_bw() +
     labs(title="Invalid Geometries",
