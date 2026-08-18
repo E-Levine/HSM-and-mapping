@@ -1,7 +1,7 @@
 # Functions for working with flow data
 #
 # Working with USGS data:
-clean_save_usgs_data <- function(rawDF, startDate, endDate, dataType){
+clean_save_usgs_data <- function(rawDF, LLDF, startDate, endDate, dataType){
   # Date range (use lubridate for robustness)
   start <- lubridate::ymd(startDate)
   end <- lubridate::ymd(endDate)
@@ -9,6 +9,20 @@ clean_save_usgs_data <- function(rawDF, startDate, endDate, dataType){
   if (is.na(start) | is.na(end)) stop("Invalid date format; use YYYY-MM-DD")
   #
   # Data filtering
+  locations <- LLDF %>%
+    dplyr::select(monitoring_location_id, geometry) %>% 
+    mutate(
+      Site = Site_code,
+      DataType = str_to_sentence(dataType),
+      Longitude = st_coordinates(.)[, 1],
+      Latitude = st_coordinates(.)[, 2]) %>% 
+    st_drop_geometry() %>%
+    rename(StationID = monitoring_location_id) %>%
+    dplyr::select(Site, StationID, DataType, Latitude, Longitude)
+  LLdata <- locations %>% 
+    dplyr::filter(Site == Site_code) %>%
+    dplyr::select(Site, StationID, DataType, Latitude, Longitude)
+    
   data <- rawDF %>% 
     rename(TIMESTAMP = time, VALUE = value, STATION = monitoring_location_id) %>%
     dplyr::filter(TIMESTAMP >= start & TIMESTAMP <= end) %>%
@@ -26,17 +40,52 @@ clean_save_usgs_data <- function(rawDF, startDate, endDate, dataType){
   end_ym <- format(end, "%Y%m")      # e.g., "202312"
   #
   # Set up for flow file:
+  LLpath <- paste0("Data/Raw-data/Flow_logger_locations.xlsx")
   data_path <- paste0("Data/Raw-data/", Site_code, "_logger_", Type, "_", start_ym, "_", end_ym,".xlsx")
+  data_path_model <- paste0("../",Site_code,"_",Version,"/Data/", Site_code, "_logger_", Type, "_", start_ym, "_", end_ym,".xlsx")  
+  LL_path_model <- paste0("../",Site_code,"_",Version,"/Data/", Site_code, "_logger_locations.xlsx")  
+  # Load loggers and append data, overwrite with new combined data - in shared location
+  wb <- loadWorkbook(LLpath)
+  existing_data <- readWorkbook(wb, sheet = "Sheet 1")
+  start_row <- nrow(existing_data) + 2  # +1 for header row, +1 to start on the next blank row
+  writeData(wb, sheet = "Sheet 1", x = locations, startRow = start_row, colNames = FALSE)
+  combined_data <- readWorkbook(wb, sheet = "Sheet 1")
+  cleaned_data <- distinct(combined_data)  # Keeps only unique rows
+  deleteData(wb, sheet = "Sheet 1", cols = 1:ncol(combined_data), rows = 1:(nrow(combined_data) + 1), gridExpand = TRUE)
+  writeData(wb, sheet = "Sheet 1", x = cleaned_data, colNames = TRUE)
+  # Write logger data to model folders
+  if (!file.exists(LL_path_model)) {
+    LL_wb <- openxlsx::createWorkbook()
+    openxlsx::addWorksheet(LL_wb, "Sheet 1")  # Add fresh sheet
+    openxlsx::writeData(LL_wb, sheet = "Sheet 1", x = LLdata) 
+    openxlsx::saveWorkbook(LL_wb, LL_path_model, overwrite = TRUE)
+  } else {
+    LL_wb <- loadWorkbook(LL_path_model)
+    existing_data <- readWorkbook(LL_wb, sheet = "Sheet 1")
+    start_row <- nrow(existing_data) + 2  # +1 for header row, +1 to start on the next blank row
+    writeData(LL_wb, sheet = "Sheet 1", x = LLdata, startRow = start_row, colNames = FALSE)
+    combined_data <- readWorkbook(LL_wb, sheet = "Sheet 1")
+    cleaned_data <- distinct(combined_data)  # Keeps only unique rows
+    deleteData(LL_wb, sheet = "Sheet 1", cols = 1:ncol(combined_data), rows = 1:(nrow(combined_data) + 1), gridExpand = TRUE)
+    writeData(LL_wb, sheet = "Sheet 1", x = cleaned_data, colNames = TRUE)
+    saveWorkbook(LL_wb, LL_path_model, overwrite = TRUE)
+  }
   # Create wb with data:
   sheetName = paste0("logger_", Type)
   new_wb <- openxlsx::createWorkbook()
   openxlsx::addWorksheet(new_wb, sheetName)  # Add fresh sheet
   openxlsx::writeData(new_wb, sheet = sheetName, x = data) 
-  # Save wb
+  # Save wbs
   openxlsx::saveWorkbook(new_wb, data_path, overwrite = TRUE)
+  openxlsx::saveWorkbook(new_wb, data_path_model, overwrite = TRUE)
+  saveWorkbook(wb, LLpath, overwrite = TRUE)
   cat("Logger data successfully saved to:\n",
       "- Sheet '",sheetName,"' (", nrow(data), " rows)\n",
-      "File: ", data_path, "\n")
+      "File: ", data_path, "\n",
+      "File: ", data_path_model, "\n\n",
+      "Logger locations successfully saved to:\n",
+      "File: ", LLpath, "\n",
+      "File: ", LL_path_model, "\n")
   #
 }
 #
@@ -46,7 +95,10 @@ clean_save_existing_data <- function(fileName, dataType){
   Type <- dataType
   #
   filePath <- paste0("Data/Raw-cleaned/", fileName, ".xlsx")
+  LLpath <- paste0("Data/Raw-data/Flow_logger_locations.xlsx")
   loaded <- read.xlsx(filePath, sheet = "Sheet1")
+  LLloaded <- read.xlsx(LLpath, sheet = "Sheet 1")
+  LL_path_model <- paste0("../",Site_code,"_",Version,"/Data/", Site_code, "_logger_locations.xlsx")  
   #
   # Data filtering
   data <- loaded %>% 
@@ -58,22 +110,59 @@ clean_save_existing_data <- function(fileName, dataType){
                   "PARAMETER" = CharacteristicName, 
                   "VALUE" = ResultMeasureValue)
   #
+  LLdata <- LLloaded %>% 
+    dplyr::filter(Site == Site_code) %>%
+    dplyr::select(Site, StationID, DataType, Latitude, Longitude) %>%
+    bind_rows(
+      data %>% 
+        distinct() %>% 
+        rename(StationID = STATION) %>% 
+        mutate(Site = Site_code, 
+               DataType = str_to_sentence(dataType)) %>% 
+        dplyr::select(Site, StationID, DataType, Latitude, Longitude)
+    )
+  #
+  #
   # Check for data
   if (nrow(data) == 0) stop("No data found in the specified date range")
   #
   start_ym <- format(as.Date(min(data$TIMESTAMP)), "%Y%m")  # e.g., "202301"
   end_ym <- format(as.Date(max(data$TIMESTAMP)), "%Y%m")      # e.g., "202312"
   data_path <- paste0("Data/Raw-data/", Site_code, "_logger_", Type, "_", start_ym, "_", end_ym,".xlsx")
-  #Create wb with data:
+  data_path_model <- paste0("../",Site_code,"_",Version,"/Data/", Site_code, "_logger_", Type, "_", start_ym, "_", end_ym,".xlsx")  
+  #
+  #
+  # Check for LL file in model folders, create if needed:
+  if (!file.exists(LL_path_model)) {
+    LL_wb <- openxlsx::createWorkbook()
+    openxlsx::addWorksheet(LL_wb, "Sheet 1")  # Add fresh sheet
+    openxlsx::writeData(LL_wb, sheet = "Sheet 1", x = LLdata) 
+    openxlsx::saveWorkbook(LL_wb, LL_path_model, overwrite = TRUE)
+  } else {
+    LL_wb <- loadWorkbook(LL_path_model)
+    existing_data <- readWorkbook(LL_wb, sheet = "Sheet 1")
+    start_row <- nrow(existing_data) + 2  # +1 for header row, +1 to start on the next blank row
+    writeData(LL_wb, sheet = "Sheet 1", x = LLdata, startRow = start_row, colNames = FALSE)
+    combined_data <- readWorkbook(LL_wb, sheet = "Sheet 1")
+    cleaned_data <- distinct(combined_data)  # Keeps only unique rows
+    deleteData(LL_wb, sheet = "Sheet 1", cols = 1:ncol(combined_data), rows = 1:(nrow(combined_data) + 1), gridExpand = TRUE)
+    writeData(LL_wb, sheet = "Sheet 1", x = cleaned_data, colNames = TRUE)
+    saveWorkbook(LL_wb, LL_path_model, overwrite = TRUE)
+    }
+  #
+  #
+  # Create wb with data:
   sheetName = paste0("logger_", Type)
   new_wb <- openxlsx::createWorkbook()
   openxlsx::addWorksheet(new_wb, sheetName)  # Add fresh sheet
   openxlsx::writeData(new_wb, sheet = sheetName, x = data) 
   #Save wb
   openxlsx::saveWorkbook(new_wb, data_path, overwrite = TRUE)
+  openxlsx::saveWorkbook(new_wb, data_path_model, overwrite = TRUE)
   cat("Logger data successfully saved to:\n",
       "- Sheet '",sheetName,"' (", nrow(data), " rows)\n",
-      "File: ", data_path, "\n")
+      "File: ", data_path, "\n",
+      "File: ", data_path_model, "\n")
   #
 }
 #
@@ -249,13 +338,17 @@ update_logger_locations <- function(new_locations){
   key_columns = c("Site", "StationID", "Latitude", "Longitude", "DataType")
   file_path <- "Data/Raw-data/Flow_logger_locations.xlsx"
   #
-  
+  # Load existing files
   All_loggers <- read.xlsx(file_path, na.strings = c("NA", " ", "", "Z"), detectDates = TRUE)
+  #
   # Check for duplicates: Identify new rows that don't already exist in Loggers
-  existing_keys <- All_loggers %>% dplyr::select(all_of(key_columns)) %>% mutate(across(c(Latitude, Longitude), ~round(.x, 5)))
-  new_keys <- new_locations %>% dplyr::select(all_of(key_columns)) %>% mutate(across(c(Latitude, Longitude), ~round(.x, 5)))
+  existing_keys <- All_loggers %>% 
+    dplyr::select(all_of(key_columns)) %>% 
+    mutate(across(c(Latitude, Longitude), ~round(.x, 5)))
+  new_keys <- new_locations %>% 
+    dplyr::select(all_of(key_columns)) %>% 
+    mutate(across(c(Latitude, Longitude), ~round(.x, 5)))
   new_unique <- anti_join(new_keys, existing_keys, by = key_columns)
-  
   #
   if (nrow(new_unique) == 0) {
     cat("No new locations to add (all are duplicates).\n")
@@ -271,6 +364,18 @@ update_logger_locations <- function(new_locations){
   write.xlsx(updated_All_loggers, file_path, overwrite = TRUE)
   cat("Updated file saved to:", file_path, "\n")
   #
+  # Save the updated locations to the model location file
+  LL_path_model <- paste0("../",Site_code,"_",Version,"/Data/", Site_code, "_logger_locations.xlsx")  
+  LL_wb <- loadWorkbook(LL_path_model)
+  existing_data <- readWorkbook(LL_wb, sheet = "Sheet 1")
+  combined_data <- bind_rows(existing_data, new_unique)
+  combined_data <- distinct(combined_data)
+  deleteData(LL_wb, sheet = "Sheet 1", 
+             cols = 1:ncol(combined_data), rows = 1:(nrow(existing_data) + 1),
+             gridExpand = TRUE)
+  writeData(LL_wb, sheet = "Sheet 1", x = combined_data, colNames = TRUE)
+  saveWorkbook(LL_wb, LL_path_model, overwrite = TRUE)
+  
   # Return the updated dataframe for further use
   return(updated_Loggers)
   #

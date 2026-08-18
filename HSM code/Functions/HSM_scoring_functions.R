@@ -8,7 +8,7 @@ load_model_files <- function(SiteCode = Site_Code, VersionNumber = Version, shp_
   output_name <- paste0(SiteCode, "_", VersionNumber, "_data")  
   #
   # Build match pattern:
-  pattern <- paste0("^", SiteCode, ".*", shp_filename, ".*\\.shp$")
+  pattern <- paste0("^", SiteCode, ".*", shp_filename, "(?:_section[1-9])?", "\\.shp$")
   # List all matching shape files
   shp_files <- list.files(path = data_dir, pattern = pattern, full.names = TRUE)
   if (length(shp_files) == 0) {
@@ -353,7 +353,7 @@ load_shapefile_columns <- function(Site_Code,
     cat("\n--- Loaded shapefile ---\n")
     cat("Available columns:\n")
     print(names(shp))
-
+    
     # Determine initial columns
     cols <- names(tidyselect::eval_select(rlang::expr({{ columns }}), data = shp))
     
@@ -1503,7 +1503,6 @@ save_model_output <- function(data = NULL, #good for single output, but not need
       stop("No 'data' provided and 'temp' and 'HSM_spdf' not found in global environment.")
     }
   }
-  
   # Prepare objects ----
   HSM_shp_output <- model %>% dplyr::select(-ends_with("SC"), -ends_with("SCL"),-contains("Shape"), -ends_with("CO"), -ends_with("TO"))
   HSM_model_csv <- HSM_shp_output %>% st_drop_geometry()

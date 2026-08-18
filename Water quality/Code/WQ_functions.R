@@ -6,27 +6,28 @@
 #
 #Loading raw files
 #library(readxl)
+#year_ranges = start and end year in file name
 read_raw_data_files <- function(SiteCode, DataSource, year_ranges) {
   # year_ranges: a list of vectors, each with two elements: start_year and end_year
   # Example: list(c(2000, 2007), c(2008, 2014), c(2015, 2019), c(2020, 2023))
   #
   # Determine overall start and end year for site file
-  overall_start_year <- as.numeric(Start_year)
-  overall_end_year <- as.numeric(End_year)
+  overall_start_year <- as.numeric(unlist(year_ranges)[1])
+  overall_end_year <- as.numeric(unlist(year_ranges)[2])
   #
   ##Read in Excel site file
+  file_name <- list.files(path = "Data/Raw-data/",
+                     pattern = paste0("^",Site_code, "_", DataSource,"_Site data_\\d{0,4}", overall_start_year, "_\\d{0,4}", overall_end_year,".xlsx"),
+                     full.names = TRUE)
   Location_data <- NULL
   if(DataSource == "Portal"){
-    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
-    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z")))
+    Location_data <- as.data.frame(read_excel(file_name, na = c("NA", " ", "", "Z")))
   } else if(DataSource == "WA"){
-    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
-    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z"),
+    Location_data <- as.data.frame(read_excel(file_name, na = c("NA", " ", "", "Z"),
                                               col_types = c("text", "text", "text", "text", "text", "text", "numeric", "numeric", "text", "date", "numeric", "text",
                                                             "text", "text", "text", "numeric", "text", "text", "text", "numeric", "text")))
   } else if(DataSource == "FIM"){
-    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_", overall_start_year, "_", overall_end_year,".xlsx")
-    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z", "NULL")))
+    Location_data <- as.data.frame(read_excel(file_name, na = c("NA", " ", "", "Z", "NULL")))
   } else {paste0("Code not yet updated for ", DataSource," data.")}
   #
   #
@@ -83,16 +84,17 @@ process_location_data <- function(DataSource = Data_source, LocationData = Locat
   } else if (DataSource == "FIM") {
     Location_data_sub <- Location_data_sub %>% add_column(Estuary = SiteCode, .before = "TripID")
   }
-  glimpse(Location_data_sub)
-  return(Location_data_sub)
+  #
 }
 #
 #Subset results data
-process_results_data <- function(DataSource, ResultsData){
+process_results_data <- function(DataSource, ResultsData, StartYear = NULL, EndYear = NULL){
   # Check inputs
   if (missing(DataSource) || missing(ResultsData)) {
     stop("Please provide both DataSource and ResultsData arguments.")
   }
+  numeric_start <- as.numeric(StartYear)
+  numeric_end <- as.numeric(EndYear)
   ##Select Results data - Portal data - not currently setup for using WA or FIM data
   #Subset df by columns to keep - change list in include more columns as needed 
   Results <- NULL
@@ -110,6 +112,16 @@ process_results_data <- function(DataSource, ResultsData){
   if(!is.null(Results)) {
     dplyr::glimpse(Results)
   }
+  
+  # Filter to years of data if specified:
+  if(!is.null(StartYear) & !is.null(EndYear)){
+    Results <- Results %>%
+      dplyr::filter(as.Date(ActivityStartDate, "%Y-%m-%d") >= as.Date(paste0(numeric_start,"-01-01")) &
+                      as.Date(ActivityStartDate, "%Y-%m-%d") <= as.Date(paste0(numeric_end,"-12-31")))
+  } else {
+    Results <- Results
+  }
+  #
   return(Results)
 }
 #
@@ -395,11 +407,15 @@ Spatial_data <- function(DataInput){
   if(Data_source == "Portal"){
     # If geometry column exists as WKT text, convert it
     if ("geometry" %in% colnames(DataInput)) {
-      WQ_sp <- st_as_sf(DataInput, wkt = "geometry", crs = 4326) %>% 
-                          st_transform(crs = target_crs)
+      Combined_data_counts <- DataInput %>% 
+        st_as_sf(wkt = "geometry", crs = 4326) %>%
+        st_transform(crs = target_crs)  %>%
+        group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>% 
+        summarise(N = n(), .groups = "drop")
     } else {
-      Combined_data_counts <- WQ_sf %>% distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>% 
-      group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>% 
+      Combined_data_counts <- DataInput %>% 
+        distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>% 
+        group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>% 
         summarise(N = n(), .groups = "drop") %>% 
         st_as_sf(coords = c("LongitudeMeasure", "LatitudeMeasure"), crs = target_crs)
     }
@@ -433,7 +449,7 @@ Spatial_data <- function(DataInput){
       summarise(N = n(), .groups = "drop") %>%
       st_as_sf(coords = c("Longitude", "Latitude"), crs = target_crs)
   } else {
-    stop("Curretnly unsupported Data_source")
+    stop("Currently unsupported Data_source")
   }
   
   return(Combined_data_counts)

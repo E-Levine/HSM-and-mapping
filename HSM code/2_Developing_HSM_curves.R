@@ -8,7 +8,7 @@ pacman::p_load(plyr, tidyverse, #Df manipulation, basic summary
                install = TRUE) 
 #
 ##Input the site code and version for this project. (Required)
-Site_Code <- c("SL") #two-letter site code used throughout for identifying files
+Site_Code <- c("PE") #two-letter site code used throughout for identifying files
 Version <- c("v1") #current version number of the model for the specified site
 source("HSM code/Functions/HSM_Functions.R")
 #
@@ -64,8 +64,8 @@ save_curve_output()
 #
 #
 ###Optional: use curves from other project saved locally:
-copy_curve_summary("US", "v1")
-copy_curve_files("US", "v1")
+copy_curve_summary("WI", "v1")
+copy_curve_files("WI", "v1")
 #
 #
 # Presentation formatting ----

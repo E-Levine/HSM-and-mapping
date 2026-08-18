@@ -445,17 +445,17 @@ save_model_scores <- function(data = NULL, #good for single output, but not need
     num_chunks <- ceiling(file_size / chunk_size)
     rows_per_chunk <- ceiling(nrow(model) / num_chunks)
     new_path <- sub("\\.shp$", "", shapefile_path)
-    
-          for(i in seq_len(num_chunks)) {
-            start_row <- (i - 1) * rows_per_chunk + 1
-            end_row <- min(i * rows_per_chunk, nrow(model))
-            chunk_data <- model[start_row:end_row, ]
-            chunk_file <- paste0(new_path, "_section", i, ".shp")
-            st_write(chunk_data, chunk_file, delete_dsn = TRUE)
-            }
+
+    for(i in seq_len(num_chunks)) {
+      start_row <- (i - 1) * rows_per_chunk + 1
+      end_row <- min(i * rows_per_chunk, nrow(model))
+      chunk_data <- model[start_row:end_row, ]
+      chunk_file <- paste0(new_path, "_section", i, ".shp")
+      st_write(chunk_data, chunk_file, delete_dsn = TRUE)
+    }
     message("Data split into ", num_chunks, " shapefiles.")
-    } else {
-      st_write(model, shapefile_path, delete_dsn = TRUE)
-      message("Shapefile saved successfully.")
-      }
+  } else {
+    st_write(model, shapefile_path, delete_dsn = TRUE)
+    message("Shapefile saved successfully.")
+  }
 }

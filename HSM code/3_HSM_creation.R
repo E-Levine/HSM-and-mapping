@@ -16,10 +16,10 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being created. Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("WI") #two-letter site code
+Site_Code <- c("PE") #two-letter site code
 Version <- c("v1") #Model version
-State_Grid <- c("F2")
-Alt_Grid <- c("E3", "F3") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
+State_Grid <- c("A1")
+Alt_Grid <- c("B1") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
 #
 ##Parameters
 Sections_designated <- c("Y") #Y/N are section designations used
@@ -69,10 +69,10 @@ find_folder_names("Seagrass")
 Start_date <- "2024-01-01"
 load_matching_shp(Section_grid, "Seagrass", StartDate = Start_date, EndDate = End_date)
 # Repair shapefile as needed...
+chk <- check_geometry(Seagrass_202412)
 repair <- repair_geometry(Seagrass_202412,  
-                          snap_tolerance = units::set_units(1, "mm"), 
-                          drop_invalid = FALSE)
-Seagrass_202412 <- repair$data
+                          action = "repair")
+Seagrass_202412 <- repair
 #
 modelGrid_sp <- apply_polygon_overlap(modelGrid = modelGrid_sp, 
                                       files_loaded = files_loaded, 
@@ -104,8 +104,8 @@ ggplot(st_as_sf(modelGrid_sp2))+
   geom_sf(aes(fill = Buff24))+
   geom_sf(aes(color = Oyst24), fill = NA)+
   #scale_color_discrete()+
-  coord_sf(xlim = c(-82.825, -82.799),
-           ylim = c(29.12, 29.175))
+  coord_sf(xlim = c(-87.12, -87.10),
+           ylim = c(30.48, 30.50))
 #
 rm(list = ls(pattern = "^Oyster_"))
 #
@@ -114,7 +114,7 @@ rm(list = ls(pattern = "^Oyster_"))
 find_folder_names("Channels")
 load_matching_shp(Section_grid, "Channels", StartDate = "2023-12-01", EndDate = "2024-12-31")
 #
-files_loaded[1] <- "Waterways"
+#files_loaded[1] <- "Waterways"
 names(files_loaded) <- "Waterways"
 # Reference table:
 (Reference_t <- df_list[[12]] %>%
@@ -129,7 +129,6 @@ modelGrid_sp3 <- apply_distance_buffers(modelGrid = modelGrid_sp2,
                                         buffer_method ="lookup",
                                         Ref_table = Reference_t,
                                         buffer_multiplier = 100,
-                                        buffer_units = "keep",
                                         df_list = df_list)
 #
 # Plot to check data application 
@@ -137,8 +136,9 @@ ggplot(st_as_sf(modelGrid_sp3))+
   geom_sf(aes(fill = Chnl24))+
   geom_sf(data = st_as_sf(Waterways_202401), aes(color = TYPE), linewidth = 1.5)+
   scale_color_discrete()+
-  coord_sf(xlim = c(-82.75, -82.738),
-           ylim = c(29.005, 29.011))
+  coord_sf(xlim = c(-87.25, -87.1),
+           ylim = c(30.3, 30.6))
+
 
 #
 #
