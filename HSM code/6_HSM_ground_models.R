@@ -18,7 +18,7 @@ source("HSM code/Functions/HSM_gt_model_functions.R", local = HSMfuncGT)
 #
 # Setup ----
 # Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("SS") #two-letter site code
 Version <- c("v1") #Model version
 SurveyYYMM <- c("2401") #SS-2401, SL-2305
 FileType <- c("shapefile") #data or shapefile
@@ -98,7 +98,7 @@ manu_theme <- theme_bw()+
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_model"
-model_scores_date <- c("2026-04-27") #2026-04-27; SS c("2026-02-05")##SL "2026-03-04"
+model_scores_date <- c("2026-07-14") #2026-04-27; SS c("2026-02-05")##SL "2026-03-04"
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -244,7 +244,7 @@ HSM_data_grps_f %>%
     plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_JenksBreaks_flow2.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_JenksBreaks_flow2_260714.png"),
   plot = p1,
   width = 9,
   height = 5,
@@ -265,11 +265,11 @@ models_df_f <- data.frame(
     geom_density(linewidth = 1) +
     scale_linetype_manual(values = c("dashed", "solid"))+
     scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
-    scale_y_continuous("Count", limits = c(0, 80), expand = c(0,0))+ #Modify as needed: SL 0-15, SS 0-80
+    scale_y_continuous("Count", limits = c(0, 100), expand = c(0,0))+ #Modify as needed: SL 0-15, SS 0-80/100
     base_theme + plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_comparison.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_comparison_260714.png"),
   plot = p2,
   width = 9,
   height = 5,
@@ -291,7 +291,7 @@ cor(HSM_data_grps_f$HSM,
                        panel.border = element_rect(color = NA)))
 # 
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_agreement.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_agreement_260714.png"),
   plot = p3,
   width = 9,
   height = 5,
@@ -311,7 +311,7 @@ HSM_scores2 <- left_join(HSM_scores, HSM_data_grps_f)
     labs(color = "Model difference"))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_difference.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_flow_difference_260714.png"),
   plot = p4,
   width = 9,
   height = 5,
@@ -441,7 +441,7 @@ HSM_data_grps_s %>%
     plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_JenksBreaks_sal3.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_JenksBreaks_sal3_260714.png"),
   plot = p5,
   width = 9,
   height = 5,
@@ -466,7 +466,7 @@ models_df_s <- data.frame(
     base_theme + plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_sal3_comparison.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_sal3_comparison_260714.png"),
   plot = p6,
   width = 9,
   height = 5,
@@ -488,7 +488,7 @@ cor(HSM_data_grps_s$HSM,
                        panel.border = element_rect(color = NA)))
 # Additive scores higher than salinity*
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_sal3_agreement.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_sal3_agreement_260714.png"),
   plot = p7,
   width = 9,
   height = 5,
@@ -508,7 +508,7 @@ HSM_scores3 <- left_join(HSM_scores, HSM_data_grps_s)
     labs(color = "Model difference"))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_sal3_difference.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_sal3_difference_260714.png"),
   plot = p8,
   width = 9,
   height = 5,
@@ -639,7 +639,7 @@ HSM_data_grps_fs %>%
     plot_theme + theme(axis.text.x = element_text(size = 11, angle = 20)))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_JenksBreaks_fs4.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_JenksBreaks_fs4_260714.png"),
   plot = p9,
   width = 9,
   height = 5,
@@ -660,11 +660,11 @@ models_df_fs <- data.frame(
     geom_density(linewidth = 1) +
     scale_linetype_manual(values = c("dashed", "solid"))+
     scale_x_continuous("HSM value", limits = c(0,1), expand = c(0,0)) + 
-    scale_y_continuous("Count", limits = c(0, 80), expand = c(0,0))+
+    scale_y_continuous("Count", limits = c(0, 100), expand = c(0,0))+
     base_theme + plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_fs4_comparison.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_fs4_comparison_260714.png"),
   plot = p10,
   width = 9,
   height = 5,
@@ -686,7 +686,7 @@ cor(HSM_data_grps_fs$HSM,
                        panel.border = element_rect(color = NA)))
 # Additive scores higher than salinity*
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_fs4_agreement.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_fs4_agreement_260714.png"),
   plot = p11,
   width = 9,
   height = 5,
@@ -706,7 +706,7 @@ HSM_scores4 <- left_join(HSM_scores, HSM_data_grps_fs)
     labs(color = "Model difference"))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_fs4_difference.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_fs4_difference_260714.png"),
   plot = p12,
   width = 9,
   height = 5,
@@ -721,7 +721,7 @@ ggsave(
 #
 # Load and clean data ----
 #
-#Load validation data
+#Load validation data -- files in Output/Shapefiles folder: SiteCode_Version_validation_data
 HSMfuncGT$load_survey_shpfiles()
 str(SS_v1_validation_data)
 #
@@ -874,7 +874,7 @@ plot(cal)
     plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_ROC.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_ROC_260714.png"),
   plot = p1_1,
   width = 9,
   height = 5,
@@ -921,7 +921,7 @@ plot(cal2)
     plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_flow2.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_flow2_260714.png"),
   plot = p1_2,
   width = 9,
   height = 5,
@@ -967,7 +967,7 @@ plot(cal3)
     plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_sal3.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_sal3_260714.png"),
   plot = p1_3,
   width = 9,
   height = 5,
@@ -1013,7 +1013,7 @@ plot(cal4)
     plot_theme)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_fs4.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_fs4_260714.png"),
   plot = p1_4,
   width = 9,
   height = 5,
@@ -1048,7 +1048,7 @@ models_dists <- data.frame(
           plot.margin = unit(c(0.2, 0.5, 0.1, 0.1), "cm")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_distributions.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_distributions_260714.png"),
   plot = p1_d,
   width = 9,
   height = 5,
@@ -1101,7 +1101,7 @@ presence_summary$HSM_type <- factor(
           panel.spacing.x = unit(1.5, "lines")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_HSM_presence_by_model.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_HSM_presence_by_model_260714.png"),
   plot = p2,
   width = 9,
   height = 5,
@@ -1135,7 +1135,7 @@ all_roc <- rbind(
           panel.spacing.x = unit(1.5, "lines")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_all.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_ROC_all_260714.png"),
   plot = p3r,
   width = 9,
   height = 5,
@@ -1202,7 +1202,7 @@ boyce_df <- data.frame(
     theme(plot.margin = unit(c(0.2, 0.25, 0.1, 0.1), "cm")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_Boyce_cont.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_Boyce_cont_260714.png"),
   plot = p4b,
   width = 9,
   height = 5,
@@ -1239,7 +1239,7 @@ ggsave(
           panel.spacing.x = unit(2.25, "lines")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_response.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/Comps/",Site_Code,"_", Version,"_response_260714.png"),
   plot = p5r,
   width = 9,
   height = 5,
@@ -1299,7 +1299,6 @@ final_data %>% st_drop_geometry() %>%
   mutate(Pct = round((n/nrow(final_data))*100,2))
 #
 #
-
 #
 #
 #Jenks breaks summary:
@@ -1327,7 +1326,7 @@ jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenk
   scale_x_continuous(limits = c(0,1), expand = c(0,0.0025)))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_jb_hist.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_jb_hist_260714.png"),
   plot = jb_plot,
   width = 9,
   height = 5,
@@ -1367,7 +1366,7 @@ summary(final_data$HSM_q4_f)
 #
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_q4hist.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_q4hist_260714.png"),
   plot = q4_plot,
   width = 9,
   height = 5,
@@ -1379,6 +1378,10 @@ ggsave(
 #
 #
 HSMfuncGT$save_final_model_output(data = final_data, output_type = "all")
+#
+#Ouput of just mdoel scores
+HSMfuncGT$save_model_scores(data = final_data, model_suffix = "_f")
+#
 ## Once saved, revisit code #5 for updated maps of data and model output.
 #
 #

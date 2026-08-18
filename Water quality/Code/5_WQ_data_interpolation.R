@@ -163,7 +163,7 @@ WQ$join_interpolation(Site_Grid_df)
 #rm(Site_Grid_spdf, Site_Grid_df) #Only rm if saving clean/reduced workspace and/or not continuing to work
 #
 #Generates plots for each model and output of all models together - run for each parameter
-plotting <- WQ$plot_interpolations2(result_Mean, Site_Grid, simplify_tolerance = 0.01)
+plotting <- WQ$plot_interpolations2(result_Threshold, Site_Grid, simplify_tolerance = 0.01)
 #
 combined_plot <- grouped_plot_interpolations(plotting) #needs work. Having issues plotting. 
 grouped_plot_interpolations(final_data$plots)
@@ -189,25 +189,15 @@ final_data <- WQ$ensemble_weighting("ensemble", c("idw", "ok"),
 #Specify threshold or NA
 #Can remove Site_Grid and result_[...] if workspace saved and final_data created: rm(Site_Grid, result_Mean)
 WQ$save_model_output(final_data, threshold_val = NA)
-#
+#2 (no individual plots), 1 (yes comb plot), 1, 1, 1
 #
 #If continuing to work, good practice to remove objects to make sure correct data is used:
 rm(final_data, plotting, ok_data, tps_data, nn_data, idw_data, Site_data_spdf, WQ_summ, list = ls(pattern = "result_"))
 
-####Save large files####
+####Save large data files####
 #
-##Get Site area  
-Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
-Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
-idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
-ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
-#Run join, run final
-#
-#library(qs)
-#final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"),
-#                    nthreads = parallel::detectCores())
 naming <- paste0(Param_name, "_", Param_name_2, "_", stat,
-                 "_", Start_year, "_", End_year)
+"_", Start_year, "_", End_year)
 naming
 #
 temp_data <- st_drop_geometry(final_data$spatialData) %>% 
@@ -224,3 +214,14 @@ WQ$write_csv_chunks(
   prefix = paste(naming)
 )
 #rm(naming, temp_data, final_data, list = ls(pattern = "result_"), Site_data_spdf)
+##Get Site area  
+Site_Grid <- WQ$load_site_grid(State_Grid, Site_area)
+Site_Grid_df <- Site_Grid %>% st_set_geometry(NULL)
+idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
+ok_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_ok_temp.rds"))
+#Run join, run final
+#
+#library(qs)
+#final_data <- qread(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_final_data_temp.qs"),
+#                    nthreads = parallel::detectCores())
+#

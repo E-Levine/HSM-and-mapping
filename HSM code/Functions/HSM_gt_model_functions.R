@@ -445,7 +445,7 @@ save_model_scores <- function(data = NULL, #good for single output, but not need
     num_chunks <- ceiling(file_size / chunk_size)
     rows_per_chunk <- ceiling(nrow(model) / num_chunks)
     new_path <- sub("\\.shp$", "", shapefile_path)
-    
+
     for(i in seq_len(num_chunks)) {
       start_row <- (i - 1) * rows_per_chunk + 1
       end_row <- min(i * rows_per_chunk, nrow(model))
