@@ -16,18 +16,18 @@ read_raw_data_files <- function(SiteCode, DataSource, year_ranges) {
   overall_end_year <- as.numeric(unlist(year_ranges)[2])
   #
   ##Read in Excel site file
+  file_name <- list.files(path = "Data/Raw-data/",
+                     pattern = paste0("^",Site_code, "_", DataSource,"_Site data_\\d{0,4}", overall_start_year, "_\\d{0,4}", overall_end_year,".xlsx"),
+                     full.names = TRUE)
   Location_data <- NULL
   if(DataSource == "Portal"){
-    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
-    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z")))
+    Location_data <- as.data.frame(read_excel(file_name, na = c("NA", " ", "", "Z")))
   } else if(DataSource == "WA"){
-    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_Site data_", overall_start_year, "_", overall_end_year,".xlsx")
-    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z"),
+    Location_data <- as.data.frame(read_excel(file_name, na = c("NA", " ", "", "Z"),
                                               col_types = c("text", "text", "text", "text", "text", "text", "numeric", "numeric", "text", "date", "numeric", "text",
                                                             "text", "text", "text", "numeric", "text", "text", "text", "numeric", "text")))
   } else if(DataSource == "FIM"){
-    site_file_path <- paste0("Data/Raw-data/", Site_code, "_", DataSource,"_", overall_start_year, "_", overall_end_year,".xlsx")
-    Location_data <- as.data.frame(read_excel(site_file_path, na = c("NA", " ", "", "Z", "NULL")))
+    Location_data <- as.data.frame(read_excel(file_name, na = c("NA", " ", "", "Z", "NULL")))
   } else {paste0("Code not yet updated for ", DataSource," data.")}
   #
   #
