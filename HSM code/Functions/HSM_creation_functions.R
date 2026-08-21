@@ -34,6 +34,10 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
   } else {
     print("No additional grids are being used.")
   }
+  # Columns required for the combined grid
+  required_cols <- c("PGID", "Lat_DD_Y", "Long_DD_X", "MGID", "Lat_DD_Y_M", "Long_DD_X_",
+                     "State_Ref", "Ref_Region", "FWC_Region", "StatePlane", "UTM_Zone",
+                     "County", "Shape_Leng", "Shape_Area", "geometry")
   # Get full list of StateGrids
   grid_list <- vector("list", length(grid_names))
   # Load StateGrid(s)
@@ -48,12 +52,30 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
     message(sprintf("Loading grid %d of %d: %s", i, length(grid_names), g))
     #
     grid_list[[i]] <- tryCatch(
-      st_read(shp, quiet = TRUE),
+      {
+        x <- st_read(shp, quiet = TRUE)
+        
+        # Keep only required columns that exist in this grid
+        missing_cols <- setdiff(required_cols, names(x))
+        
+        if (length(missing_cols) > 0) {
+          stop(sprintf(
+            "Grid '%s' is missing required columns: %s",
+            g,
+            paste(missing_cols, collapse = ", ")
+          ))
+        }
+        
+        x[, required_cols]
+      },
       error = function(e) {
         stop(sprintf(
-          "Failed to load grid %d (%s)\nPath: %s\n\n%s", i, g, shp, e$message),
-          call. = FALSE)}
-    )}
+          "Failed to load grid %d (%s)\nPath: %s\n\n%s",
+          i, g, shp, e$message
+        ), call. = FALSE)
+      }
+    )
+  }
   #
   PicoGrid <- do.call(rbind, grid_list)
   #
@@ -322,8 +344,8 @@ apply_polygon_overlap <- function(modelGrid,
     f <- get(f)
     
     # Build polygons
-    polygon_sf <- st_make_valid(f)
-    polygon_sf <- st_as_sf(polygon_sf)
+    polygon_sf <- st_as_sf(f)
+    polygon_sf <- st_make_valid(polygon_sf)
     polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
     #
     pb$tick(tokens = list(
@@ -575,7 +597,7 @@ apply_distance_buffers <- function(
     buffer_breaks = NULL, #Option to specify fixed breaks (distance in meters)
     Ref_table = NULL, #Option to supply reference table for lookup 
     buffer_multiplier = 100, #Multiplier for scoring to value conversion 
-    buffer_units = c("ft","m","km","mi") #Assumes the reference is in meters so buffer_units = "m" is 1:1
+    buffer_units = "m" #Assumes the reference is in meters so buffer_units = "m" is 1:1
 ){
   # Packages
   library(sf)
@@ -600,7 +622,9 @@ apply_distance_buffers <- function(
   Sys.sleep(1/1000)
   #
   buffer_method <- match.arg(buffer_method)
-  buffer_units  <- match.arg(buffer_units)
+  buffer_units  <- match.arg(
+    buffer_units,
+    choices = c("m", "ft", "km", "mi"))
   #
   if(buffer_method=="fixed"){
     if(is.null(buffer_breaks))
@@ -618,11 +642,12 @@ apply_distance_buffers <- function(
   if(buffer_units == "m"){
     conv <- 1
   } else {
-    conv <- switch(buffer_units,
-                   m=1,
-                   ft=0.3048,
-                   km=1000,
-                   mi=1609.344)
+    conv <- switch(
+      buffer_units,
+      m  = 1,
+      ft = 0.3048,
+      km = 1000,
+      mi = 1609.344)
   }
   #
   # Model grid ----
@@ -684,7 +709,7 @@ apply_distance_buffers <- function(
           st_intersects(modelGrid_sf,buf)
         )>0
         idx <- inside & !assigned
-        buffer_value[idx] <- paste0(b_m, buffer_units)#b
+        buffer_value[idx] <- paste0(b_m, "m")#b
         assigned[idx] <- TRUE
       }
     } else {
@@ -725,9 +750,6 @@ apply_distance_buffers <- function(
       
       ## Replace Inf values created by pmax(NA, ..., na.rm=TRUE)
       feature_sf$Value[feature_sf$Value == 0] <- NA
-      #feature_sf <- feature_sf %>%
-      #  left_join(Ref_table,
-      #            by=setNames("Param",dataColumn))
       feature_sf$buffer_m <- feature_sf$Value * buffer_multiplier * conv
       buf <- st_buffer(feature_sf,
                        dist=feature_sf$buffer_m)
@@ -736,8 +758,8 @@ apply_distance_buffers <- function(
         if(length(hits[[i]])>0){
           buffer_value[i] <- paste0(
             max(buf$buffer_m[hits[[i]]], na.rm = TRUE),
-            buffer_units
-          )#max(buf$buffer_m[hits[[i]]], na.rm=TRUE)
+            "m"
+          )
         }
       }
     }
@@ -1125,76 +1147,67 @@ check_geometry <- function(x, plot = TRUE){
 #' @export
 repair_geometry <- function(
     x,
-    snap_tolerance = NULL,
-    drop_invalid = FALSE,
-    verbose = TRUE
+    action = c("repair","remove"),
+    bad_features = NULL,
+    save = FALSE,
+    filename = NULL,
+    overwrite = FALSE
 ){
   
   library(sf)
   library(lwgeom)
   
-  ## Convert Spatial* objects
-  if (inherits(x, "SpatVector")) {
-    x <- sf::st_as_sf(x)
-  } else if (inherits(x, "Spatial")) {
-    x <- tryCatch(
-      sf::st_as_sf(x),
-      error = function(e) {
-        message("st_as_sf() failed. Trying terra conversion...")
-        tmp <- terra::vect(x)
-        v <- terra::makeValid(tmp)
-        sf::st_as_sf(v)
-      }
+  action <- match.arg(action)
+  
+  if(inherits(x,"Spatial"))
+    x <- st_as_sf(x)
+  
+  # Find bad polygons if not supplied
+  if(is.null(bad_features))
+    bad_features <- check_geometry(x, plot = FALSE)$bad_features
+  
+  if(length(bad_features)==0){
+    
+    message("No invalid geometries found.")
+    
+    return(x)
+    
+  }
+  
+  if(action=="repair"){
+    
+    x[bad_features, ] <-
+      sf::st_make_valid(
+        x[bad_features, ]
+      )
+    
+  }
+  
+  if(action=="remove"){
+    
+    x <- x[-bad_features, ]
+    
+  }
+  
+  # Final repair of entire layer
+  x <- sf::st_make_valid(x)
+  
+  if(save){
+    
+    if(is.null(filename))
+      stop("filename must be supplied when save = TRUE")
+    
+    st_write(
+      x,
+      filename,
+      delete_layer = overwrite,
+      quiet = TRUE
     )
+    
   }
   
-  ## Remove empty geometries
-  empty <- st_is_empty(x)
-  if(any(empty))
-    x <- x[!empty, ]
+  return(x)
   
-  ## Optional snapping
-  if (!is.null(snap_tolerance)) {
-    if (sf::st_is_longlat(x)) {
-      warning("Skipping st_snap(): object is in geographic coordinates.")
-    } else {
-      x <- suppressWarnings(
-        sf::st_snap(x, x, snap_tolerance))
-    }
-  }
-  
-  ## Final GEOS repair
-  x <- suppressWarnings(
-    st_buffer(x, 0)
-  )
-  
-  ## Final validity
-  after <- suppressWarnings(
-    st_is_valid(x, NA_on_exception = TRUE)
-  )
-  
-  ## Optionally remove unrepaired features
-  if(drop_invalid){
-    x <- x[isTRUE(after) | (!is.na(after) & after), ]
-  }
-  
-  report <- data.frame(
-    Feature = seq_along(after),
-    ValidAfter = after
-  )
-  
-  if(verbose){
-    cat(sum(after, na.rm=TRUE), "valid after\n")
-    cat(sum(!after, na.rm=TRUE), "still invalid\n")
-  }
-  
-  list(
-    data = x,
-    report = report,
-    remaining_invalid = which(is.na(after) | !after),
-    removed_empty = which(empty),
-    n_after = sum(after, na.rm = TRUE)
-  )
 }
 #
 #
