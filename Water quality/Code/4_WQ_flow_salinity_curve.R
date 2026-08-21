@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                install = TRUE) 
 #
 #
-Site_code <- c("WI")       #Two letter estuary code
+Site_code <- c("SA")       #Two letter estuary code
 Version <- c("v1")         #For saving plots
 Start_year <- c("2020")
 End_year <- c("2024")
@@ -33,22 +33,27 @@ library(dataRetrieval)
 #Parameter code: 00060 = mean daily discharge, 00061 = instantaneous discharge
 # 00480 = Salinity, 00095 = Specific conductance
 #Statistic_id: 00003 = Mean
-(temp_data <- read_waterdata_daily(monitoring_location_id = c("USGS-02310700", "USGS-02313700", "USGS-02313230", "USGS-02313250", "USGS-02310750",
-                                                              "USGS-285447082445100", "USGS-285531082412600", "USGS-02310752", "USGS-02313272", "USGS-02310712", "USGS-284506082435801"), 
+Site <- c("USGS-02359500", "USGS-295323085151700", 
+          "USGS-295308085143700", "USGS-301116085443000")
+#
+(temp_locations <- read_waterdata_monitoring_location(Site))
+#
+(temp_data <- read_waterdata_daily(monitoring_location_id = Site, 
                                   parameter_code = c("00060", "00061"),
                                   properties = c("value", "statistic_id", "monitoring_location_id", "parameter_code", "time", "unit_of_measure"),
                                   skipGeometry = TRUE))
 #
 unique(temp_data$parameter_code)
 #
-WQ$clean_save_usgs_data(temp_data, "2020-01-01", "2024-12-31", "flow")
+WQ$clean_save_usgs_data(temp_data, temp_locations, "2020-01-01", "2024-12-31", "flow")
 #
 #
 #
 ### Data from cleaned Storet files ####
-# Name of file to use
+# Name of file to use, Raw or Compiled folder to look in
 #
-WQ$clean_save_existing_data("WI_Portal_combined_filtered_2020_2024", "Salinity")
+WQ$clean_save_existing_data("SA_Portal_SAHSM_2020_2024", "Salinity", 
+                            RawOrCompiled = "Compiled")
 #
 #
 #
@@ -56,7 +61,7 @@ WQ$clean_save_existing_data("WI_Portal_combined_filtered_2020_2024", "Salinity")
 ### Data gather and cleaning####
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
 # Make sure only desired logger data files are in the main folder
-WQ$load_WQ_data()
+WQ$load_WQ_data(loadFromProject = "Yes")
 #
 ## Clean data
 #
@@ -66,20 +71,35 @@ salinity_raw <- salinity_raw %>%
 # library(geosphere, igraph, dplyr, leaflet)
 # df should have columns: ID, Latitude, Longitude, Value
 # distance_threshold in meters (e.g., 2000)
-sali_grps <- WQ$cluster_points(salinity_raw, 1500)
+sali_grps <- WQ$cluster_points(salinity_raw, 2500)
 # View the map: sali_grps$map
 # Access modified data: sali_grps$data
 # Access group summaries: sali_grps$groups
 #
 # Add group station locations to Loggers data frame in R and Excel data file
 updated_Loggers <- WQ$update_logger_locations(sali_grps$locations)
-Loggers <- updated_Loggers
+Loggers <- bind_rows(Loggers,
+                     updated_Loggers) %>%
+  distinct()
 #
-#
+# Clean conductance data if needed:
 # If working with conductance data from USGS loggers, "load"USGS-R/CSI" package is used:
 #usethis::create_github_token(); gitcreds::gitcreds_set()
 devtools::install_github("USGS-R/CSI")
 library("CSI")
+
+sal_raw_temp <- sali_grps$data %>% #salinity_raw %>% 
+  # Limit to conductance data
+  #filter(parameter_code == "00095") %>%
+  # Add Year-Month column
+  mutate(Year = format(TIMESTAMP, "%Y"),
+         Month = format(TIMESTAMP, "%m")) %>%
+  dplyr::select(Year, Month, STATION, VALUE)
+(salinity_raw <- sal_raw_temp %>%
+    dplyr::group_by(STATION) %>%
+    dplyr::group_modify(~ CSIspec_con(.x)) %>%
+    dplyr::ungroup() %>%
+    mutate(PARAMETER = "Salinity"))
 #
 #
 # Total daily flow for each logger
@@ -93,22 +113,10 @@ flow_ave <- flow_raw %>%
   summarise(Flow = sum(Value, na.rm = T)) %>% 
   ungroup()
 #
-# Clean conductance data if needed:
-sal_raw_temp <- sali_grps$data %>% #salinity_raw %>% 
-  # Limit to conductance data
-  #filter(parameter_code == "00095") %>%
-  # Add Year-Month column
-  mutate(Year = format(TIMESTAMP, "%Y"),
-         Month = format(TIMESTAMP, "%m")) %>%
-  dplyr::select(Year, Month, STATION, VALUE)
-(salinity_raw <- sal_raw_temp %>%
-  dplyr::group_by(STATION) %>%
-  dplyr::group_modify(~ CSIspec_con(.x)) %>%
-  dplyr::ungroup() %>%
-  mutate(PARAMETER = "Salinity"))
+#
 #
 # Mean daily salinity for each logger: either salinity_raw if no grouping, sali_grps$data if grouped
-salinity_ave <- salinity_raw %>% #sali_grps$data %>%  
+salinity_ave <- sali_grps$data %>%  #salinity_raw %>% #
   rename_with(~str_to_title(.x)) %>%
   {# Rename Timestamp to Date or create Date from Year and Month
     if ("Timestamp" %in% names(.)) {
@@ -149,8 +157,8 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area
-State_Grid <- c("F2") #E2, H4
-Alt_Grid <- c("F3")
+State_Grid <- c("C1") #E2, H4
+Alt_Grid <- c("C2")
 Site_Grid <- WQ2$load_site_grid(State_Grid, Site_area, Alt_Grid = Alt_Grid)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
@@ -162,7 +170,7 @@ ggplot()+
   #Individual station points if grouping:
   geom_point(data = Loggers %>% filter(DataType == "Flow"), aes(Longitude, Latitude), 
              color = "black", size =4, alpha = 0.6)+
-  geom_point(data = Loggers %>% dplyr::filter(grepl("WI", StationID)), aes(Longitude, Latitude),  
+  geom_point(data = Loggers %>% dplyr::filter(grepl("SA", StationID)), aes(Longitude, Latitude),  
              color = "coral", size = 3.5, shape = 17, alpha = 0.7)+
   #geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType, shape = DataType), alpha = 0.6, size = 4)+
   theme_classic()+
@@ -206,7 +214,7 @@ larvae <- rbind(
 # Plot fit - option to add green fill over optimal salinity range and/or flow range
 names(models$models)
 WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models, 
-                         names(models$models)[13], 
+                         names(models$models)[22], 
                          "Mean_Flow", "Mean_Salinity", 
                          Salinity_min = 11.98, Salinity_max = 38.95)
 #
@@ -371,7 +379,7 @@ AOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, 
 WQ$plot_flow_interp(AOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".jpg", sep = ""), 
        dpi = 300)
 #
 #
@@ -390,13 +398,12 @@ LOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, 
 WQ$plot_flow_interp(LOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".jpg", sep = ""), 
        dpi = 300,
-       device = ragg::agg_tiff,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 7,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 #
 #
 #
@@ -421,25 +428,23 @@ p <- WQ$plot_flow_interp(AnonSub_idw_data, "meanDays")
 #
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".jpg", sep = ""), 
        dpi = 300,
-       device = ragg::agg_tiff,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "none")
+       units = "in")
 #
 p <- WQ$plot_flow_interp(AnonSuper_idw_data, "meanDays")
 #
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".jpg", sep = ""), 
        dpi = 300,
-       device = ragg::agg_tiff,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "none")
+       units = "in")
 #
 #
 #
@@ -466,13 +471,12 @@ p <- WQ$plot_flow_interp(LnonSub_idw_data, "meanDays")
 #
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".jpg", sep = ""), 
        dpi = 300,
-       device = ragg::agg_tiff,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "none")
+       units = "in")
 #
 p <- WQ$plot_flow_interp(LnonSuper_idw_data, "meanDays")
 p_fast <- p +
@@ -480,13 +484,12 @@ p_fast <- p +
 #
 ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".jpg", sep = ""), 
        dpi = 300,
-       device = ragg::agg_tiff,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "none")
+       units = "in")
 #
 #
 ##
@@ -510,13 +513,12 @@ p_fast <- p +
 #
 ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "Outlier1",".jpg", sep = ""), 
        dpi = 300,
-       device = ragg::agg_tiff,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "none")
+       units = "in")
 #
 p <- WQ$plot_flow_interp(Outlier2_idw_data, "meanOut2")
 p_fast <- p +
@@ -524,13 +526,12 @@ p_fast <- p +
 #
 ggsave(plot = p, 
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), 
+       filename = paste("Flow_salinity_curve_", "Outlier2",".jpg", sep = ""), 
        dpi = 300,
-       device = ragg::agg_tiff,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "none")
+       units = "in")
 
 #
 #
