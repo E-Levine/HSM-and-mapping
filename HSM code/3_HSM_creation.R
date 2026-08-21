@@ -16,10 +16,10 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being created. Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("WI") #two-letter site code
+Site_Code <- c("SA") #two-letter site code
 Version <- c("v1") #Model version
-State_Grid <- c("F2")
-Alt_Grid <- c("E3", "F3") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
+State_Grid <- c("C1")
+Alt_Grid <- c("C2") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
 #
 ##Parameters
 Sections_designated <- c("Y") #Y/N are section designations used
@@ -69,10 +69,10 @@ find_folder_names("Seagrass")
 Start_date <- "2024-01-01"
 load_matching_shp(Section_grid, "Seagrass", StartDate = Start_date, EndDate = End_date)
 # Repair shapefile as needed...
-repair <- repair_geometry(Seagrass_202412,  
-                          snap_tolerance = units::set_units(1, "mm"), 
-                          drop_invalid = FALSE)
-Seagrass_202412 <- repair$data
+check_geometry(Seagrass_202412)
+repair <- repair_geometry(Seagrass_202412,
+                          action = "repair")
+Seagrass_202412 <- repair
 #
 modelGrid_sp <- apply_polygon_overlap(modelGrid = modelGrid_sp, 
                                       files_loaded = files_loaded, 
@@ -100,12 +100,17 @@ modelGrid_sp2 <- apply_distance_buffers(modelGrid = modelGrid_sp,
                                         df_list = df_list)
 #
 # Plot to check data application 
+# Overall view
+ggplot(st_as_sf(modelGrid_sp2))+
+  geom_sf(aes(fill = Buff24))+
+  geom_sf(aes(color = Oyst24), fill = NA)
+# Zoom
 ggplot(st_as_sf(modelGrid_sp2))+
   geom_sf(aes(fill = Buff24))+
   geom_sf(aes(color = Oyst24), fill = NA)+
   #scale_color_discrete()+
-  coord_sf(xlim = c(-82.825, -82.799),
-           ylim = c(29.12, 29.175))
+  coord_sf(xlim = c(-85.8, -85.7),
+           ylim = c(30.22, 30.27))
 #
 rm(list = ls(pattern = "^Oyster_"))
 #
