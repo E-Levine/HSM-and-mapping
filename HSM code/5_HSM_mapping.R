@@ -991,7 +991,7 @@ dissolve_grid <- function(x,
 }
 #
 #
-HSM_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSM_f", model_name = "final_scores", save_shapefile = TRUE)
+HSM_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSMgrp", model_name = "final_scores", save_shapefile = TRUE)
 HSM_simp$plot
 #
 #
