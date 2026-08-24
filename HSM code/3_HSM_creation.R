@@ -119,7 +119,7 @@ rm(list = ls(pattern = "^Oyster_"))
 find_folder_names("Channels")
 load_matching_shp(Section_grid, "Channels", StartDate = "2023-12-01", EndDate = "2024-12-31")
 #
-files_loaded[1] <- "Waterways"
+#files_loaded[1] <- "Waterways"
 names(files_loaded) <- "Waterways"
 # Reference table:
 (Reference_t <- df_list[[12]] %>%
@@ -134,16 +134,20 @@ modelGrid_sp3 <- apply_distance_buffers(modelGrid = modelGrid_sp2,
                                         buffer_method ="lookup",
                                         Ref_table = Reference_t,
                                         buffer_multiplier = 100,
-                                        buffer_units = "keep",
                                         df_list = df_list)
 #
 # Plot to check data application 
+# Overall 
+ggplot(st_as_sf(modelGrid_sp3))+
+  geom_sf(aes(fill = Chnl24))+
+  geom_sf(data = st_as_sf(Waterways_202401), aes(color = TYPE), linewidth = 1.5)
+# Zoom
 ggplot(st_as_sf(modelGrid_sp3))+
   geom_sf(aes(fill = Chnl24))+
   geom_sf(data = st_as_sf(Waterways_202401), aes(color = TYPE), linewidth = 1.5)+
   scale_color_discrete()+
-  coord_sf(xlim = c(-82.75, -82.738),
-           ylim = c(29.005, 29.011))
+  coord_sf(xlim = c(-85.7, -85.6),
+           ylim = c(30.1, 30.15))
 
 #
 #
@@ -153,8 +157,8 @@ head(modelGrid_sp4@data)
 #
 #
 #
+temp <- modelGrid_sp4@data
 #
-
 ####Output layer with data applied ####
 #
 # Save model datalayers 

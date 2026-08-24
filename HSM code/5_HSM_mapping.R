@@ -21,7 +21,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("WI") #two-letter site code
+Site_Code <- c("SA") #two-letter site code
 Version <- c("v1") #Model version
 Final_version <- c("Y") #Final model output? Y/N
 #
@@ -30,7 +30,7 @@ Final_version <- c("Y") #Final model output? Y/N
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_final_model"
-model_scores_date <- c("2026-08-05")#c("2026-04-27")#c("2026-03-04") #
+model_scores_date <- c("2026-08-24")#c("2026-04-27")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -290,13 +290,13 @@ HSMmodel %>%
     y = "Count"
   ) +
   base_theme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 900000), breaks = seq(0, 900000, 300000), labels = scales::label_comma())+#, breaks = seq(0, 36000, 12000))+ #2000000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 600000), breaks = seq(0, 600000, 200000), labels = scales::label_comma())+#, breaks = seq(0, 36000, 12000))+ #2000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme + theme(axis.text.x = element_text(angle = 20, vjust = 0.8)))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_grp_hist.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_grp_hist.jpg"),
   plot = p0,
   width = 9,
   height = 5,
@@ -313,7 +313,7 @@ ggsave(
   geom_sf(data = FL_outline, linewidth = 0.35)+
   geom_point(data = Cities, aes(Longitude, Latitude), alpha = 0.8, size = 4)+
   geom_shadowtext(data = Cities, aes(Longitude, Latitude, label = Location),
-            nudge_x = 0.05, nudge_y = -0.025, # ADJUST AS NEEDED
+            nudge_x = 0.1, nudge_y = -0.025, # ADJUST AS NEEDED
             size = 5, fontface = "bold", family = "Arial", 
             color = "black", bg.color = "white")+
   annotate("text", label = "Atlantic\nOcean", x = -80.12, y = 27.25, # UPDATE AS NEEDED
@@ -323,7 +323,7 @@ ggsave(
   WI_overview_zoom)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_area_map.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_area_map.jpg"),
   plot = p1,
   width = 9,
   height = 5,
@@ -348,7 +348,7 @@ bbox_buffer <- st_buffer(site_bbox, dist = 0)
           panel.background = element_rect(fill = "white")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_location_map.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_location_map.jpg"),
   plot = p2,
   width = 9,
   height = 5,
@@ -369,7 +369,7 @@ ggsave(
    # Cities
    geom_point(data = Cities, aes(Longitude, Latitude), alpha = 0.8, size = 5.5, shape = 17)+
    geom_shadowtext(data = Cities, aes(Longitude, Latitude, label = Location),
-                   nudge_x = -0.05, nudge_y = -0.03, # ADJUST AS NEEDED
+                   nudge_x = 0.15, nudge_y = -0.03, # ADJUST AS NEEDED
                    size = 5, fontface = "bold", family = "Arial", 
                    color = "black", bg.color = "white")+
    annotate("text", label = "Atlantic\nOcean", x = -80.12, y = 27.22, # UPDATE AS NEEDED
@@ -389,7 +389,7 @@ ggsave(
 )
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_loggers_locations.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_loggers_locations.jpg"),
   plot = pflow,
   width = 9,
   height = 5,
@@ -414,7 +414,7 @@ ggsave(
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_habitat.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_habitat.jpg"),
     plot = p3,
     width = 9,
     height = 5,
@@ -423,7 +423,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_habitat.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_habitat.jpg"),
     plot = p3,
     width = 9,
     height = 5,
@@ -445,7 +445,7 @@ if(Final_version == "Y"){
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_buffer.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_buffer.jpg"),
     plot = p4,
     width = 9,
     height = 5,  
@@ -454,7 +454,7 @@ if(Final_version == "Y"){
   )
   } else {
     ggsave(
-      filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_buffer.png"),
+      filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_buffer.jpg"),
       plot = p4,
       width = 9,
       height = 5,  
@@ -507,7 +507,7 @@ if(Final_version == "Y"){
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Channels.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Channels.jpg"),
     plot = p5,
     width = 9,
     height = 5,
@@ -516,7 +516,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Channels.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Channels.jpg"),
     plot = p5,
     width = 9,
     height = 5,
@@ -540,7 +540,7 @@ if(Final_version == "Y"){
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Salinity.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Salinity.jpg"),
     plot = p6,
     width = 9,
     height = 5,
@@ -549,7 +549,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Salinity.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Salinity.jpg"),
     plot = p6,
     width = 9,
     height = 5,
@@ -571,7 +571,7 @@ if(Final_version == "Y"){
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Temperature.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Temperature.jpg"),
     plot = p7,
     width = 9,
     height = 5,
@@ -580,7 +580,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Temperature.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Temperature.jpg"),
     plot = p7,
     width = 9,
     height = 5,
@@ -602,7 +602,7 @@ if(Final_version == "Y"){
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Flow.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Flow.jpg"),
     plot = p7.5,
     width = 9,
     height = 5,
@@ -611,7 +611,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.jpg"),
     plot = p7.5,
     width = 9,
     height = 5,
@@ -642,7 +642,7 @@ if(Final_version == "Y"){
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Composite.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Composite.jpg"),
     plot = p8,
     width = 9,
     height = 5,
@@ -651,7 +651,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Composite.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Composite.jpg"),
     plot = p8,
     width = 9,
     height = 5,
@@ -683,11 +683,11 @@ HSM_scores <- HSM_scores %>%
     theme(panel.border = element_blank(), 
           axis.text.x = element_text(angle = 20, hjust = 0.8))+
     scale_x_discrete(drop = FALSE)+
-    scale_y_continuous(expand = c(0,0), limits = c(0, 1000000))) #SL 32000, SS 2000000
+    scale_y_continuous(expand = c(0,0), limits = c(0, 500000), labels = scales::label_comma())) #SL 32000, SS 2000000
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMgrp_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMgrp_hist.jpg"),
     plot = p8.5,
     width = 8,
     height = 4,
@@ -696,7 +696,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMgrp_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMgrp_hist.jpg"),
     plot = p8.5,
     width = 8,
     height = 4,
@@ -722,7 +722,7 @@ HSM_scores <- HSM_scores %>% mutate(HSMjb = factor(HSMjb, levels = c("Low", "Med
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_JenksBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_JenksBreaks.jpg"),
     plot = p9,
     width = 9,
     height = 5,
@@ -731,7 +731,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_JenksBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_JenksBreaks.jpg"),
     plot = p9,
     width = 9,
     height = 5,
@@ -757,11 +757,11 @@ jb_breaks <- c(0.00, 0.36, 0.49)
   base_theme + papertheme + 
   theme(panel.border = element_blank())+
   scale_x_continuous(expand = c(0,0), limits = c(-0.005, 1.0), breaks = seq(0, 1, 0.1))+
-  scale_y_continuous(expand = c(0,0), limits = c(0, 800000), labels = scales::label_comma())) #20000, 1600000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 400000), labels = scales::label_comma())) #20000, 1600000
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMjb_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMjb_hist.jpg"),
     plot = p9.5,
     width = 8,
     height = 4,
@@ -770,7 +770,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMjb_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMjb_hist.jpg"),
     plot = p9.5,
     width = 8,
     height = 4,
@@ -797,7 +797,7 @@ if(Final_version == "Y"){
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_QuartileBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_QuartileBreaks.jpg"),
     plot = p10,
     width = 9,
     height = 5,
@@ -806,7 +806,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_QuartileBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_QuartileBreaks.jpg"),
     plot = p10,
     width = 9,
     height = 5,
@@ -817,7 +817,7 @@ if(Final_version == "Y"){
 #
 #
 # Quantile hist
-q4_breaks <- c(0.00, 0.30, 0.40, 0.44)
+q4_breaks <- c(0.00, 0.40, 0.44, 0.45)
 (p10.5 <- ggplot(HSM_scores, aes(x = HSM_f)) +
     geom_histogram(fill = "gray50", color = "black", bins = 30, center = 0.05) +
     geom_vline(xintercept = q4_breaks, linetype = "dashed", linewidth = 1, color = "red") +
@@ -833,11 +833,11 @@ q4_breaks <- c(0.00, 0.30, 0.40, 0.44)
     base_theme + papertheme + 
     theme(panel.border = element_blank())+
     scale_x_continuous(expand = c(0,0), limits = c(-0.005, 1.0), breaks = seq(0, 1, 0.1))+
-    scale_y_continuous(expand = c(0,0), limits = c(0, 1000000), labels = scales::label_comma())) #20000
+    scale_y_continuous(expand = c(0,0), limits = c(0, 400000), labels = scales::label_comma())) #20000
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMq4_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMq4_hist.jpg"),
     plot = p10.5,
     width = 8,
     height = 4,
@@ -846,7 +846,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMq4_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMq4_hist.jpg"),
     plot = p10.5,
     width = 8,
     height = 4,
@@ -886,7 +886,7 @@ Ave_scores %>%
 # Cells >= 0.9
 Ave_scores %>%
   summarise(across(OystAV:FAV, ~ round(sum(.x >= 0.9, na.rm = TRUE),3)))
-
+#
 # Shapefile simplification output ----
 #
 library(sf)
@@ -991,7 +991,7 @@ dissolve_grid <- function(x,
 }
 #
 #
-HSM_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSM_f", model_name = "final", save_shapefile = TRUE)
+HSM_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSM_f", model_name = "final_scores", save_shapefile = TRUE)
 HSM_simp$plot
 #
 #
