@@ -407,11 +407,12 @@ Spatial_data <- function(DataInput){
   if(Data_source == "Portal"){
     # If geometry column exists as WKT text, convert it
     if ("geometry" %in% colnames(DataInput)) {
-      Combined_data_counts <- DataInput %>% 
-        st_as_sf(wkt = "geometry", crs = 4326) %>%
-        st_transform(crs = target_crs)  %>%
+      WQ_sf <- st_as_sf(DataInput, wkt = "geometry", crs = 4326) %>% 
+                          st_transform(crs = target_crs)
+      Combined_data_counts <- WQ_sf %>% distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>% 
         group_by(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, KML) %>% 
-        summarise(N = n(), .groups = "drop")
+        summarise(N = n(), .groups = "drop") %>% 
+        st_as_sf(coords = c("LongitudeMeasure", "LatitudeMeasure"), crs = target_crs)
     } else {
       Combined_data_counts <- DataInput %>% 
         distinct(MonitoringLocationIdentifier, LatitudeMeasure, LongitudeMeasure, ActivityStartDate, KML) %>% 
@@ -478,8 +479,8 @@ create_station_map <- function(DataSource, EstuaryArea, StateOutline, SelectedSt
   #Define popup variables and station ID column based on DataSource
   if (DataSource == "Portal") {
     popup_vars <- c("StationID" = "MonitoringLocationIdentifier", 
-                    "Latitude" = "LatitudeMeasure", 
-                    "Longitude" = "LongitudeMeasure", 
+                    "Latitude" = if ("LatitudeMeasure" %in% names(Stations_sf)) "LatitudeMeasure" else "Latitude", 
+                    "Longitude" = if("LongitudeMeasure" %in% names(Stations_sf)) "LongitudeMeasure" else "Longitude", 
                     "Samples" = "N")
   } else if (DataSource == "WA") {
     popup_vars <- c("StationID" = "StationID", 
@@ -495,6 +496,13 @@ create_station_map <- function(DataSource, EstuaryArea, StateOutline, SelectedSt
     stop("Currently unsupported DataSource")
   }
   #
+  coords <- st_coordinates(Stations_sf)
+  Stations_sf <- Stations_sf %>%
+    bind_cols(
+      tibble(
+        Longitude = coords[, 1],
+        Latitude  = coords[, 2]) %>%
+        dplyr::select(-any_of(names(Stations_sf))))
   #Add Stations_sf points with colored dots by KML
   map <- base_map + 
     tm_shape(Stations_sf) + 

@@ -22,7 +22,7 @@ clean_save_usgs_data <- function(rawDF, LLDF, startDate, endDate, dataType){
   LLdata <- locations %>% 
     dplyr::filter(Site == Site_code) %>%
     dplyr::select(Site, StationID, DataType, Latitude, Longitude)
-    
+
   data <- rawDF %>% 
     rename(TIMESTAMP = time, VALUE = value, STATION = monitoring_location_id) %>%
     dplyr::filter(TIMESTAMP >= start & TIMESTAMP <= end) %>%
@@ -90,11 +90,21 @@ clean_save_usgs_data <- function(rawDF, LLDF, startDate, endDate, dataType){
 }
 #
 # Clean and save existing data:
-clean_save_existing_data <- function(fileName, dataType){
+clean_save_existing_data <- function(fileName, dataType, RawOrCompiled = "Raw"){
   # Data type/parameter
   Type <- dataType
+  # Data folder
+  data_type <- tolower(RawOrCompiled)
+  if (!data_type %in% c("raw", "compiled")) {
+    stop("RawOrCompiled must be either 'Raw' or 'Compiled'.")
+  }
+  data_path <- if (data_type == "raw") {
+    "Data/Raw-data/"
+  } else {
+    "Data/Compiled-data/"
+  }
   #
-  filePath <- paste0("Data/Raw-cleaned/", fileName, ".xlsx")
+  filePath <- paste0(data_path, fileName, ".xlsx")
   LLpath <- paste0("Data/Raw-data/Flow_logger_locations.xlsx")
   loaded <- read.xlsx(filePath, sheet = "Sheet1")
   LLloaded <- read.xlsx(LLpath, sheet = "Sheet 1")
@@ -104,11 +114,28 @@ clean_save_existing_data <- function(fileName, dataType){
   data <- loaded %>% 
     filter(CharacteristicName == "Salinity") %>% 
     dplyr::select("STATION" = MonitoringLocationName, 
-                  "Latitude" = LatitudeMeasure, 
-                  "Longitude" = LongitudeMeasure, 
+                  dplyr::any_of(c("LatitudeMeasure", "Latitude")),
+                  dplyr::any_of(c("LongitudeMeasure", "Longitude")),
                   "TIMESTAMP" = ActivityStartDate, 
                   "PARAMETER" = CharacteristicName, 
-                  "VALUE" = ResultMeasureValue)
+                  "VALUE" = ResultMeasureValue) %>%
+    dplyr::rename(
+      Latitude = dplyr::any_of("LatitudeMeasure"),
+      Longitude = dplyr::any_of("LongitudeMeasure")
+    )
+  #
+  LLdata <- LLloaded %>% 
+    dplyr::filter(Site == Site_code) %>%
+    dplyr::select(Site, StationID, DataType, Latitude, Longitude) %>%
+    bind_rows(
+      data %>% 
+        distinct() %>% 
+        rename(StationID = STATION) %>% 
+        mutate(Site = Site_code, 
+               DataType = str_to_sentence(dataType)) %>% 
+        dplyr::select(Site, StationID, DataType, Latitude, Longitude)
+    )
+  #
   #
   LLdata <- LLloaded %>% 
     dplyr::filter(Site == Site_code) %>%
@@ -148,7 +175,7 @@ clean_save_existing_data <- function(fileName, dataType){
     deleteData(LL_wb, sheet = "Sheet 1", cols = 1:ncol(combined_data), rows = 1:(nrow(combined_data) + 1), gridExpand = TRUE)
     writeData(LL_wb, sheet = "Sheet 1", x = cleaned_data, colNames = TRUE)
     saveWorkbook(LL_wb, LL_path_model, overwrite = TRUE)
-    }
+  }
   #
   #
   # Create wb with data:
@@ -157,60 +184,96 @@ clean_save_existing_data <- function(fileName, dataType){
   openxlsx::addWorksheet(new_wb, sheetName)  # Add fresh sheet
   openxlsx::writeData(new_wb, sheet = sheetName, x = data) 
   #Save wb
+  openxlsx::saveWorkbook(new_wb, data_path_model, overwrite = TRUE)
   openxlsx::saveWorkbook(new_wb, data_path, overwrite = TRUE)
   openxlsx::saveWorkbook(new_wb, data_path_model, overwrite = TRUE)
   cat("Logger data successfully saved to:\n",
       "- Sheet '",sheetName,"' (", nrow(data), " rows)\n",
       "File: ", data_path, "\n",
       "File: ", data_path_model, "\n")
-  #
 }
 #
 # Load Excel data files:
-load_WQ_data <- function() {
-  
-  Stations <- openxlsx::read.xlsx(
-    file.path("Data/Raw-data/Flow_logger_locations.xlsx"),
-    na.strings = c("NA", " ", "", "Z"),
-    detectDates = TRUE
-  ) %>%
-    dplyr::filter(Site == Site_code)
-  
-  flow_file <- list.files(
-    path = "Data/Raw-data/",
-    pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$")
-  )
-  
-  if (length(flow_file) == 0) {
-    stop("No flow file found for Site_code: ", Site_code)
+load_WQ_data <- function(loadFromProject = "No") {
+  #
+  folderLocation <- tolower(loadFromProject)
+  #
+  if(folderLocation == "no"){
+    Stations <- openxlsx::read.xlsx(
+      file.path("Data/Raw-data/Flow_logger_locations.xlsx"),
+      na.strings = c("NA", " ", "", "Z"),
+      detectDates = TRUE
+    ) %>%
+      dplyr::filter(Site == Site_code)
+    
+    flow_file <- list.files(
+      path = "Data/Raw-data/",
+      pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$")
+    )
+    
+    if (length(flow_file) == 0) {
+      stop("No flow file found for Site_code: ", Site_code)
+    }
+    
+    flow_raw <- openxlsx::read.xlsx(
+      file.path("Data/Raw-data/", flow_file[1]),
+      na.strings = c("NA", " ", "", "Z"),
+      detectDates = TRUE
+    )
+    
+    salinity_file <- list.files(
+      path = "Data/Raw-data/",
+      pattern = paste0(Site_code, "_logger_[Ss]alinity_.*\\.xlsx$")
+    )
+    
+    if (length(salinity_file) == 0) {
+      stop("No salinity file found for Site_code: ", Site_code)
+    }
+    
+    salinity_raw <- openxlsx::read.xlsx(
+      file.path("Data/Raw-data/", salinity_file[1]),
+      na.strings = c("NA", " ", "", "Z"),
+      detectDates = TRUE
+    )
+  } else if(folderLocation == "yes"){
+    
+    Stations <- openxlsx::read.xlsx(
+      file.path(paste0("../",Site_code, "_", Version,"/Data/",Site_code,"_logger_locations.xlsx")),
+      na.strings = c("NA", " ", "", "Z"),
+      detectDates = TRUE
+    ) %>%
+      dplyr::filter(Site == Site_code)
+    
+    flow_file <- list.files(
+      path = paste0("../",Site_code, "_", Version,"/Data/"),
+      pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$")
+    )
+    
+    if (length(flow_file) == 0) {
+      stop("No flow file found for Site_code: ", Site_code)
+    }
+    
+    flow_raw <- openxlsx::read.xlsx(
+      file.path(paste0("../",Site_code, "_", Version,"/Data/"), flow_file[1]),
+      na.strings = c("NA", " ", "", "Z"),
+      detectDates = TRUE
+    )
+    
+    salinity_file <- list.files(
+      path = paste0("../",Site_code, "_", Version,"/Data/"),
+      pattern = paste0(Site_code, "_logger_[Ss]alinity_.*\\.xlsx$")
+    )
+    
+    if (length(salinity_file) == 0) {
+      stop("No salinity file found for Site_code: ", Site_code)
+    }
+    
+    salinity_raw <- openxlsx::read.xlsx(
+      file.path(paste0("../",Site_code, "_", Version,"/Data/"), salinity_file[1]),
+      na.strings = c("NA", " ", "", "Z"),
+      detectDates = TRUE
+    )
   }
-  
-  flow_path <- file.path("Data/Raw-data", flow_file[1])
-  message("Loading flow file: ", flow_path)
-  
-  flow_raw <- openxlsx::read.xlsx(
-    file.path("Data/Raw-data/", flow_file[1]),
-    na.strings = c("NA", " ", "", "Z"),
-    detectDates = TRUE
-  )
-  
-  salinity_file <- list.files(
-    path = "Data/Raw-data/",
-    pattern = paste0(Site_code, "_logger_[Ss]alinity_.*\\.xlsx$")
-  )
-  
-  if (length(salinity_file) == 0) {
-    stop("No salinity file found for Site_code: ", Site_code)
-  }
-  
-  salinity_path <- file.path("Data/Raw-data", salinity_file[1])
-  message("Loading salinity file: ", salinity_path)
-  
-  salinity_raw <- openxlsx::read.xlsx(
-    file.path("Data/Raw-data/", salinity_file[1]),
-    na.strings = c("NA", " ", "", "Z"),
-    detectDates = TRUE
-  )
   
   # Assign outputs to global environment
   assign("Loggers", Stations, envir = .GlobalEnv)
@@ -225,28 +288,17 @@ load_WQ_data <- function() {
 # distance_threshold in meters (e.g., 2000)
 cluster_points <- function(df, distance_threshold, Site = Site_code) {
   SiteCode <- Site
-  
-  # Limit data to work with
-  df <- df %>% 
-    drop_na()
-  
   # Extract coordinates
   coords <- df[, c("Longitude", "Latitude")]
   
-  n <- nrow(coords)
-  
-  cat("Number of unique locations:", n, "\n")
-  cat("Distance matrix size:", round((n^2 * 8) / 1024^3, 2), "GB\n")
-  
   # Compute pairwise distances using Haversine formula (in meters)
   dist_mat <- geosphere::distm(coords, fun = geosphere::distHaversine)
-
+  
   # Ability to check number of groups based on distance and change distance if desired:
   repeat{
     # Create adjacency matrix: TRUE if distance < threshold
     adj_mat <- dist_mat < distance_threshold
     diag(adj_mat) <- FALSE  # No self-connections
-    adj_mat <- (adj_mat + t(adj_mat)) > 0
     
     # Build undirected graph
     g <- graph_from_adjacency_matrix(adj_mat, mode = "undirected")

@@ -34,6 +34,10 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
   } else {
     print("No additional grids are being used.")
   }
+  # Columns required for the combined grid
+  required_cols <- c("PGID", "Lat_DD_Y", "Long_DD_X", "MGID", "Lat_DD_Y_M", "Long_DD_X_",
+                     "State_Ref", "Ref_Region", "FWC_Region", "StatePlane", "UTM_Zone",
+                     "County", "Shape_Leng", "Shape_Area", "geometry")
   # Get full list of StateGrids
   grid_list <- vector("list", length(grid_names))
   # Load StateGrid(s)
@@ -48,12 +52,30 @@ get_base_grid <- function(SiteCode, VersionID, SectionsDesignated, Save_data, Sa
     message(sprintf("Loading grid %d of %d: %s", i, length(grid_names), g))
     #
     grid_list[[i]] <- tryCatch(
-      st_read(shp, quiet = TRUE),
+      {
+        x <- st_read(shp, quiet = TRUE)
+        
+        # Keep only required columns that exist in this grid
+        missing_cols <- setdiff(required_cols, names(x))
+        
+        if (length(missing_cols) > 0) {
+          stop(sprintf(
+            "Grid '%s' is missing required columns: %s",
+            g,
+            paste(missing_cols, collapse = ", ")
+          ))
+        }
+        
+        x[, required_cols]
+      },
       error = function(e) {
         stop(sprintf(
-          "Failed to load grid %d (%s)\nPath: %s\n\n%s", i, g, shp, e$message),
-          call. = FALSE)}
-    )}
+          "Failed to load grid %d (%s)\nPath: %s\n\n%s",
+          i, g, shp, e$message
+        ), call. = FALSE)
+      }
+    )
+  }
   #
   PicoGrid <- do.call(rbind, grid_list)
   #
@@ -322,7 +344,7 @@ apply_polygon_overlap <- function(modelGrid,
     f <- get(f)
     
     # Build polygons
-    polygon_sf <- st_as_sf(f)    
+    polygon_sf <- st_as_sf(f)
     polygon_sf <- st_make_valid(polygon_sf)
     polygon_sf <- st_transform(polygon_sf, st_crs(modelGrid_sf))
     #
@@ -618,11 +640,12 @@ apply_distance_buffers <- function(
   if(buffer_units == "m"){
     conv <- 1
   } else {
-    conv <- switch(buffer_units,
-                   m=1,
-                   ft=0.3048,
-                   km=1000,
-                   mi=1609.344)
+    conv <- switch(
+      buffer_units,
+      m  = 1,
+      ft = 0.3048,
+      km = 1000,
+      mi = 1609.344)
   }
   #
   # Model grid ----

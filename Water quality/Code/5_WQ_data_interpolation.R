@@ -23,11 +23,11 @@ source("Code/WQ_functions_interpolation.R", local = WQ)
 #modeling <- new.env()
 #load("SSv1_TMean_working.RData", envir = modeling)
 #
-Site_code <- c("PE")       #Two letter estuary code
+Site_code <- c("SA")       #Two letter estuary code
 Version <- c("v1")         #Version code for model 
-State_Grid <- c("A1")      #Two-letter StateGrid ID
-Alt_Grid <- c("B1")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
-Project_code <- c("PEHSM") #Project code given to data, found in file name
+State_Grid <- c("C1")      #Two-letter StateGrid ID
+Alt_Grid <- c("C2")        #Two-letter additional StateGrid ID, enter NA if no secondary StateGrid needed
+Project_code <- c("SAHSM") #Project code given to data, found in file name
 Start_year <- c("2020")    #Start year (YYYY) of data, found in file name
 End_year <- c("2024")      #End year (YYYY) of data, found in file name
 Folder <- c("compiled")    #Data folder: "compiled" or "final"
@@ -71,7 +71,7 @@ ggplot()+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"], st_bbox(Site_area)["xmax"]),
            ylim = c(st_bbox(Site_area)["ymin"], st_bbox(Site_area)["ymax"]))
 #
-#Site_version/Output/Figure files/Site_WQ_Stations -- ~800*auto
+#Site_version/Output/Figure files/Site_WQ_Stations ~1100
 #rm(FL_outline)
 #
 #END OF SECTION
@@ -114,10 +114,10 @@ if(color_temp == "warm") {
 #library(lubridate)
 WQ_summ <- WQ$summarize_data(WQ_data %>% drop_na(Value), 
                           Time_period = "YearMonth", Summ_method = "Means")
-                          #Threshold_parameters = c("above", 35))#,  #Month_range = c(5, 10))
+                          #Threshold_parameters = c("above", 35)) #Month_range = c(5, 10), 
 #
 head(WQ_summ)
-stat <- c("Mean") #used for file naming: Means, Mins, ThresholdA35, etc.
+stat <- c("TempMeans") #used for file naming: Means, Mins, ThresholdA35, etc.
 #write_xlsx(WQ_summ, paste0("../", Site_code, "_", Version, "/Data/", Site_code, "_WQ_", Param_name, "_", Param_name_2,"_", stat,".xlsx"), format_headers = TRUE)
 #
 #
@@ -138,7 +138,6 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = WQ_summ[,c("Longitude","Latitu
 #
 ##Inverse distance weighted - updated for Month, Year
 idw_data <- WQ$perform_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, Param_name, "Month")
-
 #saveRDS(idw_data, paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
 #idw_data <- readRDS(paste0("../", Site_code, "_", Version,"/Data/Layers/",Param_name, "_", Param_name_2,"_", stat,"_idw_temp.rds"))
 #

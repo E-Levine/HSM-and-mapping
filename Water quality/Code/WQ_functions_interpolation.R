@@ -213,8 +213,8 @@ load_WQ_data <- function(){
   if(Folder == "compiled" && interactive()){
     result <- select.list(c("Yes", "No"), title = "\nCan the data be saved locally to the project version folder?")
     files <- list.files(path = "Data/Compiled-data/", 
-                        pattern = paste0(Site_code, "_", Data_source, "_.*_", Project_code, "_", Start_year, "_", End_year,".xlsx"))
-    WQ_data <- read_excel(paste0("Data/Compiled-data/", files[1]), na = c("NA", " ", "", "Z")) %>%
+                        pattern = paste0("^",Site_code, "_", Data_source, "(_.*)?_", Project_code, "_", Start_year, "_", End_year,"\\.xlsx"))
+    WQ_data <- read_excel(paste0("Data/Compiled-data/", files), na = c("NA", " ", "", "Z")) %>%
       dplyr::rename(Latitude = contains("Latitude"), Longitude = contains("Longitude"), StationID = contains("LocationIdentifier"),
                     Parameter = contains("CharacteristicName"), Value = contains("MeasureValue"))
     
@@ -2065,11 +2065,10 @@ ensemble_weighting <- function(model = c("ensemble", "single"), selected_models 
   ## Timing end ----
   EndTime <- Sys.time()
   message("Ending time:", format(EndTime))
-  print(EndTime - StartTime)
   if (interactive()) {
     print(utils::head(result$spatialData))
   }
-  
+  print(EndTime - StartTime)
   gc(FALSE)
   
   invisible(result)

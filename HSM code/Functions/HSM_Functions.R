@@ -199,8 +199,8 @@ Identify_dataframes <- function(object_list){
   named_data <- object_list[(names(object_list) %in% dataframes == TRUE)]
   #Combine data levels info into one output
   selected_data <<- c(named_data[1:3], list(Parameter_Summary = bind_rows(named_data[4:(length(named_data))])))
-  t_line1 <- paste("These data are to be included in the model: ", paste(unlist(dataframes), collapse = ", "))
-  t_line2 <- paste("These data are NOT included in the model: ", paste(unlist(notdataframes), collapse = ", "))
+  t_line1 <- paste("These data are to be included in the model: \n", paste(unlist(dataframes), collapse = ", "),"\n")
+  t_line2 <- paste("These data are NOT included in the model: \n", paste(unlist(notdataframes), collapse = ", "),"\n")
   dfoutput <<- sprintf("%s\n%s", t_line1, t_line2)
   cat(dfoutput)
   selected_data[["Data not included"]] <<- notdataframes

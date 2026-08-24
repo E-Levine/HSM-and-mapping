@@ -16,10 +16,10 @@ pacman::p_load(plyr, tidyverse, readxl, #Df manipulation, basic summary
 source("HSM code/Functions/HSM_Creation_Functions.R")
 #
 #Working parameters - to be set each time a new site or version is being created. Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("PE") #two-letter site code
+Site_Code <- c("SA") #two-letter site code
 Version <- c("v1") #Model version
-State_Grid <- c("A1")
-Alt_Grid <- c("B1") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
+State_Grid <- c("C1")
+Alt_Grid <- c("C2") #Two-letter StateGrid ID, enter NA if no secondary StateGrid needed
 #
 ##Parameters
 Sections_designated <- c("Y") #Y/N are section designations used
@@ -69,8 +69,8 @@ find_folder_names("Seagrass")
 Start_date <- "2024-01-01"
 load_matching_shp(Section_grid, "Seagrass", StartDate = Start_date, EndDate = End_date)
 # Repair shapefile as needed...
-chk <- check_geometry(Seagrass_202412)
-repair <- repair_geometry(Seagrass_202412,  
+check_geometry(Seagrass_202412)
+repair <- repair_geometry(Seagrass_202412,
                           action = "repair")
 Seagrass_202412 <- repair
 #
@@ -100,12 +100,17 @@ modelGrid_sp2 <- apply_distance_buffers(modelGrid = modelGrid_sp,
                                         df_list = df_list)
 #
 # Plot to check data application 
+# Overall view
+ggplot(st_as_sf(modelGrid_sp2))+
+  geom_sf(aes(fill = Buff24))+
+  geom_sf(aes(color = Oyst24), fill = NA)
+# Zoom
 ggplot(st_as_sf(modelGrid_sp2))+
   geom_sf(aes(fill = Buff24))+
   geom_sf(aes(color = Oyst24), fill = NA)+
   #scale_color_discrete()+
-  coord_sf(xlim = c(-87.12, -87.10),
-           ylim = c(30.48, 30.50))
+  coord_sf(xlim = c(-85.8, -85.7),
+           ylim = c(30.22, 30.27))
 #
 rm(list = ls(pattern = "^Oyster_"))
 #
@@ -132,13 +137,17 @@ modelGrid_sp3 <- apply_distance_buffers(modelGrid = modelGrid_sp2,
                                         df_list = df_list)
 #
 # Plot to check data application 
+# Overall 
+ggplot(st_as_sf(modelGrid_sp3))+
+  geom_sf(aes(fill = Chnl24))+
+  geom_sf(data = st_as_sf(Waterways_202401), aes(color = TYPE), linewidth = 1.5)
+# Zoom
 ggplot(st_as_sf(modelGrid_sp3))+
   geom_sf(aes(fill = Chnl24))+
   geom_sf(data = st_as_sf(Waterways_202401), aes(color = TYPE), linewidth = 1.5)+
   scale_color_discrete()+
-  coord_sf(xlim = c(-87.25, -87.1),
-           ylim = c(30.3, 30.6))
-
+  coord_sf(xlim = c(-85.7, -85.6),
+           ylim = c(30.1, 30.15))
 
 #
 #
@@ -148,8 +157,8 @@ head(modelGrid_sp4@data)
 #
 #
 #
+temp <- modelGrid_sp4@data
 #
-
 ####Output layer with data applied ####
 #
 # Save model datalayers 
