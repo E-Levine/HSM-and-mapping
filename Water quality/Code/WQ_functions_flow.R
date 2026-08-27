@@ -195,7 +195,7 @@ clean_save_existing_data <- function(fileName, dataType, RawOrCompiled = "Raw"){
 #
 # Load Excel data files
 load_WQ_data <- function(loadFromProject = "No", 
-                         include_flow = "No", include_rain = "No") {
+                         include_flow = "Yes", include_rain = "No") {
   #
   folderLocation <- tolower(loadFromProject)
   includingFlow  <- tolower(include_flow)
@@ -206,7 +206,7 @@ load_WQ_data <- function(loadFromProject = "No",
     
     path2follow <- ifelse(folderLocation == "no", 
                           "Data/Raw-data/", 
-                          paste0("../",Site_code, "_", Version,"/Data/"))
+                          paste0("../",Site_code, "_.*/Data/"))
     
     files <- list.files(
       path = path2follow,
@@ -257,7 +257,7 @@ load_WQ_data <- function(loadFromProject = "No",
       stop("No flow file found for Site_code: ", Site_code)
     }
     # Flow file(s)
-    if(includingFlow == "Y"){
+    if(includingFlow == "yes"){
       # Read and combine all matching flow files
       flow_raw <- read_and_bind(
         pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$"),
@@ -269,7 +269,7 @@ load_WQ_data <- function(loadFromProject = "No",
       message("Flow data not loaded")
     }
     # Rain file(s)
-    if(includingRain == "Y"){
+    if(includingRain == "yes"){
       # Read and combine all matching rain files
       rain_raw <- read_and_bind(
         pattern = paste0(Site_code, "_logger_rain_.*\\.xlsx$"),
@@ -313,7 +313,7 @@ load_WQ_data <- function(loadFromProject = "No",
       stop("No flow file found for Site_code: ", Site_code)
     }
     # Flow file(s)
-    if(includingFlow == "Y"){
+    if(includingFlow == "yes"){
       # Read and combine all matching flow files
       flow_raw <- read_and_bind(
         pattern = paste0(Site_code, "_logger_flow_.*\\.xlsx$"),
@@ -325,7 +325,7 @@ load_WQ_data <- function(loadFromProject = "No",
       message("Flow data not loaded")
     }
     # Rain file(s)
-    if(includingRain == "Y"){
+    if(includingRain == "yes"){
       # Read and combine all matching rain files
       rain_raw <- read_and_bind(
         pattern = paste0(Site_code, "_logger_rain_.*\\.xlsx$"),
@@ -929,6 +929,8 @@ predict_salinity_from_models <- function(model_output,
   metrics_list <- list()
   comp_plots_list <- list()
   plots_list <- list()
+  residF_list <- list()
+  residS_list <- list()
   
   model_names <- names(models)
 
@@ -1001,7 +1003,7 @@ predict_salinity_from_models <- function(model_output,
       Bias = bias
     )
      
-    # PLOT ---------------------------
+    # PLOTS ---------------------------
     p <- ggplot(combined, aes(x = Actual_salinity, y = Predicted_salinity)) +
       geom_point(alpha = 0.7) +
       geom_abline(slope = 1, intercept = 0, size = 1.5, color = "red") +
@@ -1022,13 +1024,47 @@ predict_salinity_from_models <- function(model_output,
        scale_y_continuous(expand = c(0,0), limits = c(0, 35))+
        theme_classic() +
        labs(
-         title = paste("Predicted vs Actual -", m),
+         title = paste("Act(pts) vs Pred(red) -", m),
          x = "Flow (cfs)",
          y = "Salinity"
        )
+     
+     # Residulals vs flow
+     p3 <- combined %>% 
+       mutate(residual = Actual_salinity - Predicted_salinity,
+              abs_error = abs(residual)) %>%
+       ggplot(aes(x = Flow, y = residual)) +
+       geom_hline(yintercept = 0, linetype = "dashed") +
+       geom_point(alpha = 0.4) +
+       geom_smooth(method = "loess", color = "darkblue") +
+       geom_smooth(method = "gam", color = "red") +
+       theme_classic() +
+       labs(
+         title = paste("Flow vs residuals -", m),
+         x = "Flow (cfs)",
+         y = "Residuals"
+       )
     
+     # Residulals vs salinity
+     p4 <- combined %>% 
+       mutate(residual = Actual_salinity - Predicted_salinity,
+              abs_error = abs(residual)) %>%
+       ggplot(aes(x = Actual_salinity, y = residual)) +
+       geom_hline(yintercept = 0, linetype = "dashed") +
+       geom_point(alpha = 0.4) +
+       geom_smooth(method = "loess", color = "darkblue") +
+       geom_smooth(method = "gam", color = "red") +
+       theme_classic() +
+       labs(
+         title = paste("Act salinity vs residuals -", m),
+         x = "Salinity",
+         y = "Residuals"
+       )
+     
      comp_plots_list[[m]] <- p
      plots_list[[m]] <- p2
+     residF_list[[m]] <- p3
+     residS_list[[m]] <- p4
     
     print(p)  # optional auto-display
   }
@@ -1044,7 +1080,9 @@ predict_salinity_from_models <- function(model_output,
     predictions = predictions_df,
     metrics = metrics_df,
     comp_plots = comp_plots_list,
-    plots = plots_list
+    plots = plots_list,
+    residFlow = residF_list,
+    residSal = residS_list
   )
 }
 #

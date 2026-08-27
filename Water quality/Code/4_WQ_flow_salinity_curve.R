@@ -20,7 +20,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
 Site_code <- c("SL")       #Two letter estuary code
 Version <- c("RE")         #For saving plots
 Start_year <- c("1965")
-End_year <- c("2025")
+End_year <- c("2016")
 #
 WQ <- new.env()
 source("Code/WQ_functions_flow.R", local = WQ)
@@ -61,7 +61,7 @@ WQ$clean_save_existing_data("SA_Portal_SAHSM_2020_2024", "Salinity",
 ### Data gather and cleaning####
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
 # Make sure only desired logger data files are in the main folder
-WQ$load_WQ_data(loadFromProject = "Yes")
+WQ$load_WQ_data(loadFromProject = "No", include_flow = "yes", include_rain = "yes")
 #
 ## Clean data
 #
@@ -123,6 +123,8 @@ flow_sum <- flow_sum  %>%
 #
 #
 # Total daily rain for each logger (mean among methods (timeseries ID))
+# Rain in inches. Constant = 0.04201389
+#Ave runoff coefficient of 0.8 for urban areas/canals
 rain_sum <- rain_raw %>%
   rename_with(~str_to_title(.x)) %>%
   rename("Date" = Timestamp) %>%
@@ -134,8 +136,19 @@ rain_sum <- rain_raw %>%
   #mutate(Station = "ALL") %>%
   group_by(Site, Date, Station, Parameter) %>% 
   summarise(Rain = sum(Value, na.rm = T)) %>% 
+  mutate(Rain = as.numeric(ifelse(Rain < 0, 0, Rain))) %>% 
   ungroup() %>%
-  left_join(Loggers %>% dplyr::select(StationID, Name) %>% rename("Station" = StationID))
+  left_join(Loggers %>% dplyr::select(StationID, Name) %>% rename("Station" = StationID)) %>% 
+  # Calculate cfs of rain
+  mutate(
+    Acres = case_when(substr(Station, 1, 3) == "S49" ~ 109015, 
+                      substr(Station, 1, 3) == "S97" ~ 111000,
+                      TRUE ~ NA),
+    # Gross potential flow (100% runoff)
+    GrossRain = Rain * Acres * 0.04201389,
+    # Net actual flow (accounting for watershed soil infiltration & evaporation)
+    NetRain = GrossRain * 0.8
+  )
 #
 unique(rain_sum$Station); unique(rain_sum$Name)
 #
@@ -143,7 +156,7 @@ unique(rain_sum$Station); unique(rain_sum$Name)
 #
 #
 # Mean daily salinity for each logger: either salinity_raw if no grouping, sali_grps$data if grouped
-salinity_ave <- sali_grps$data %>%  #salinity_raw %>% #
+salinity_ave <- salinity_raw %>% #sali_grps$data %>%  #
   rename_with(~str_to_title(.x)) %>%
   {# Rename Timestamp to Date or create Date from Year and Month
     if ("Timestamp" %in% names(.)) {
@@ -219,11 +232,15 @@ ggplot()+
   #Individual station points if grouping:
   geom_point(data = Loggers %>% filter(DataType == "Flow"), aes(Longitude, Latitude), 
              color = "black", size =4, alpha = 0.6)+
-  geom_point(data = Loggers %>% dplyr::filter(grepl("SA", StationID)), aes(Longitude, Latitude),  
-             color = "coral", size = 3.5, shape = 17, alpha = 0.7)+
+  geom_point(data = Loggers %>% dplyr::filter(DataType == "Salinity"), aes(Longitude, Latitude),  
+                        color = "coral", size = 3.5, shape = 17, alpha = 0.7)+
+  geom_point(data = Loggers %>% dplyr::filter(DataType == "Rain"), aes(Longitude, Latitude),  
+             color = "pink", size = 3.5, shape = 17, alpha = 0.7)+
+  #geom_point(data = Loggers %>% dplyr::filter(grepl("SL", StationID)), aes(Longitude, Latitude),  
+  #           color = "coral", size = 3.5, shape = 17, alpha = 0.7)+
   #geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType, shape = DataType), alpha = 0.6, size = 4)+
   theme_classic()+
-  scale_color_manual(values = c("#333333", "darkblue", "#D55E00"))+
+  #scale_color_manual(values = c("#333333", "darkblue", "#D55E00"))+
   scale_shape_manual(values = c(16, 17, 15))+
   theme(panel.border = element_rect(color = "black", fill = NA), 
         axis.title = element_text(size = 12, color = "black"), 
@@ -239,12 +256,20 @@ ggplot()+
 #monthly_data <- left_join(sal_monthly, flow_monthly)
 #head(monthly_data)
 #
+water_sum <- flow_sum %>%
+  dplyr::select(-Station) %>%
+  pivot_wider(names_from = Name, values_from = Flow) %>%
+  mutate(Station = "All", Name = "All",
+         Flow = rowSums(across(all_of(c("S80", "S49", "S97"))), na.rm = T))
+#
 flow_train <- flow_sum %>% filter(Date >= "1965-01-01" & Date <= "2016-12-31")
 rain_train <- rain_sum %>% filter(Date >= "1965-01-01" & Date <= "2016-12-31")
 sal_train <- salinity_ave %>% filter(Date >= "1965-01-01" & Date <= "2016-12-31")
+water_train <- water_sum %>% filter(Date >= "1965-01-01" & Date <= "2016-12-31")
 ## Fit curve
 #library(stringr, minpack.lm, dplyr)
 models <- WQ$fit_salinity_flow_models(flow_train, sal_train, flow_col = "Flow", salinity_col = "Salinity")
+mod_Tot <- WQ$fit_salinity_flow_models(water_train, sal_train, flow_col = "Flow", salinity_col = "Salinity")
 #
 # Function to limit to selected (listed) models
 models <- WQ$filter_models(models, c("USGS-02313700-USGS-02313700", 
@@ -270,6 +295,10 @@ WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models,
                          "all", #names(models$models)[9], 
                          "Flow", "Salinity")#, 
                          #Salinity_min = 11.98, Salinity_max = 38.95)
+#
+WQ$ggplot_hyperbolic_fit(mod_Tot$data_lookup, mod_Tot$models, 
+                         "all", #names(models$models)[9], 
+                         "Flow", "Salinity")
 #
 #ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
 #       filename = paste("Flow_salinity_curve_", "SS2_WC",".tiff", sep = ""), dpi = 1000)
@@ -314,6 +343,7 @@ WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models,
 flow_test <- flow_sum %>% filter(Date > "2016-12-31")
 rain_test <- rain_sum %>% filter(Date > "2016-12-31")
 sal_test <- salinity_ave %>% filter(Date > "2016-12-31")
+water_test <- water_sum %>% filter(Date > "2016-12-31")
 #
 sal_preds <- WQ$predict_salinity_from_models(model_output = models,
                                              test_flow = flow_test,
@@ -321,10 +351,112 @@ sal_preds <- WQ$predict_salinity_from_models(model_output = models,
                                              flow_col = "Flow",
                                              salinity_col = "Salinity")
 #
-sal_preds$comp_plots[3]
-sal_preds$plots[3]
+ggpubr::ggarrange(sal_preds$comp_plots[1]$HR1_S49,
+                  sal_preds$plots[1]$HR1_S49,
+                  sal_preds$residFlow[1]$HR1_S49,
+                  sal_preds$residSal[1]$HR1_S49,
+                  
+                  sal_preds$comp_plots[2]$HR1_S80,
+                  sal_preds$plots[2]$HR1_S80,
+                  sal_preds$residFlow[2]$HR1_S80,
+                  sal_preds$residSal[2]$HR1_S80,
+                  
+                  sal_preds$comp_plots[3]$HR1_S97,
+                  sal_preds$plots[3]$HR1_S97,
+                  sal_preds$residFlow[3]$HR1_S97,
+                  sal_preds$residSal[3]$HR1_S97)
+#
+ggpubr::ggarrange(sal_preds$comp_plots[4]$US1_S49,
+                  sal_preds$plots[4]$US1_S49,
+                  sal_preds$residFlow[4]$US1_S49,
+                  sal_preds$residSal[4]$US1_S49,
+                  
+                  sal_preds$comp_plots[5]$US1_S80,
+                  sal_preds$plots[5]$US1_S80,
+                  sal_preds$residFlow[5]$US1_S80,
+                  sal_preds$residSal[5]$US1_S80,
+                  
+                  sal_preds$comp_plots[6]$US1_S97,
+                  sal_preds$plots[6]$US1_S97,
+                  sal_preds$residFlow[6]$US1_S97,
+                  sal_preds$residSal[6]$US1_S97)
+#
+ggpubr::ggarrange(sal_preds$comp_plots[7]$A1A_S49,
+                  sal_preds$plots[7]$A1A_S49,
+                  sal_preds$residFlow[7]$A1A_S49,
+                  sal_preds$residSal[7]$A1A_S49,
+                  
+                  sal_preds$comp_plots[8]$A1A_S80,
+                  sal_preds$plots[8]$A1A_S80,
+                  sal_preds$residFlow[8]$A1A_S80,
+                  sal_preds$residSal[8]$A1A_S80,
+                  
+                  sal_preds$comp_plots[9]$A1A_S97,
+                  sal_preds$plots[9]$A1A_S97,
+                  sal_preds$residFlow[9]$A1A_S97,
+                  sal_preds$residSal[9]$A1A_S97)
 #
 #
+#
+TOTsal_preds <- WQ$predict_salinity_from_models(model_output = mod_Tot,
+                                             test_flow = water_test,
+                                             test_salinity = sal_test, 
+                                             flow_col = "Flow",
+                                             salinity_col = "Salinity")
+#
+ggpubr::ggarrange(TOTsal_preds$comp_plots[1]$HR1_All,
+                  TOTsal_preds$plots[1]$HR1_All,
+                  TOTsal_preds$residFlow[1]$HR1_All,
+                  TOTsal_preds$residSal[1]$HR1_All,
+                  
+                  TOTsal_preds$comp_plots[2]$US1_All,
+                  TOTsal_preds$plots[2]$US1_All,
+                  TOTsal_preds$residFlow[2]$US1_All,
+                  TOTsal_preds$residSal[2]$US1_All,
+                  
+                  TOTsal_preds$comp_plots[3]$A1A_All,
+                  TOTsal_preds$plots[3]$A1A_All,
+                  TOTsal_preds$residFlow[3]$A1A_All,
+                  TOTsal_preds$residSal[3]$A1A_All)
+#
+#
+#
+#
+### Load flow scenarios and predict salinity ###
+#
+flow_sce <- openxlsx::read.xlsx(
+  file.path("Data/Compiled-data/SL_RE_flow_scenarios.xlsx"),
+  na.strings = c("NA", " ", "", "Z"),
+  detectDates = TRUE
+)
+#
+head(flow_sce); head(water_sum)
+flow_sce_df <- flow_sce %>%
+  mutate(Station = "All", Name = "All")
+#
+# Predictions
+CERPPB_preds <- WQ$predict_salinity_from_models(model_output = mod_Tot,
+                                                test_flow = flow_sce_df,
+                                                test_salinity = salinity_ave, 
+                                                flow_col = "CERPPB",
+                                                salinity_col = "Salinity")
+#
+ggpubr::ggarrange(CERPPB_preds$comp_plots[1]$HR1_All,
+                  CERPPB_preds$plots[1]$HR1_All,
+                  CERPPB_preds$residFlow[1]$HR1_All,
+                  CERPPB_preds$residSal[1]$HR1_All,
+                  
+                  CERPPB_preds$comp_plots[2]$US1_All,
+                  CERPPB_preds$plots[2]$US1_All,
+                  CERPPB_preds$residFlow[2]$US1_All,
+                  CERPPB_preds$residSal[2]$US1_All,
+                  
+                  CERPPB_preds$comp_plots[3]$A1A_All,
+                  CERPPB_preds$plots[3]$A1A_All,
+                  CERPPB_preds$residFlow[3]$A1A_All,
+                  CERPPB_preds$residSal[3]$A1A_All)
+#
+CERPPB_df <- CERPPB_preds$predictions
 #
 #
 #
