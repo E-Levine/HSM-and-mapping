@@ -21,7 +21,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SL") #two-letter site code
+Site_Code <- c("SA") #two-letter site code
 Version <- c("v1") #Model version
 Final_version <- c("Y") #Final model output? Y/N
 #
@@ -30,7 +30,7 @@ Final_version <- c("Y") #Final model output? Y/N
 #
 ###Load shape file with model data: 
 model_file_name <- "HSM_final_model"
-model_scores_date <- c("2026-04-27")#c("2026-03-04") #
+model_scores_date <- c("2026-08-24")#c("2026-04-27")#c("2026-03-04") #
 # Also loads files for scoring
 shp_pattern <- paste0("^", Site_Code, "_", Version, "_", model_file_name, "_", model_scores_date, ".*\\.shp$")
 shp_files <- list.files(path = file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"),
@@ -65,7 +65,7 @@ Loggers <- Ref_locs %>% filter(str_detect(Type, "logger"))
 map_basetheme <- theme_classic()+
   theme(
     panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-    axis.title = element_blank(),#element_text(size = 14, color = "black"), 
+    axis.title = element_blank(), element_text(size = 14, color = "black"), 
     axis.text =  element_text(size = 15, color = "black", family = "Arial"),
     axis.text.x = element_text(angle = 30, vjust = 0.5)
   )
@@ -73,15 +73,15 @@ map_basetheme <- theme_classic()+
 base_theme <- ggplot2::theme_classic() +
   ggplot2::theme(
     axis.title = element_text(size = 20, face = "bold", color = "black", family = "Arial"),
-    axis.text = ggplot2::element_text(size = 18, family = "Arial", color = "black"),
+    axis.text = element_text(size = 18, family = "Arial", color = "black"),
     axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
     axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
     axis.ticks = element_line(color = "black", linewidth = 0.1),
     axis.ticks.length = unit(-0.15, "cm"),
-    panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.1),
     plot.margin = grid::unit(c(0.05, 0, 0, 0), "cm"),
-    plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
-    plot.caption = ggplot2::element_text(face = "italic", size = 9),
+    plot.title = element_text(margin = margin(b = 5), family = "Arial"),
+    plot.caption = element_text(face = "italic", size = 9),
     legend.title = element_text(size = 12, family = "Arial"),
     legend.text = element_text(size = 10, family = "Arial"))
 #
@@ -107,6 +107,11 @@ SS_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.015, st_bbox(Site_area
                     ylim = c(st_bbox(Site_area)["ymin"]-0.005, st_bbox(Site_area)["ymax"]+0.010))
 SS_logger_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.17),
                              ylim = c(st_bbox(Site_area)["ymin"]-0.02, st_bbox(Site_area)["ymax"]+0.02))
+WI_overview_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.095, st_bbox(Site_area)["xmax"]+0.085),
+                             ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.03))
+WI_zoom <- coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.03, st_bbox(Site_area)["xmax"]+0.035),
+                    ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.05))
+
 #
 #
 #
@@ -274,24 +279,24 @@ write_xlsx(Suit_summ,
 HSMmodel %>% 
   st_drop_geometry() %>%
   #mutate(HSM_r = round(HSMround, 1)) %>%
-  group_by(HSMgrp_f) %>%
+  group_by(HSMgrp) %>%
   summarise(n())
 #
-(p0 <- ggplot(HSMmodel, aes(x = HSMgrp_f)) +
+(p0 <- ggplot(HSMmodel, aes(x = HSMgrp)) +
   geom_histogram(stat = "count", fill = "gray50", color = "black") +
   labs(
     title = "HSM scores",
     x = "Suitability score",
     y = "Count"
   ) +
-  basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))+#, breaks = seq(0, 36000, 12000))+ #2000000
+  base_theme + 
+  scale_y_continuous(expand = c(0,0), limits = c(0, 600000), breaks = seq(0, 600000, 200000), labels = scales::label_comma())+#, breaks = seq(0, 36000, 12000))+ #2000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
-  papertheme + theme(axis.text.x = element_text(size = 11, angle = 20)))
+  papertheme + theme(axis.text.x = element_text(angle = 20, vjust = 0.8)))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_grp_hist.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_grp_hist.jpg"),
   plot = p0,
   width = 9,
   height = 5,
@@ -308,17 +313,17 @@ ggsave(
   geom_sf(data = FL_outline, linewidth = 0.35)+
   geom_point(data = Cities, aes(Longitude, Latitude), alpha = 0.8, size = 4)+
   geom_shadowtext(data = Cities, aes(Longitude, Latitude, label = Location),
-            nudge_x = 0.05, nudge_y = -0.025, # ADJUST AS NEEDED
+            nudge_x = 0.1, nudge_y = -0.025, # ADJUST AS NEEDED
             size = 5, fontface = "bold", family = "Arial", 
             color = "black", bg.color = "white")+
   annotate("text", label = "Atlantic\nOcean", x = -80.12, y = 27.25, # UPDATE AS NEEDED
            fontface = "italic", size = 5, family = "Arial")+
    map_basetheme +
    theme(panel.background = element_rect(fill = "#CCFFFF"))+
-  SS_overview_zoom)
+  WI_overview_zoom)
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_area_map.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_area_map.jpg"),
   plot = p1,
   width = 9,
   height = 5,
@@ -343,7 +348,7 @@ bbox_buffer <- st_buffer(site_bbox, dist = 0)
           panel.background = element_rect(fill = "white")))
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_location_map.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_location_map.jpg"),
   plot = p2,
   width = 9,
   height = 5,
@@ -364,7 +369,7 @@ ggsave(
    # Cities
    geom_point(data = Cities, aes(Longitude, Latitude), alpha = 0.8, size = 5.5, shape = 17)+
    geom_shadowtext(data = Cities, aes(Longitude, Latitude, label = Location),
-                   nudge_x = -0.05, nudge_y = -0.03, # ADJUST AS NEEDED
+                   nudge_x = 0.15, nudge_y = -0.03, # ADJUST AS NEEDED
                    size = 5, fontface = "bold", family = "Arial", 
                    color = "black", bg.color = "white")+
    annotate("text", label = "Atlantic\nOcean", x = -80.12, y = 27.22, # UPDATE AS NEEDED
@@ -375,15 +380,16 @@ ggsave(
    geom_text(aes(-82.87, 29.13, label = "Waccasassa\nBay", fontface = "italic"), color = "black", size = 3.5)+
    geom_text(aes(-82.87, 29.26, label = "Waccasassa\nRiver", fontface = "italic"), color = "black", size = 4.25)+
    geom_segment(aes(x = -82.80, y = 29.175, xend = -82.83, yend = 29.25), linewidth = 1)+
+   geom_text(aes(-82.83, 28.80, label = "Homosassa\nBay", fontface = "italic"), color = "black", size = 3.5)+
    # Formatting
    theme_classic()+ map_basetheme + legendtheme +
    scale_color_manual(values = c("#333333", "#D55E00"))+
    scale_shape_manual(values = c(16, 15))+
-   SS_logger_zoom
+   WI_zoom
 )
 #
 ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_loggers_locations.png"),
+  filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_loggers_locations.jpg"),
   plot = pflow,
   width = 9,
   height = 5,
@@ -404,11 +410,11 @@ ggsave(
    scale_color_viridis_c(limits = c(0,1))+
    labs(color = "Oyster habitat") + # UPDATE AS NEEDED
    theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-   SS_zoom)
+   WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_habitat.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_habitat.jpg"),
     plot = p3,
     width = 9,
     height = 5,
@@ -417,7 +423,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_habitat.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_habitat.jpg"),
     plot = p3,
     width = 9,
     height = 5,
@@ -435,11 +441,11 @@ if(Final_version == "Y"){
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Oyster buffer") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_buffer.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Oyster_buffer.jpg"),
     plot = p4,
     width = 9,
     height = 5,  
@@ -448,7 +454,7 @@ if(Final_version == "Y"){
   )
   } else {
     ggsave(
-      filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_buffer.png"),
+      filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Oyster_buffer.jpg"),
       plot = p4,
       width = 9,
       height = 5,  
@@ -466,7 +472,7 @@ if(Final_version == "Y"){
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Seagrass habitat") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
@@ -497,11 +503,11 @@ if(Final_version == "Y"){
     scale_color_viridis_c()+
     labs(color = "Channels") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Channels.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Channels.jpg"),
     plot = p5,
     width = 9,
     height = 5,
@@ -510,7 +516,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Channels.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Channels.jpg"),
     plot = p5,
     width = 9,
     height = 5,
@@ -530,11 +536,11 @@ if(Final_version == "Y"){
    scale_color_viridis_c(limits = c(0,1))+
    labs(color = "Salinity") + # UPDATE AS NEEDED
    theme(axis.text.x = element_text(angle = 0, vjust = 0)) +
-   SS_zoom)
+   WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Salinity.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Salinity.jpg"),
     plot = p6,
     width = 9,
     height = 5,
@@ -543,7 +549,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Salinity.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Salinity.jpg"),
     plot = p6,
     width = 9,
     height = 5,
@@ -561,11 +567,11 @@ if(Final_version == "Y"){
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Temperature") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Temperature.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Temperature.jpg"),
     plot = p7,
     width = 9,
     height = 5,
@@ -574,7 +580,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Temperature.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Temperature.jpg"),
     plot = p7,
     width = 9,
     height = 5,
@@ -592,11 +598,11 @@ if(Final_version == "Y"){
     scale_color_viridis_c(limits = c(0,1))+
     labs(color = "Flow") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Flow.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Flow.jpg"),
     plot = p7.5,
     width = 9,
     height = 5,
@@ -605,7 +611,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Flow.jpg"),
     plot = p7.5,
     width = 9,
     height = 5,
@@ -620,7 +626,7 @@ if(Final_version == "Y"){
 #
 ## HSM groups
 (p8 <- ggplot()+
-    geom_sf(data = HSM_scores, aes(color = HSMgrp_f, fill = HSMgrp_f), show.legend = TRUE) +
+    geom_sf(data = HSM_scores, aes(color = HSMgrp, fill = HSMgrp), show.legend = TRUE) +
    geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
    map_basetheme + legendtheme +
     scale_color_viridis_d(limits = c("[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
@@ -632,11 +638,11 @@ if(Final_version == "Y"){
     labs(color = "HSM score", fill = "HSM score") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
    guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE)) +
-   SS_zoom)
+   WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Composite.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_Composite.jpg"),
     plot = p8,
     width = 9,
     height = 5,
@@ -645,7 +651,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Composite.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_Composite.jpg"),
     plot = p8,
     width = 9,
     height = 5,
@@ -658,15 +664,15 @@ if(Final_version == "Y"){
 # Scores hist
 HSM_scores <- HSM_scores %>%
   mutate(
-    HSMgrp_f = factor(
-      HSMgrp_f,
+    HSMgrp = factor(
+      HSMgrp,
       levels = c(
         "[0,0.1)", "[0.1,0.2)", "[0.2,0.3)", "[0.3,0.4)",
         "[0.4,0.5)", "[0.5,0.6)", "[0.6,0.7)", "[0.7,0.8)",
         "[0.8,0.9)", "[0.9,1]"
       )
     ))
-(p8.5 <- ggplot(HSM_scores, aes(x = HSMgrp_f)) +
+(p8.5 <- ggplot(HSM_scores, aes(x = HSMgrp)) +
     geom_histogram(stat = "count", fill = "gray50", color = "black") +
     labs(
       title = "Jenks Breakpoints Overlay",
@@ -677,11 +683,11 @@ HSM_scores <- HSM_scores %>%
     theme(panel.border = element_blank(), 
           axis.text.x = element_text(angle = 20, hjust = 0.8))+
     scale_x_discrete(drop = FALSE)+
-    scale_y_continuous(expand = c(0,0), limits = c(0, 2000000))) #SL 32000, SS 
+    scale_y_continuous(expand = c(0,0), limits = c(0, 500000), labels = scales::label_comma())) #SL 32000, SS 2000000
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMgrp_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMgrp_hist.jpg"),
     plot = p8.5,
     width = 8,
     height = 4,
@@ -690,7 +696,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMgrp_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMgrp_hist.jpg"),
     plot = p8.5,
     width = 8,
     height = 4,
@@ -703,20 +709,20 @@ if(Final_version == "Y"){
 #
 ## Jenks breaks
 #Make sure in proper order:
-HSM_scores <- HSM_scores %>% mutate(HSMjb_f = factor(HSMjb_f, levels = c("Low", "Medium", "High")))
+HSM_scores <- HSM_scores %>% mutate(HSMjb = factor(HSMjb, levels = c("Low", "Medium", "High")))
 (p9 <- ggplot()+
-    geom_sf(data = HSM_scores, aes(color = HSMjb_f, fill = HSMjb_f)) +
+    geom_sf(data = HSM_scores, aes(color = HSMjb, fill = HSMjb)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
     map_basetheme + legendtheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
-    labs(color = "Jenks breaks", fill = "Jenks breaks") + # UPDATE AS NEEDED
+    labs(color = "Jenks breaks", fill = "Jenks breaks") + 
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
     guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE))+
-    SS_zoom)
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_JenksBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_JenksBreaks.jpg"),
     plot = p9,
     width = 9,
     height = 5,
@@ -725,7 +731,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_JenksBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_JenksBreaks.jpg"),
     plot = p9,
     width = 9,
     height = 5,
@@ -735,11 +741,11 @@ if(Final_version == "Y"){
   }
 #
 # Jenks hist
-jb_breaks <- c(0.00, 0.43, 0.61)
+jb_breaks <- c(0.00, 0.36, 0.49)
 (p9.5 <- ggplot(HSM_scores, aes(x = HSM_f)) +
   geom_histogram(fill = "gray50", color = "black", bins = 30, center = 0.05) +
   geom_vline(xintercept = jb_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = jb_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts+148000)), #-1500
+  ggrepel::geom_text_repel(data = data.frame(x = jb_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts-20000)), #-1500
                            aes(x = x, y = y, label = round(x, 2)), size = 4.75, color = "red", angle = 0, direction = "y", 
                            nudge_y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
@@ -751,11 +757,11 @@ jb_breaks <- c(0.00, 0.43, 0.61)
   base_theme + papertheme + 
   theme(panel.border = element_blank())+
   scale_x_continuous(expand = c(0,0), limits = c(-0.005, 1.0), breaks = seq(0, 1, 0.1))+
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1600000))) #20000, 1600000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 400000), labels = scales::label_comma())) #20000, 1600000
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMjb_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMjb_hist.jpg"),
     plot = p9.5,
     width = 8,
     height = 4,
@@ -764,7 +770,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMjb_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMjb_hist.jpg"),
     plot = p9.5,
     width = 8,
     height = 4,
@@ -778,18 +784,20 @@ if(Final_version == "Y"){
 #
 ## Quantile breaks
 (p10 <- ggplot()+
-    geom_sf(data = HSM_scores, aes(color = HSM_q4_f, fill = HSM_q4_f)) +
+    geom_sf(data = HSM_scores, aes(color = HSM_q4, fill = HSM_q4)) +
     geom_sf(data = Site_area, fill = NA)+ geom_sf(data = FL_outline)+
-    base_theme + legendtheme +
+    map_basetheme + legendtheme + papertheme +
     scale_color_viridis_d()+ scale_fill_viridis_d()+
     labs(color = "Quartile breaks", fill = "Quartile breaks") + # UPDATE AS NEEDED
     theme(axis.text.x = element_text(angle = 0, vjust = 0))+
+    theme(axis.text = element_text(size = 13.5))+
     guides(fill = guide_legend(reverse = TRUE), color = guide_legend(reverse = TRUE))+
-    SS_zoom)
+    theme(legend.position = "none")+
+    WI_zoom)
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_QuartileBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_final_QuartileBreaks.jpg"),
     plot = p10,
     width = 9,
     height = 5,
@@ -798,7 +806,7 @@ if(Final_version == "Y"){
     )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_QuartileBreaks.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Map files/",Site_Code,"_", Version,"_QuartileBreaks.jpg"),
     plot = p10,
     width = 9,
     height = 5,
@@ -809,13 +817,13 @@ if(Final_version == "Y"){
 #
 #
 # Quantile hist
-q4_breaks <- c(0.00, 0.49, 0.51, 0.54)
+q4_breaks <- c(0.00, 0.40, 0.44, 0.45)
 (p10.5 <- ggplot(HSM_scores, aes(x = HSM_f)) +
     geom_histogram(fill = "gray50", color = "black", bins = 30, center = 0.05) +
     geom_vline(xintercept = q4_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-    ggrepel::geom_text_repel(data = data.frame(x = q4_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts)), #1500
+    ggrepel::geom_text_repel(data = data.frame(x = q4_breaks, y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts-15000)), #1500
                              aes(x = x, y = y, label = round(x, 2)), size = 4.75, color = "red", angle = 0, direction = "y", 
-                             nudge_y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                             nudge_y = max(hist(HSM_scores$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.22, vjust = 0.5,
                              segment.color = NA)+
     labs(
       title = "Quartile Breakpoints Overlay",
@@ -825,11 +833,11 @@ q4_breaks <- c(0.00, 0.49, 0.51, 0.54)
     base_theme + papertheme + 
     theme(panel.border = element_blank())+
     scale_x_continuous(expand = c(0,0), limits = c(-0.005, 1.0), breaks = seq(0, 1, 0.1))+
-    scale_y_continuous(expand = c(0,0), limits = c(0, 1600000))) #20000
+    scale_y_continuous(expand = c(0,0), limits = c(0, 400000), labels = scales::label_comma())) #20000
 #
 if(Final_version == "Y"){
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMq4_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_HSMq4_hist.jpg"),
     plot = p10.5,
     width = 8,
     height = 4,
@@ -838,7 +846,7 @@ if(Final_version == "Y"){
   )
 } else {
   ggsave(
-    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMq4_hist.png"),
+    filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_HSMq4_hist.jpg"),
     plot = p10.5,
     width = 8,
     height = 4,
@@ -878,3 +886,209 @@ Ave_scores %>%
 # Cells >= 0.9
 Ave_scores %>%
   summarise(across(OystAV:FAV, ~ round(sum(.x >= 0.9, na.rm = TRUE),3)))
+#
+# Shapefile simplification output ----
+#
+library(sf)
+library(dplyr)
+library(rmapshaper)
+library(ggplot2)
+
+dissolve_grid <- function(x,
+                          group_cols,
+                          round_col = NULL,
+                          round_digits = NULL,
+                          simplify = TRUE,
+                          tolerance_size = 20, #20 = 1 grid cell
+                          print_plot = FALSE,
+                          fill_by = NULL,
+                          save_shapefile = FALSE,
+                          model_name = NULL,
+                          overwrite = TRUE){
+  
+  # Check columns exist
+  stopifnot(all(group_cols %in% names(x)))
+  
+  if (!is.null(round_col))
+    stopifnot(round_col %in% names(x))
+  
+  # Repair geometries
+  x <- st_make_valid(x)
+  
+  # Optional rounding of a continuous variable
+  if (!is.null(round_col) & !is.null(round_digits)) {
+    x[[round_col]] <- round(x[[round_col]], round_digits)
+  }
+  
+  # Dissolve polygons
+  crs_orig <- sf::st_crs(x)
+  
+  out <- x %>%
+    group_by(across(all_of(group_cols))) %>%
+    summarise(do_union = TRUE, .groups = "drop") %>%
+    # Simplify geometry 
+    sf::st_transform(5070) %>%
+    sf::st_simplify(dTolerance = tolerance_size,          
+                    preserveTopology = TRUE) %>%
+    sf::st_transform(crs_orig)
+  
+  # Basetheme for maps
+  map_basetheme <- theme_classic()+
+    theme(
+      panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
+      axis.title = element_blank(),#element_text(size = 14, color = "black"), 
+      axis.text =  element_text(size = 15, color = "black", family = "Arial"),
+      axis.text.x = element_text(angle = 30, vjust = 0.5)
+    )
+  
+  # Create ggplot object
+  if (!is.null(fill_by)) {
+    p <- ggplot(out) +
+      geom_sf(aes(fill = .data[[fill_by]])) +
+      map_basetheme
+  } else {
+    fill_by <- group_cols[1]
+    p <- ggplot(out) +
+      geom_sf(aes(fill = .data[[fill_by]])) +
+      map_basetheme
+    }
+  
+  if (print_plot)
+    print(p)
+  
+  # Save shapefile ----
+  if (save_shapefile) {
+    if (is.null(model_name) || model_name == "") {
+      stop("model_name must be supplied when save_shapefile = TRUE.")
+    }
+    # Create output directory
+    out_dir <- file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles")
+    if (!dir.exists(out_dir))
+      dir.create(out_dir, recursive = TRUE)
+    # Output filename
+    base_name <- paste0(Site_Code, "_", Version, "_final_model_", model_name)
+    shp_file <- file.path(out_dir, paste0(base_name, ".shp"))
+    # Write shapefile
+    if (!overwrite) {
+      i <- 1
+      while (file.exists(shp_file)) {
+        shp_file <- file.path(
+          out_dir,
+          paste0(base_name, "_", i, ".shp")
+        )
+        i <- i + 1
+      }
+    } else {
+      sf::st_write(out, shp_file, delete_layer = overwrite, quiet = TRUE)
+      message("Shapefile written to:\n", shp_file)
+    }
+  }
+  
+  return(list(
+    sf = out,
+    plot = p
+  ))
+}
+#
+#
+HSM_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSMgrp", model_name = "final_scores", save_shapefile = TRUE)
+HSM_simp$plot
+#
+#
+HSM_jb_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSMjb", model_name = "Jenks", save_shapefile = TRUE)
+HSM_jb_simp$plot
+#
+#
+HSM_q4_simp <- dissolve_grid(x = HSMmodel, group_cols = "HSM_q4", model_name = "Quartile", save_shapefile = TRUE)
+HSM_q4_simp$plot
+#sf::st_write(HSM_q4_simp$sf, 
+#             file.path(file.path(paste0(Site_Code, "_", Version), "Output", "Shapefiles"), paste0(paste0(Site_Code, "_", Version, "_final_model_Quartile.shp"))), 
+#             delete_layer = FALSE, 
+#             quiet = TRUE)
+#731
+#
+#' Dissolve and Simplify a Polygon Grid
+#'
+#' Dissolves adjacent polygons sharing one or more attribute values into
+#' multipart polygons, optionally rounds a continuous variable prior to
+#' dissolving, simplifies the resulting geometries to reduce file size, and
+#' creates a ggplot object for visualization.
+#'
+#' This function is useful for reducing the size of regular grid-based habitat
+#' suitability model (HSM) outputs while preserving the spatial extent of areas
+#' with the same attribute values.
+#'
+#' @param x An `sf` object containing polygon geometries.
+#'
+#' @param group_cols Character vector of one or more column names used to
+#' dissolve polygons. Polygons sharing identical values across all specified
+#' columns will be merged.
+#'
+#' @param round_col Optional character string specifying a numeric column to
+#' round prior to dissolving. Useful for continuous variables (e.g., HSM scores)
+#' where small numeric differences prevent adjacent polygons from being merged.
+#' Default is `NULL`.
+#'
+#' @param round_digits Integer specifying the number of decimal places used when
+#' rounding `round_col`. Ignored if `round_col = NULL`.
+#'
+#' @param simplify_keep Numeric between 0 and 1 specifying the proportion of vertices to
+#' retain during simplification. Smaller values produce smaller files but less
+#' detailed geometry. Passed to `rmapshaper::ms_simplify()`. Default is `0.05`.
+#'
+#' @param keep_shapes Logical indicating whether all polygon features should be
+#' preserved during simplification, even if they are very small. Passed to
+#' `rmapshaper::ms_simplify()`. Default is `TRUE`.
+#'
+#' @param print_plot Logical indicating whether the generated ggplot object should be
+#' printed to the active graphics device. Regardless of this option, the plot
+#' object is returned. Default is `FALSE`.
+#'
+#' @param fill_by Optional character string specifying the attribute used for
+#' polygon fill colours in the ggplot object. If `NULL`, polygons are drawn
+#' without a fill aesthetic.
+#'
+#' @return A named list containing:
+#' \describe{
+#'   \item{data}{An `sf` object containing the dissolved and optionally
+#'   simplified polygons.}
+#'   \item{plot}{A `ggplot` object displaying the resulting polygons.}
+#' }
+#'
+#' @details
+#' The function performs the following operations:
+#' \enumerate{
+#'   \item Optionally repairs invalid geometries.
+#'   \item Optionally rounds a continuous attribute.
+#'   \item Dissolves adjacent polygons sharing identical attribute values.
+#'   \item Optionally simplifies polygon geometry to reduce file size.
+#'   \item Creates a ggplot object for visualization.
+#' }
+#'
+#' Geometry simplification uses
+#' `rmapshaper::ms_simplify()`, which generally preserves polygon topology
+#' better than `sf::st_simplify()` while substantially reducing file size.
+#'
+#' @examples
+#' ## Dissolve by HSM class
+#' result <- dissolve_grid(
+#'   x = HSM_grid,
+#'   group_cols = "HSM_class",
+#'   fill_col = "HSM_class"
+#' )
+#'
+#' ## Dissolve by Estuary and rounded HSM score
+#' result <- dissolve_grid(
+#'   x = HSM_grid,
+#'   group_cols = c("Estuary", "HSM_score"),
+#'   round_col = "HSM_score",
+#'   round_digits = 2,
+#'   fill_col = "HSM_score"
+#' )
+#'
+#' ## Access outputs
+#' result$data
+#' result$plot
+#'
+#' @export
+#' 

@@ -23,7 +23,7 @@ HSMfunc <- new.env()
 source("HSM code/Functions/HSM_scoring_functions.R", local = HSMfunc)
 #
 #Working parameters - to be set each time a new site or version is being used Make sure to use same Site_code and Version number from setup file.
-Site_Code <- c("SA") #two-letter site code
+Site_Code <- c("WI") #two-letter site code
 Version <- c("v1") #Model version
 #
 #
@@ -31,7 +31,7 @@ Version <- c("v1") #Model version
 #
 ###Load shape file with data from Arc: default shp_filename = "_datalayer"
 # Also loads files for scoring
-HSMfunc$load_model_files(shp_filename = "datalayers_20260821")
+HSMfunc$load_model_files(shp_filename = "datalayers_20260724")
 #
 # Check potential file names:
 #(datafiles <- HSMfunc$list_files(paste0(Site_Code,"_",Version,"/Output/Data files"),
@@ -41,9 +41,9 @@ HSMfunc$load_model_files(shp_filename = "datalayers_20260821")
 # Data setup, updates ----
 #
 # Load model files with updated data:
-HSMfunc$load_model_files(shp_filename = "datalayers_260821")
+HSMfunc$load_model_files(shp_filename = "datalayers_260217")
 # Limit to PGID and data being updated:
-glimpse(SA_v1_data)
+glimpse(WI_v1_data)
 #Combine original data with new data, then skip to scoring
 #t <- st_join(SS_v0_data %>% dplyr::select(PGID:Long_DD_X_, Oyst26, Buff26), 
 #             SS_vori_data%>% dplyr::select(-c(Oyst20, Buff23))) 
@@ -61,10 +61,10 @@ model_scores <- model_data_2 %>% dplyr::select(-c(contains("AV"), contains("HSM"
 #
 # Add and clean interp data: Excel cols----
 #
-currentsf <- SA_v1_data
+currentsf <- WI_v1_data
 #
 #Annual mean salinity
-(SA_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
+(WI_v1_salMonMean <- HSMfunc$add_excel_columns_sf(
   existing_sf = currentsf,
   excel_path = paste0(Site_Code,"_",Version,"/Output/Data files/Salinity_Monthly_Mean_2020_2024.xlsx"),
   join_by = "PGID",
@@ -401,20 +401,20 @@ rm(datafiles)
 #
 # Add and clean interp data: Shapefiles----
 #
-currentsf <- SA_v1_data
+currentsf <- WI_v1_data
 #
 #Annual mean salinity
-SA_v1_salMonMean <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_salMonMean <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                    sf_object = currentsf,
                                                    shapefile_name = "Salinity_Monthly_Mean_2020_2024",
                                                    columns = starts_with("e") & ends_with("e"))
-head(SA_v1_salMonMean)
+head(WI_v1_salMonMean)
 #
 #
 #
 #
 # Annual minimum salinity
-SA_v1_salMonMin <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_salMonMin <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                    sf_object = currentsf,
                                                    shapefile_name = "Salinity_Monthly_Minimum_2020_2024",
                                                    columns = starts_with("e") & ends_with("i"))
@@ -423,16 +423,16 @@ SA_v1_salMonMin <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # May-Oct range salinity
-SA_v1_salMonRange <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_salMonRange <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                     sf_object = currentsf,
                                                     shapefile_name = "Salinity_Monthly_Range_2020_2024_May_Oct",
-                                                    columns = matches("^e.*[AI]$"))
+                                                    columns = starts_with("e"))
 #
 #
 #
 #
 # Annual mean temperature
-SA_v1_temMonMean <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_temMonMean <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                    sf_object = currentsf,
                                                    shapefile_name = "Temperature, water_Monthly_Mean_2020_2024",
                                                    columns = starts_with("e") & ends_with("e"))
@@ -444,9 +444,9 @@ SA_v1_temMonMean <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Annual T > 35 temperature
-SA_v1_temMonT35 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_temMonT35 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                   sf_object = currentsf,
-                                                  shapefile_name = "Temperature_Monthly_Threshold_2020_2024_35",
+                                                  shapefile_name = "Temperature, water_Monthly_Threshold_2020_2024_35",
                                                   columns = starts_with("e") & ends_with("T"))
 #
 #
@@ -454,7 +454,7 @@ SA_v1_temMonT35 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # May-Oct T < 20 temperature
-SA_v1_temMonB20 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_temMonB20 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                   sf_object = currentsf,
                                                   shapefile_name = "Temperature, water_Monthly_Threshold_2020_2024_May_Oct_20",
                                                   columns = starts_with("e") & ends_with("T"))
@@ -466,9 +466,9 @@ SA_v1_temMonB20 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Outlier1 flow
-SA_v1_outlier1 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_outlier1 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                  sf_object = currentsf,
-                                                 shapefile_name = "SA_flow_outlier1",
+                                                 shapefile_name = "WI_flow_outlier1",
                                                  columns = "meanOut1")
 #
 #
@@ -477,9 +477,9 @@ SA_v1_outlier1 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Outlier2 flow
-SA_v1_outlier2 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_outlier2 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                                  sf_object = currentsf,
-                                                 shapefile_name = "SA_flow_outlier2",
+                                                 shapefile_name = "WI_flow_outlier2",
                                                  columns = "meanOut2")
 #
 #
@@ -487,18 +487,18 @@ SA_v1_outlier2 <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Adult optimal flow
-SA_v1_adop <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_adop <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                              sf_object = currentsf,
-                                             shapefile_name = "SA_flow_optimal_adult",
+                                             shapefile_name = "WI_flow_optimal_adult",
                                              columns = "mnOptml")
 #
 #
 #
 #
 # Larvae optimal flow
-SA_v1_laop <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_laop <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                              sf_object = currentsf,
-                                             shapefile_name = "SA_flow_optimal_larvae",
+                                             shapefile_name = "WI_flow_optimal_larvae",
                                              columns = "mnOptml")
 #
 #
@@ -506,9 +506,9 @@ SA_v1_laop <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Adult super flow
-SA_v1_adsup <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_adsup <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                               sf_object = currentsf,
-                                              shapefile_name = "SA_flow_super_adult",
+                                              shapefile_name = "WI_flow_super_adult",
                                               columns = "meanDays")
 #
 #
@@ -516,9 +516,9 @@ SA_v1_adsup <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Adult sub flow
-SA_v1_adsub <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_adsub <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                               sf_object = currentsf,
-                                              shapefile_name = "SA_flow_sub_adult",
+                                              shapefile_name = "WI_flow_sub_adult",
                                               columns = "meanDays")
 #
 #
@@ -526,9 +526,9 @@ SA_v1_adsub <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Larvae super flow
-SA_v1_lasup <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_lasup <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                               sf_object = currentsf,
-                                              shapefile_name = "SA_flow_super_larvae",
+                                              shapefile_name = "WI_flow_super_larvae",
                                               columns = "meanDays")
 #
 #
@@ -536,9 +536,9 @@ SA_v1_lasup <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 #
 # Larvae sub flow
-SA_v1_lasub <- HSMfunc$load_shapefile_columns(Site_Code, Version,
+WI_v1_lasub <- HSMfunc$load_shapefile_columns(Site_Code, Version,
                                               sf_object = currentsf,
-                                              shapefile_name = "SA_flow_sub_larvae",
+                                              shapefile_name = "WI_flow_sub_larvae",
                                               columns = "meanDays")
 #
 #
@@ -549,7 +549,7 @@ SA_v1_lasub <- HSMfunc$load_shapefile_columns(Site_Code, Version,
 #
 # Base data----
 #
-ASalE <- SA_v1_salMonMean %>% 
+ASalE <- WI_v1_salMonMean %>% 
        st_drop_geometry() %>%
        dplyr::select(PGID, contains("ens"), starts_with("e")) %>%
        dplyr::rename_with(
@@ -559,7 +559,7 @@ ASalE <- SA_v1_salMonMean %>%
   mutate(across(where(is.numeric), ~ replace(.x, is.infinite(.x), NA)))
 #
 # Annual minimum salinity
-ASalI <- SA_v1_salMonMin %>% 
+ASalI <- WI_v1_salMonMin %>% 
   st_drop_geometry() %>%
   dplyr::select(PGID, contains("ens"), starts_with("e")) %>%
   dplyr::rename_with(
@@ -571,7 +571,7 @@ ASalI <- SA_v1_salMonMin %>%
 #
 #
 # May-Oct range salinity
-ASalR <- SA_v1_salMonRange %>% 
+ASalR <- WI_v1_salMonRange %>% 
   st_drop_geometry() %>%
   dplyr::select(PGID, contains("ens"), starts_with("e")) %>%
   dplyr::rename_with(
@@ -587,7 +587,7 @@ ASalR <- SA_v1_salMonRange %>%
 #
 #
 # Annual mean temperature
-ATemE <- SA_v1_temMonMean %>% 
+ATemE <- WI_v1_temMonMean %>% 
   st_drop_geometry() %>%
   dplyr::select(PGID, contains("ens"), starts_with("e")) %>%
   dplyr::rename_with(
@@ -600,7 +600,7 @@ ATemE <- SA_v1_temMonMean %>%
 #
 #
 # Annual T > 35 temperature
-ATemA35 <- SA_v1_temMonT35 %>% 
+ATemA35 <- WI_v1_temMonT35 %>% 
   st_drop_geometry() %>%
   dplyr::select(PGID, contains("ens"), starts_with("e")) %>%
   dplyr::rename_with(
@@ -613,7 +613,7 @@ ATemA35 <- SA_v1_temMonT35 %>%
 #
 #
 # May-Oct T < 20 temperature
-STemB20 <- SA_v1_temMonB20 %>% 
+STemB20 <- WI_v1_temMonB20 %>% 
   st_drop_geometry() %>%
   dplyr::select(PGID, contains("ens"), starts_with("e")) %>%
   dplyr::rename_with(
@@ -908,12 +908,12 @@ Temperture_thres_scores <- HSMfunc$assign_threshold_scores(temp, column_type = "
 ### Interpolations from R, multiple columns needing averaging:
 #
 # Salinity - all year Mean
-Salinity_scores_mean <- HSMfunc$assign_salinity_scores(SA_v1_salMonMean, Salinity_adult, 
+Salinity_scores_mean <- HSMfunc$assign_salinity_scores(WI_v1_salMonMean, Salinity_adult, 
                                                   column_type = "individual", 
                                                   individual_key = "e",
                                                   type = "separate")
 #
-(Salinity_mean_scores <- left_join(SA_v1_data %>% dplyr::select(PGID), 
+(Salinity_mean_scores <- left_join(WI_v1_data %>% dplyr::select(PGID), 
                          HSMfunc$row_average(data = Salinity_scores_mean,
                                              cols = starts_with("e"),#contains("ens"),
                                              new_column_name = "SAnnueESC",
@@ -923,12 +923,12 @@ Salinity_scores_mean <- HSMfunc$assign_salinity_scores(SA_v1_salMonMean, Salinit
 #
 #
 # Salinity - all year Min
-Salinity_scores_min <- HSMfunc$assign_salinity_scores(SA_v1_salMonMin, Salinity_adult, 
+Salinity_scores_min <- HSMfunc$assign_salinity_scores(WI_v1_salMonMin, Salinity_adult, 
                                                   column_type = "individual", 
                                                   individual_key = "e",
                                                   type = "separate")
 #
-(Salinity_min_scores <- left_join(SA_v1_data %>% dplyr::select(PGID),
+(Salinity_min_scores <- left_join(WI_v1_data %>% dplyr::select(PGID),
                          HSMfunc$row_average(data = Salinity_scores_min,
                                              cols = starts_with("e"),#contains("ens"),
                                              new_column_name = "SAnnueISC",
@@ -939,21 +939,21 @@ Salinity_scores_min <- HSMfunc$assign_salinity_scores(SA_v1_salMonMin, Salinity_
 #
 # Salinity - spawning period Mean
 Salinity_spawn_scores_mean_t <- HSMfunc$assign_sal_spawn_scores(
-  SA_v1_salMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")), 
+  WI_v1_salMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")), 
   Salinity_adult, 
   column_type = "individual",
   individual_key = "e",
   type = "separate")
 #
 Salinity_spawn_scores_mean <- left_join(Salinity_spawn_scores_mean_t, 
-                                        HSMfunc$assign_sal_spawn_scores(SA_v1_salMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")), 
+                                        HSMfunc$assign_sal_spawn_scores(WI_v1_salMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")), 
                                                                         Salinity_larvae, 
                                                                         column_type = "individual",
                                                                         individual_key = "e",
                                                                         type = "separate") %>% 
                                           st_drop_geometry()) 
 #
-(Salinity_spawn_mean_scores <- left_join(SA_v1_data %>% dplyr::select(PGID), 
+(Salinity_spawn_mean_scores <- left_join(WI_v1_data %>% dplyr::select(PGID), 
                          HSMfunc$row_average(data = Salinity_spawn_scores_mean,
                                              cols = contains("e"),
                                              new_column_name = "SSpwneESC",
@@ -967,7 +967,7 @@ Salinity_spawn_scores_mean <- left_join(Salinity_spawn_scores_mean_t,
 #Score at Maximum and score at Minimum, Range_score = mean(Max_score, Min_score)
 #Adult
 Salinity_spawn_scores_range_t <- HSMfunc$assign_sal_spawn_scores(
-  SA_v1_salMonRange, 
+  WI_v1_salMonRange, 
   Salinity_adult, 
   column_type = "individual",
   individual_key = "e",
@@ -1004,7 +1004,7 @@ Salinity_spawn_scores_range_t <- HSMfunc$assign_sal_spawn_scores(
 #
 #Larvae
 Salinity_spawn_scores_range_Lt <- HSMfunc$assign_sal_spawn_scores(
-  SA_v1_salMonRange, 
+  WI_v1_salMonRange, 
   Salinity_larvae, 
   column_type = "individual",
   individual_key = "e",
@@ -1044,7 +1044,7 @@ Salinity_spawn_scores_range_Lt <- HSMfunc$assign_sal_spawn_scores(
                                          Salinity_spawn_scores_range_Lt2%>% 
                                           st_drop_geometry())) 
 #
-(Salinity_spawn_range_scores <- left_join(SA_v1_data %>% dplyr::select(PGID), 
+(Salinity_spawn_range_scores <- left_join(WI_v1_data %>% dplyr::select(PGID), 
                          HSMfunc$row_average(data = Salinity_spawn_scores_range,
                                              cols = contains("e"),
                                              new_column_name = "SSpwneRSC", 
@@ -1054,12 +1054,12 @@ Salinity_spawn_scores_range_Lt <- HSMfunc$assign_sal_spawn_scores(
 #
 #
 # Temperature - all year Mean
-Temperature_scores_t <- HSMfunc$assign_temperature_scores(SA_v1_temMonMean, Temperature_adult, 
+Temperature_scores_t <- HSMfunc$assign_temperature_scores(WI_v1_temMonMean, Temperature_adult, 
                                                          column_type = "individual",
                                                          individual_key = "e",
                                                          type = "separate")
 #
-(Temperature_scores <- left_join(SA_v1_data %>% dplyr::select(PGID), 
+(Temperature_scores <- left_join(WI_v1_data %>% dplyr::select(PGID), 
                          HSMfunc$row_average(data = Temperature_scores_t,
                                              cols = contains("e"),
                                              new_column_name = "TAnnueESC", 
@@ -1070,21 +1070,21 @@ Temperature_scores_t <- HSMfunc$assign_temperature_scores(SA_v1_temMonMean, Temp
 #
 # Temperature - Spawning period Mean
 Temperature_spawn_scores_t <- HSMfunc$assign_temperature_spawn_scores(
-  SA_v1_temMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")), 
+  WI_v1_temMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")), 
   Temperature_adult,
   column_type = "individual",
   individual_key = "e",
   type = "separate")
 (Temperature_spawn_scores_t2 <- left_join(Temperature_spawn_scores_t, 
                                       HSMfunc$assign_temperature_spawn_scores(
-                                        SA_v1_temMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")),
+                                        WI_v1_temMonMean %>% dplyr::select(PGID, matches("May|Jun|Jul|Aug|Sep|Oct")),
                                         Temperature_larvae,
                                         column_type = "individual",
                                         individual_key = "e", 
                                         type = "separate") %>% 
                                         st_drop_geometry()))
 #
-(Temperature_spawn_scores <- left_join(SA_v1_data %>% dplyr::select(PGID), 
+(Temperature_spawn_scores <- left_join(WI_v1_data %>% dplyr::select(PGID), 
                          HSMfunc$row_average(data = Temperature_spawn_scores_t2,
                                              cols = contains("e"),
                                              new_column_name = "TSpwneESC", 
@@ -1094,12 +1094,12 @@ Temperature_spawn_scores_t <- HSMfunc$assign_temperature_spawn_scores(
 #
 #
 # Temperature - Threshold period - number = proportion above.below the threshold - score is inverse of values
-Temperture_thres_scoresA <- HSMfunc$assign_threshold_scores(SA_v1_temMonT35,
+Temperture_thres_scoresA <- HSMfunc$assign_threshold_scores(WI_v1_temMonT35,
                                                             column_type = "individual",
                                                             individual_key = "e",
                                                             type = "separate")
 #
-(Temperature_thresA_scores <- left_join(SA_v1_data %>% dplyr::select(PGID), 
+(Temperature_thresA_scores <- left_join(WI_v1_data %>% dplyr::select(PGID), 
                          HSMfunc$row_average(data = Temperture_thres_scoresA,
                                              cols = contains("e"),
                                              new_column_name = "TAnnueT35SC", 
@@ -1108,12 +1108,12 @@ Temperture_thres_scoresA <- HSMfunc$assign_threshold_scores(SA_v1_temMonT35,
 
 #
 #
-Temperture_thres_scoresB <- HSMfunc$assign_threshold_scores(SA_v1_temMonB20,
+Temperture_thres_scoresB <- HSMfunc$assign_threshold_scores(WI_v1_temMonB20,
                                                             column_type = "individual",
                                                             individual_key = "e",
                                                             type = "separate")
 #
-(Temperature_thresB_scores <- left_join(SA_v1_data %>% dplyr::select(PGID), 
+(Temperature_thresB_scores <- left_join(WI_v1_data %>% dplyr::select(PGID), 
                          HSMfunc$row_average(data = Temperture_thres_scoresB,
                                              cols = contains("e"),
                                              new_column_name = "TSpwneT20SC", 
@@ -1127,81 +1127,81 @@ Temperture_thres_scoresB <- HSMfunc$assign_threshold_scores(SA_v1_temMonB20,
 #
 # Flow data
 # Adult optimal
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_adop,
+                           data = WI_v1_adop,
                            cols = contains("Opt"),
                            new_column_name = "FAnnuiAO",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
 #Adult super/sub
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_adsup,
+                           data = WI_v1_adsup,
                            cols = contains("Days"),
                            new_column_name = "FAnnuiAP",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_adsub,
+                           data = WI_v1_adsub,
                            cols = contains("Days"),
                            new_column_name = "FAnnuiAB",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
 # Larvae optimal
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_laop,
+                           data = WI_v1_laop,
                            cols = contains("Opt"),
                            new_column_name = "FAnnuiLO",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
 # Larvae super/sub
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_lasup,
+                           data = WI_v1_lasup,
                            cols = contains("Days"),
                            new_column_name = "FAnnuiLP",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_lasub,
+                           data = WI_v1_lasub,
                            cols = contains("Days"),
                            new_column_name = "FAnnuiLB",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
 # Outlier 1
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_outlier1,
+                           data = WI_v1_outlier1,
                            cols = contains("Out"),
                            new_column_name = "FAnnui1",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
 # Outlier 2
-(SA_v1_data <- left_join(SA_v1_data, 
+(WI_v1_data <- left_join(WI_v1_data, 
                          HSMfunc$row_average(
-                           data = SA_v1_outlier2,
+                           data = WI_v1_outlier2,
                            cols = contains("Out"),
                            new_column_name = "FAnnui2",
                            keep_columns = c("PGID")
                          ),
                          by = "PGID"))
 #
-Optimal_flow_t <- HSMfunc$assign_flow_scores(SA_v1_data, `Optimal flow`, col_pattern = ".*O$",type = "separate")
-Above_flow_t <- HSMfunc$assign_flow_scores(SA_v1_data, `Non-optimal flow`, col_pattern = ".*P$",type = "separate")
-Sub_flow_t <- HSMfunc$assign_flow_scores(SA_v1_data, `Non-optimal flow`, col_pattern = ".*B$",type = "separate")
-Out1_flow_t <- HSMfunc$assign_flow_scores(SA_v1_data, `Outlier1 flow`, col_pattern = ".*1$",type = "separate")#
-Out2_flow_t <- HSMfunc$assign_flow_scores(SA_v1_data, `Outlier2 flow`, col_pattern = ".*2$",type = "separate")#
+Optimal_flow_t <- HSMfunc$assign_flow_scores(WI_v1_data, `Optimal flow`, col_pattern = ".*O$",type = "separate")
+Above_flow_t <- HSMfunc$assign_flow_scores(WI_v1_data, `Non-optimal flow`, col_pattern = ".*P$",type = "separate")
+Sub_flow_t <- HSMfunc$assign_flow_scores(WI_v1_data, `Non-optimal flow`, col_pattern = ".*B$",type = "separate")
+Out1_flow_t <- HSMfunc$assign_flow_scores(WI_v1_data, `Outlier1 flow`, col_pattern = ".*1$",type = "separate")#
+Out2_flow_t <- HSMfunc$assign_flow_scores(WI_v1_data, `Outlier2 flow`, col_pattern = ".*2$",type = "separate")#
 #
 (Flow_scores <- left_join(Optimal_flow_t, st_drop_geometry(Above_flow_t)) %>% 
   left_join(st_drop_geometry(Sub_flow_t)) %>%
@@ -1231,63 +1231,12 @@ papertheme <- theme(
   plot.title =  element_blank(), plot.margin = margin(t = 10, r=10)
 )
 #
-base_theme <- ggplot2::theme_classic() +
-  ggplot2::theme(
-    axis.title = element_text(size = 17, face = "bold", color = "black", family = "Arial"),
-    axis.text = ggplot2::element_text(size = 15, family = "Arial", color = "black"),
-    axis.text.x = element_text(margin = margin(t=0.25, r=0.5, b=0, l=0.5, unit = "cm")), #unit(c(0.25, 0.5, 0, 0.5), "cm")), 
-    axis.text.y = element_text(margin = margin(t=0, r=0.35, b=0, l=0, unit = "cm")), #unit(c(0, 0.25, 0, 0), "cm")),
-    axis.ticks = element_line(color = "black", linewidth = 0.1),
-    axis.ticks.length = unit(-0.15, "cm"),
-    panel.border = ggplot2::element_rect(color = "black", fill = NA, linewidth = 0.1),
-    plot.margin = grid::unit(c(0.05, 0, 0, 0), "cm"),
-    plot.title = ggplot2::element_text(margin = ggplot2::margin(b = 5), family = "Arial"),
-    plot.caption = ggplot2::element_text(face = "italic", size = 9),
-    legend.title = element_text(size = 12, family = "Arial"),
-    legend.text = element_text(size = 10, family = "Arial"))
-#
-# presentation formatting
-maptheme <- theme_classic()+
-  theme(
-    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.5),
-    axis.title = element_blank(),#element_text(size = 14, color = "black"), 
-    axis.text =  element_text(size = 15, color = "black", family = "Arial"),
-    axis.text.x = element_text(angle = 30, vjust = 0.5)
-  )
-#
-# for plots
-plot_theme <- theme(plot.margin = unit(c(0.25, 0.45, 0.1, 0.1), "cm"),
-                    panel.border = element_rect(color = NA))
-#
-legendtheme <- theme(
-  legend.title = element_text(size = 14, color = "black", family = "Arial"),
-  legend.text = element_text(size = 13, color = "black", family = "Arial"),
-  legend.background = element_blank(),
-  legend.key = element_blank()
-)
-#
-FacetTheme <- theme(strip.text.y = element_text(face = "bold", size = 12),
-                    strip.background = element_rect(fill = "#CCCCCC"),
-                    panel.spacing = unit(0.75, "lines"),
-                    strip.text.x = element_text(face = "bold", size = 12))
-
-#Manuscript format
-manu_theme <- theme_bw()+
-  theme(axis.title = element_text(size = 12, face = "bold", color = "black", family = "Arial"), 
-        axis.text = element_text(size = 11, family = "Arial"), 
-        axis.text.x = element_text(margin = unit(c(0.25, 0.5, 0, 0.5), "cm")), 
-        axis.text.y = element_text(margin = unit(c(0, 0.25, 0, 0), "cm")),
-        axis.ticks = element_line(color = "black", linewidth = 0.1),
-        axis.ticks.length = unit(-0.15, "cm"),
-        panel.grid = element_blank(),
-        panel.border = element_blank(), 
-        axis.line = element_line(color = "black", linewidth = 0.1))
-#
 #
 #
 ##### Model scoring ####
 #
 ### Add scores to data
+assign(paste0(Site_Code, "_", Version, "_scores_data"), HSMfunc$join_score_dataframes(temp))
 assign(paste0(Site_Code, "_", Version, "_scores_data"), HSMfunc$join_score_dataframes(temp))
 assign(
   paste0(Site_Code, "_", Version, "_scores_data"),
@@ -1323,11 +1272,10 @@ if(model_data == "all"){
 #
 #
 # Additive model:
-## Flow as exclusionary when 0:
 HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>% 
   st_drop_geometry() %>% 
   {
-    av_data <- dplyr::select(., ends_with("AV") & !matches("^FAV$"))
+    av_data <- dplyr::select(., ends_with("AV"))
     
     # Keep only AV columns with at least one real (non-NA/NaN) value
     valid_av <- av_data[, colSums(!is.na(av_data)) > 0, drop = FALSE]
@@ -1335,14 +1283,10 @@ HSM_data <- get(paste0(Site_Code, "_", Version, "_data_clean")) %>%
     CurveCO_val <- ncol(valid_av)
     
     mutate(.,
-           HSM_f = case_when(
-             ChnlTO == 1 & FAV == 0 ~ 0,  # HSM = 0 when Flow is 0
-             ChnlTO == 1 ~ (rowSums(valid_av, na.rm = TRUE) / CurveCO_val) * FAV,
-             ChnlTO == 0 ~ 0, 
-             TRUE ~ NA_real_
-           )) %>%
-      mutate(HSMround_f = round(HSM_f, 2),
-             Curve_val = ncol(valid_av))
+           HSM = case_when(ChnlTO == 1 ~ rowSums(valid_av, na.rm = TRUE)/CurveCO_val,
+                           ChnlTO == 0 ~ 0, 
+                           TRUE ~ NA_real_)) %>%
+      mutate(HSMround = round(HSM, 2))
   }
 #
 # Define the breaks for grouping (0 to 1 by 0.1)
@@ -1350,48 +1294,47 @@ breaks <- seq(0, 1, by = 0.1)#seq(0, 1, by = 0.1)
 #
 # Determine natural Jenks breaks (thirds)
 set.seed(54321)
-vals <- sample(HSM_data$HSM_f, min(20000, length(HSM_data$HSM_f))) #Sample then calculate breaks
-jenks_breaks <- classInt::classIntervals(vals, n = 4, style = "jenks")$brks#getJenksBreaks(var = HSM_data$HSM, k = 4)
+vals <- sample(HSM_data$HSM, min(20000, length(HSM_data$HSM))) #Sample then calculate breaks
+jenks_breaks <- classInt::classIntervals(vals, n = 3, style = "jenks")$brks#getJenksBreaks(var = HSM_data$HSM, k = 4)
 #
 # Clean breaks then make sure they cover full data range:
 jenks_breaks <- sort(unique(
   signif(jenks_breaks, 6)
 ))
 jenks_breaks[c(1, length(jenks_breaks))] <-
-  range(HSM_data$HSM_f, na.rm = TRUE)
-jenks_breaks
+  range(HSM_data$HSM, na.rm = TRUE)
 #
 # Assign groups using cut()
 HSM_data_grps <- HSM_data %>%
   mutate(
     # HSM 0.1 groups
     HSMgrp = case_when(
-      HSMround_f < 0.1 & HSMround_f >= 0 ~ "[0,0.1)",
-      HSMround_f < 0.2 & HSMround_f >= 0.1 ~ "[0.1,0.2)",
-      HSMround_f < 0.3 & HSMround_f >= 0.2 ~ "[0.2,0.3)",
-      HSMround_f < 0.4 & HSMround_f >= 0.3 ~ "[0.3,0.4)",
-      HSMround_f < 0.5 & HSMround_f >= 0.4 ~ "[0.4,0.5)",
-      HSMround_f < 0.6 & HSMround_f >= 0.5 ~ "[0.5,0.6)",
-      HSMround_f < 0.7 & HSMround_f >= 0.6 ~ "[0.6,0.7)",
-      HSMround_f < 0.8 & HSMround_f >= 0.7 ~ "[0.7,0.8)",
-      HSMround_f < 0.9 & HSMround_f >= 0.8 ~ "[0.8,0.9)",
+      HSMround < 0.1 & HSMround >= 0 ~ "[0,0.1)",
+      HSMround < 0.2 & HSMround >= 0.1 ~ "[0.1,0.2)",
+      HSMround < 0.3 & HSMround >= 0.2 ~ "[0.2,0.3)",
+      HSMround < 0.4 & HSMround >= 0.3 ~ "[0.3,0.4)",
+      HSMround < 0.5 & HSMround >= 0.4 ~ "[0.4,0.5)",
+      HSMround < 0.6 & HSMround >= 0.5 ~ "[0.5,0.6)",
+      HSMround < 0.7 & HSMround >= 0.6 ~ "[0.6,0.7)",
+      HSMround < 0.8 & HSMround >= 0.7 ~ "[0.7,0.8)",
+      HSMround < 0.9 & HSMround >= 0.8 ~ "[0.8,0.9)",
       TRUE           ~ "[0.9,1]"
     ),
     # Aggregated bins
     HSMgyr = case_when(
       HSMgrp == "0" ~ "0",
-      HSMround_f < 0.4 ~ "Low",
-      HSMround_f < 0.6 ~ "Moderate",
+      HSMround < 0.4 ~ "Low",
+      HSMround < 0.6 ~ "Moderate",
       TRUE           ~ "High"
     ),
     # Jenks breaks
-    HSMjb = cut(HSM_f,
+    HSMjb = cut(HSM,
                 breaks = jenks_breaks,
                 include.lowest = TRUE,
                 labels = c("Low", "Medium", "High")),
     # Quantiles
     HSM_q4 = factor(
-      ntile(HSM_f, 4),
+      ntile(HSM, 4),
       levels = 1:4,
       labels = c("Least", "Low", "Moderate", "Most"))
   ) %>%
@@ -1503,7 +1446,7 @@ HSM_data_grps %>%
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 1000000), breaks = seq(0, 1500000, 250000))+ #120000, 3000000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 3000000), breaks = seq(0, 3000000, 500000))+ #120000, 3000000
   scale_x_discrete(expand = c(0.005,0))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme + theme(axis.text.x = element_text(size = 11, angle = 20))
@@ -1514,22 +1457,29 @@ summary(HSM_data_grps$HSMgyr)
 summary(HSM_data_grps$HSMjb)
 #Jenks breaks summary:
 table(
-  cut(HSM_data$HSM_f, breaks = jenks_breaks, include.lowest = TRUE),
+  cut(HSM_data$HSM, breaks = jenks_breaks, include.lowest = TRUE),
   useNA = "ifany"
 )
-jenks.tests(classIntervals(HSM_data$HSM_f, style = "fixed", fixedBreaks = jenks_breaks))
+jenks.tests(classIntervals(HSM_data$HSM, style = "fixed", fixedBreaks = jenks_breaks))
+#Test 4 groups:
+set.seed(321)
+jenks_breaks2 <- classInt::classIntervals(vals, n = 4, style = "jenks")$brks
+jenks_breaks2 <- sort(unique(signif(jenks_breaks2, 6)))
+jenks_breaks2[c(1, length(jenks_breaks2))] <- range(HSM_data$HSM, na.rm = TRUE)
+table(cut(HSM_data$HSM, breaks = jenks_breaks2, include.lowest = TRUE), useNA = "ifany")
+jenks.tests(classIntervals(HSM_data$HSM, style = "fixed", fixedBreaks = jenks_breaks2))
 #
 #hist(HSM_data$HSM, col = "gray90", main = "Jenks Breakpoints Overlay", xlab = "HSM score")
 #abline(v = jenks_breaks, col = "red", lwd = 2, lty = 2)
 #text(x = jenks_breaks, y = 59500, labels = round(jenks_breaks, 2), pos = 4, col = "red", cex = 1.15)
 #SL: -15000 - repel; ylim - 60000
 #SS: -250000 - repel; ylim - 2500000
-ggplot(HSM_data, aes(x = HSM_f)) +
+ggplot(HSM_data, aes(x = HSM)) +
   geom_histogram(fill = "gray50", color = "black", bins = 30, boundary = 0) +
-  geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts-200000)), #250000
+  geom_vline(xintercept = jenks_breaks2, linetype = "dashed", linewidth = 1, color = "red") +
+  ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks2, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-250000), 
                            aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
-                           nudge_y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
+                           nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
                            segment.color = NA)+
   #annotate("text", x = jenks_breaks, y = 0, label = round(jenks_breaks, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
   labs(
@@ -1538,7 +1488,7 @@ ggplot(HSM_data, aes(x = HSM_f)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 500000), breaks = seq(0, 500000, 250000)) + #60000
+  scale_y_continuous(expand = c(0,0), limits = c(0, 2500000)) + #60000
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0, 1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt")) +
   papertheme
@@ -1550,20 +1500,20 @@ summary(HSM_data_grps$HSM_q4)
     group_by(HSM_q4) %>%
     summarise(
       n = n(),
-      min = min(HSM_f, na.rm = TRUE),
-      max = max(HSM_f, na.rm = TRUE),
-      mean = mean(HSM_f, na.rm = TRUE),
+      min = min(HSM, na.rm = TRUE),
+      max = max(HSM, na.rm = TRUE),
+      mean = mean(HSM, na.rm = TRUE),
       .groups = "drop"
     ))
 #
 #SL: -15000 - repel; ylim - 60000
 #SS: -350000 - repel; ylim - 2500000
-ggplot(HSM_data, aes(HSM_f)) +
+ggplot(HSM_data, aes(HSM)) +
   geom_histogram(bins = 30, fill = "grey50", color = "black", boundary = 0) +
   geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
-  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts-200000)), 
+  ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(HSM_data$HSM, plot = FALSE)$counts)-350000), 
                            aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
-                           nudge_y = max(hist(HSM_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.35,
+                           nudge_y = max(hist(HSM_data$HSM, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.35,
                            segment.color = NA)+
   #annotate("text", x = temp_cuts$min, y = 0, label = round(temp_cuts$min, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
   labs(
@@ -1572,7 +1522,7 @@ ggplot(HSM_data, aes(HSM_f)) +
     y = "Count"
   ) +
   basetheme + 
-  scale_y_continuous(expand = c(0,0), limits = c(0, 500000), breaks = seq(0, 500000, 250000)) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 2500000)) +
   scale_x_continuous(expand = c(0.005,0), breaks = seq(0, 1, by = 0.1), limits = c(0,1))+
   theme(plot.margin = margin(t = 5, r = 10, b = 5, l = 5, unit = "pt"))+
   papertheme
@@ -1608,148 +1558,6 @@ Scoring_summ %>%
   summarise(meanVal = mean(mean, na.rm = T),
             sdVal = sd(mean, na.rm = T))
 #
-#
-#
-#
-
-#### Final model output ----
-#
-# Limit to HSM, HSMround, and HSMgrp of best model
-# Make sure HSMgrp, HSMgyr, HSMjb, and HSM_q4 exists
-(final_data_raw <- HSM_data_grps %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X, 
-                                              contains("SC"), contains("AV"), ChnlTO, Curve_val,
-                                              HSM_f, HSMround_f, HSMgrp, HSMgyr, HSMjb, HSM_q4))
-#
-# Make sure object is sfc
-final_data_raw <- left_join(HSM_spdf %>% dplyr::select(PGID, Lat_DD_Y, Long_DD_X), 
-                            final_data_raw)
-#
-# Limit model cells to aquatic area (remove cells completely covered by land)
-# Make sure same CRS
-# Load land:
-FL_outline <- st_read("Data layers/FL_Outlines/FL_Outlines.shp")
-plot(FL_outline)
-FL_outline <- st_transform(FL_outline, st_crs(final_data_raw))
-#
-# Determine HSM polygons covered by land polygons
-covered_mat <- st_covered_by(final_data_raw, FL_outline, sparse = FALSE)
-#
-# Identify rows where polygon is covered by ANY land polygon
-covered_any <- apply(covered_mat, 1, any)
-#
-# Keep only those NOT fully covered
-final_data <- final_data_raw[!covered_any, ]
-#
-# Check final area coverage
-ggplot()+
-  geom_sf(data = final_data, aes(color = HSM_f))+
-  scale_color_viridis_c(limits = c(0,1))
- #
-#
-#
-summary(final_data$HSMgrp) %>%
-  as.data.frame() %>%
-  mutate(Pct = round((./nrow(final_data))*100,2))
-#
-final_data %>% st_drop_geometry() %>%
-  group_by(HSMgyr) %>%
-  summarise(
-    n = n(),
-    min = min(HSM_f, na.rm = TRUE),
-    max = max(HSM_f, na.rm = TRUE),
-    mean = mean(HSM_f, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  mutate(Pct = round((n/nrow(final_data))*100,2))
-#
-#
-#
-#
-#Jenks breaks summary:
-table(
-  cut(final_data$HSM_f, breaks = jenks_breaks, include.lowest = TRUE),
-  useNA = "ifany"
-)
-jenks.tests(classIntervals(final_data$HSM_f, style = "fixed", fixedBreaks = jenks_breaks))
-#
-(jb_plot <- ggplot(final_data, aes(x = HSM_f)) +
-    geom_histogram(fill = "gray50", color = "black", bins = 30,  center = 0.05) +
-    geom_vline(xintercept = jenks_breaks, linetype = "dashed", linewidth = 1, color = "red") +
-    ggrepel::geom_text_repel(data = data.frame(x = jenks_breaks, y = max(hist(final_data$HSM_f, plot = FALSE)$counts-20000)), #-300000, 1000
-                             aes(x = x, y = y, label = round(x, 2)), color = "red", angle = 0, direction = "y", 
-                             nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
-                             segment.color = NA)+
-    #annotate("text", x = jenks_breaks, y = 0, label = round(jenks_breaks, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
-    labs(
-      title = "Jenks Breakpoints Overlay",
-      x = "HSM score",
-      y = "Count"
-    ) +
-    base_theme + plot_theme +
-   scale_y_continuous(expand = c(0,0), limits = c(0, 400000), breaks = seq(0, 400000, 200000), labels = scales::label_comma())+ #1250000, 20000 
-    scale_x_continuous(limits = c(0,1), expand = c(0,0.0025)))
-#
-ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_jb_hist.png"),
-  plot = jb_plot,
-  width = 9,
-  height = 5,
-  units = "in",
-  dpi = 300 # Use 300 dpi for high quality
-)
-#
-#
-summary(final_data$HSM_q4)
-(temp_cuts <- final_data %>%
-    st_drop_geometry() %>%
-    group_by(HSM_q4) %>%
-    summarise(
-      n = n(),
-      min = min(HSM_f, na.rm = TRUE),
-      max = max(HSM_f, na.rm = TRUE),
-      mean = mean(HSM_f, na.rm = TRUE),
-      .groups = "drop"
-    ))
-#
-(q4_plot <- ggplot(final_data, aes(HSM_f)) +
-    geom_histogram(bins = 40, fill = "grey50", color = "black") +
-    geom_vline(data = temp_cuts, aes(xintercept = min), linetype = "dashed", linewidth = 1, color = "red") +
-    ggrepel::geom_text_repel(data = data.frame(x = temp_cuts$min, y = max(hist(final_data$HSM_f, plot = FALSE)$counts)-20000), #300000, 1000
-                             aes(x = x, y = y, label = round(x, 3)), color = "red", angle = 0, direction = "y", 
-                             nudge_y = max(hist(final_data$HSM_f, plot = FALSE)$counts) * 0.05, hjust = -0.25, vjust = 0.5,
-                             segment.color = NA)+
-    #annotate("text", x = temp_cuts$min, y = 0, label = round(temp_cuts$min, 2), hjust = -0.15, vjust = -0.25, color = "red", size = 5) +
-    labs(
-      title = "Quartile Bins Overlay",
-      x = "HSM score",
-      y = "Count"
-    ) +
-    base_theme + plot_theme +
-    scale_y_continuous(expand = c(0,0), limits = c(0, 400000), breaks = seq(0, 400000, 200000), labels = scales::label_comma())+ #1250000, 20000
-    scale_x_continuous(limits = c(0, 1.0), expand = c(0,0.0015)))
-#
-#
-ggsave(
-  filename = paste0(Site_Code,"_", Version, "/Output/Figure files/",Site_Code,"_", Version,"_final_q4hist.png"),
-  plot = q4_plot,
-  width = 9,
-  height = 5,
-  units = "in",
-  dpi = 300 # Use 300 dpi for high quality
-)
-#
-#
-#
-#
-HSMfuncGT <- new.env()
-source("HSM code/Functions/HSM_gt_model_functions.R", local = HSMfuncGT)
-# output_type = c(all, data, scores, model)
-HSMfuncGT$save_final_model_output(data = final_data, output_type = "all")
-#
-#Output of just model scores
-HSMfuncGT$save_model_scores(data = final_data)
-#
-## Once saved, code #5 for maps of data and model output.
 #
 #
 #

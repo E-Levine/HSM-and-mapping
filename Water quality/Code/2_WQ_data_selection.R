@@ -19,15 +19,15 @@ source("Code/WQ_functions.R")
 #
 #
 ###Setup - specs####
-Site_code <- c("WC")    #Two letter estuary code
+Site_code <- c("SA")    #Two letter estuary code
 Version <- c("v1")      #Version of HSM
 Data_source <- c("Portal") #Source of data: "Portal", "WA", "FIM"
 #
 #Number of files to combine (Enter 1 if only one file. Current max is 3 files):
 Filtered_files <- c(1)
 #Years of possible data (from file names). Start and end years required for each file. Use 'NA" for any unused files:
-Start_year <- c("2020")
-End_year <- c("2024")
+Start_year <- c("2019")
+End_year <- c("2025")
 Start_year_2 <- c(NA)
 End_year_2 <- c(NA)
 Start_year_3 <- c(NA)
@@ -183,17 +183,23 @@ Modified_data(Selection_Method, ProjectCode = "WCHSM")
 #
 ####Output all stations possible####
 #
-All_Stations <- output_all(WQ_selected, WidgetSave = "N")
+# Limit to stations "IN" Kml area
+WQ_selected_f <- rbind(WQ_selected %>%
+  filter(KML == "In"),
+  WQ_selected %>%
+    filter(MonitoringLocationIdentifier == c("21FLSABR_WQX-BAY-ST-EWBAY-7")))
+#
+All_Stations <- output_all(WQ_selected_f, WidgetSave = "N")
 All_Stations$AllStations
 All_Stations$WQStations
 #
 # List of any stations to include or exclude from selection: need station ID within ""
-To_include <- data.frame(StationID = c("21FLCOSP_WQX-32-03", "21FLHILL_WQX-28", "21FLHILL_WQX-25"))
-To_exclude <- data.frame(StationID = c("21FLTPA_WQX-G5SW0169", "21FLPDEM_WQX-24-07", "21FLTPA_WQX-G5SW0187", "21FLPDEM_WQX-24-01", "21FLTPA_WQX-G5SW0152", "21FLPDEM_WQX-19-02"))
+To_include <- NA# data.frame(StationID = c("21FLSABR_WQX-BAY-ST-EWBAY-7"))
+To_exclude <- NA# data.frame(StationID = c("21FLTPA_WQX-G5SW0169", "21FLPDEM_WQX-24-07", "21FLTPA_WQX-G5SW0187", "21FLPDEM_WQX-24-01", "21FLTPA_WQX-G5SW0152", "21FLPDEM_WQX-19-02"))
 #
 ##Run to include and/or exclude based on lines above
 #ProjectCode = 3-4 letter code to specify project data gathered for: CAGE, TBWQ (general)
-finalize_data(To_include, To_exclude, ProjectCode = "SLAllWQ")
+finalize_data(To_include, To_exclude, ProjectCode = "SAHSM")
 #
 # 
 #

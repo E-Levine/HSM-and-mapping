@@ -64,8 +64,8 @@ save_curve_output()
 #
 #
 ###Optional: use curves from other project saved locally:
-copy_curve_summary("US", "v1")
-copy_curve_files("US", "v1")
+copy_curve_summary("PE", "v1")
+copy_curve_files("PE", "v1")
 #
 #
 # Presentation formatting ----

@@ -20,20 +20,20 @@ source("Code/WQ_functions.R")
 ####Compilation setup####
 #
 #Set parameters - run for each data source type
-Site_code <- c("WC")       #Two letter estuary code
+Site_code <- c("SA")       #Two letter estuary code
 Version <- c("v1")         #Version ID for the model data will be used in
 Data_source <- c("Portal") #Source of data: "Portal", "WA" , or "FIM"
 #
 #Years of data (used in file names):
-Start_year <- c("2020")
-End_year <- c("2024")
+Start_year <- c("2019")
+End_year <- c("2025")
 #
 #If working with FIM data: Skip to "Estuary area", then to Mapping of stations 
 #
 ####Load files####
 #
 ##Read in raw data files
-read_raw_data_files(Site_code, Data_source, list(c(2020, 2024)))
+read_raw_data_files(Site_code, Data_source, list(c(2019, 2025)))
 #
 #
 ##Estuary area  

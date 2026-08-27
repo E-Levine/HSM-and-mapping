@@ -33,21 +33,27 @@ library(dataRetrieval)
 #Parameter code: 00060 = mean daily discharge, 00061 = instantaneous discharge
 # 00480 = Salinity, 00095 = Specific conductance
 #Statistic_id: 00003 = Mean
-(temp_data <- read_waterdata_daily(monitoring_location_id = c("USGS-02277100", "USGS-02277110"),
-                                  parameter_code = c("00480", "00010", "90860"),
+Site <- c("USGS-02359500", "USGS-295323085151700", 
+          "USGS-295308085143700", "USGS-301116085443000")
+#
+(temp_locations <- read_waterdata_monitoring_location(Site))
+#
+(temp_data <- read_waterdata_daily(monitoring_location_id = Site, 
+                                  parameter_code = c("00060", "00061"),
                                   properties = c("value", "statistic_id", "monitoring_location_id", "parameter_code", "time", "unit_of_measure"),
                                   skipGeometry = TRUE))
 #"USGS-02310700", "USGS-02313700", "USGS-02313230", "USGS-02313250", "USGS-02310750", "USGS-285447082445100", "USGS-285531082412600", "USGS-02310752", "USGS-02313272", "USGS-02310712", "USGS-284506082435801")
 unique(temp_data$parameter_code)
 #
-WQ$clean_save_usgs_data(temp_data, "1965-01-01", "2025-12-31", "WQ")
+WQ$clean_save_usgs_data(temp_data, temp_locations, "1965-01-01", "2025-12-31", "WQ")
 #
 #
 #
 ### Data from cleaned Storet files ####
-# Name of file to use
+# Name of file to use, Raw or Compiled folder to look in
 #
-WQ$clean_save_existing_data("SS_Portal_combined_filtered_2020_2024", "Salinity")
+WQ$clean_save_existing_data("SA_Portal_SAHSM_2020_2024", "Salinity", 
+                            RawOrCompiled = "Compiled")
 #
 #
 #
@@ -55,27 +61,45 @@ WQ$clean_save_existing_data("SS_Portal_combined_filtered_2020_2024", "Salinity")
 ### Data gather and cleaning####
 ## Load data (logger_flow and logger_salinity files) requires xlsx files
 # Make sure only desired logger data files are in the main folder
-WQ$load_WQ_data()
+WQ$load_WQ_data(loadFromProject = "Yes")
 #
 ## Clean data
 #
 # If many points, can simplify into groups with averaged values
+salinity_raw <- salinity_raw %>% 
+  left_join(Loggers %>% dplyr::select(-DataType, -Site), by = c("STATION" = "StationID"))
 # library(geosphere, igraph, dplyr, leaflet)
 # df should have columns: ID, Latitude, Longitude, Value
 # distance_threshold in meters (e.g., 2000)
-sali_grps <- WQ$cluster_points(salinity_raw, 7500)
+sali_grps <- WQ$cluster_points(salinity_raw, 2500)
 # View the map: sali_grps$map
 # Access modified data: sali_grps$data
 # Access group summaries: sali_grps$groups
 #
 # Add group station locations to Loggers data frame in R and Excel data file
 updated_Loggers <- WQ$update_logger_locations(sali_grps$locations)
-Loggers <- updated_Loggers
+Loggers <- bind_rows(Loggers,
+                     updated_Loggers) %>%
+  distinct()
 #
-#
+# Clean conductance data if needed:
 # If working with conductance data from USGS loggers, "load"USGS-R/CSI" package is used:
+#usethis::create_github_token(); gitcreds::gitcreds_set()
 devtools::install_github("USGS-R/CSI")
 library("CSI")
+
+sal_raw_temp <- sali_grps$data %>% #salinity_raw %>% 
+  # Limit to conductance data
+  #filter(parameter_code == "00095") %>%
+  # Add Year-Month column
+  mutate(Year = format(TIMESTAMP, "%Y"),
+         Month = format(TIMESTAMP, "%m")) %>%
+  dplyr::select(Year, Month, STATION, VALUE)
+(salinity_raw <- sal_raw_temp %>%
+    dplyr::group_by(STATION) %>%
+    dplyr::group_modify(~ CSIspec_con(.x)) %>%
+    dplyr::ungroup() %>%
+    mutate(PARAMETER = "Salinity"))
 #
 #
 #
@@ -116,22 +140,10 @@ rain_sum <- rain_raw %>%
 unique(rain_sum$Station); unique(rain_sum$Name)
 #
 #
-# Clean conductance data if needed:
-sal_raw_temp <- salinity_raw %>% 
-  # Limit to conductance data
-  filter(parameter_code == "00095") %>%
-  # Add Year-Month column
-  mutate(Year = format(TIMESTAMP, "%Y"),
-         Month = format(TIMESTAMP, "%m")) %>%
-  dplyr::select(Year, Month, STATION, VALUE)
-(salinity_raw <- sal_raw_temp %>%
-  dplyr::group_by(STATION) %>%
-  dplyr::group_modify(~ CSIspec_con(.x)) %>%
-  dplyr::ungroup() %>%
-  mutate(PARAMETER = "Salinity"))
+#
 #
 # Mean daily salinity for each logger: either salinity_raw if no grouping, sali_grps$data if grouped
-salinity_ave <- salinity_raw %>% #sali_grps$data %>%  
+salinity_ave <- sali_grps$data %>%  #salinity_raw %>% #
   rename_with(~str_to_title(.x)) %>%
   {# Rename Timestamp to Date or create Date from Year and Month
     if ("Timestamp" %in% names(.)) {
@@ -205,8 +217,11 @@ ggplot()+
   #geom_sf(data = Site_Grid, fill = NA)+
   geom_sf(data = FL_outline)+
   #Individual station points if grouping:
-  #geom_point(data = salinity_raw, aes(Longitude, Latitude),  color = "#666666", shape = 8, size = 4)+
-  geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType, shape = DataType), alpha = 0.8, size = 4)+
+  geom_point(data = Loggers %>% filter(DataType == "Flow"), aes(Longitude, Latitude), 
+             color = "black", size =4, alpha = 0.6)+
+  geom_point(data = Loggers %>% dplyr::filter(grepl("SA", StationID)), aes(Longitude, Latitude),  
+             color = "coral", size = 3.5, shape = 17, alpha = 0.7)+
+  #geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType, shape = DataType), alpha = 0.6, size = 4)+
   theme_classic()+
   scale_color_manual(values = c("#333333", "darkblue", "#D55E00"))+
   scale_shape_manual(values = c(16, 17, 15))+
@@ -275,6 +290,19 @@ larvae <- rbind(
   WQ$flow_at_salinity_hyp2(models$models, 10.01, models$data_lookup) %>% mutate(Sal = "min", Flow = "max"), 
   WQ$flow_at_salinity_hyp2(models$models, 31.49, models$data_lookup) %>% mutate(Sal = "max", Flow = "min")) %>% mutate(Type = "Larave")
 #
+# Plot fit - option to add green fill over optimal salinity range and/or flow range
+names(models$models)
+WQ$ggplot_hyperbolic_fit(models$data_lookup, models$models, 
+                         names(models$models)[22], 
+                         "Mean_Flow", "Mean_Salinity", 
+                         Salinity_min = 11.98, Salinity_max = 38.95)
+#
+#ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+#       filename = paste("Flow_salinity_curve_", "WI5_3250",".tiff", sep = ""), dpi = 300)
+#
+#ggplot_hyperbolic_fit(monthly_data, fit_sp, "Mean_Flow", "Mean_Salinity",
+ #                     Salinity_min = 11.98, Salinity_max = 35.98,
+  #                    Flow_min = 0, Flow_max = 907.26)
 #
 #
 #
@@ -451,8 +479,8 @@ AOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, 
 WQ$plot_flow_interp(AOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".tiff", sep = ""), 
-       dpi = 400)
+       filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".jpg", sep = ""), 
+       dpi = 300)
 #
 #
 #
@@ -470,13 +498,12 @@ LOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, 
 WQ$plot_flow_interp(LOP_idw_data, "meanOptimal")
 #
 ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".tiff", sep = ""), 
-       dpi = 400,
-       device = ragg::agg_tiff,
+       filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".jpg", sep = ""), 
+       dpi = 300,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 7,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 #
 #
 #
@@ -501,25 +528,23 @@ p <- WQ$plot_flow_interp(AnonSub_idw_data, "meanDays")
 #
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".tiff", sep = ""), 
-       dpi = 450,
-       device = ragg::agg_tiff,
+       filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".jpg", sep = ""), 
+       dpi = 300,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 #
 p <- WQ$plot_flow_interp(AnonSuper_idw_data, "meanDays")
 #
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".tiff", sep = ""), 
-       dpi = 450,
-       device = ragg::agg_tiff,
+       filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".jpg", sep = ""), 
+       dpi = 300,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 #
 #
 #
@@ -546,27 +571,25 @@ p <- WQ$plot_flow_interp(LnonSub_idw_data, "meanDays")
 #
 ggsave(plot = p,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".tiff", sep = ""), 
-       dpi = 450,
-       device = ragg::agg_tiff,
+       filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".jpg", sep = ""), 
+       dpi = 300,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 #
 p <- WQ$plot_flow_interp(LnonSuper_idw_data, "meanDays")
 p_fast <- p +
-  ggrastr::rasterise(geom_sf(), dpi = 450)
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
 ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".tiff", sep = ""), 
-       dpi = 450,
-       device = ragg::agg_tiff,
+       filename = paste("Flow_salinity_curve_", "larval_super_meanDays",".jpg", sep = ""), 
+       dpi = 300,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 #
 #
 ##
@@ -586,31 +609,29 @@ Outlier2_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_s
 #
 p <- WQ$plot_flow_interp(Outlier_idw_data, "meanOut1")
 p_fast <- p +
-  ggrastr::rasterise(geom_sf(), dpi = 450)
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
-ggsave(plot = p,
+ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "Outlier1",".tiff", sep = ""), 
-       dpi = 450,
-       device = ragg::agg_tiff,
+       filename = paste("Flow_salinity_curve_", "Outlier1",".jpg", sep = ""), 
+       dpi = 300,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 #
 p <- WQ$plot_flow_interp(Outlier2_idw_data, "meanOut2")
 p_fast <- p +
-  ggrastr::rasterise(geom_sf(), dpi = 450)
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
 ggsave(plot = p, 
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
-       filename = paste("Flow_salinity_curve_", "Outlier2",".tiff", sep = ""), 
-       dpi = 450,
-       device = ragg::agg_tiff,
+       filename = paste("Flow_salinity_curve_", "Outlier2",".jpg", sep = ""), 
+       dpi = 300,
+       device = ragg::agg_jpeg,
        width = 8,
        height = 8,
-       units = "in",
-       compression = "lzw")
+       units = "in")
 
 #
 #
@@ -653,12 +674,12 @@ write_csv_chunks <- function(
   invisible(length(split_df))
 }
 #
-(temp_data <- st_drop_geometry(AOP_idw_data) %>% #UPDATE WITH NEW DATA
+(temp_data <- st_drop_geometry(Outlier2_idw_data) %>% #UPDATE WITH NEW DATA
   as.data.frame() %>%
   dplyr::rename("Long_DD_X" = Longitude, "Lat_DD_Y" = Latitude) %>%
   mutate(Long_DD_X = as.numeric(Long_DD_X),
          Lat_DD_Y = as.numeric(Lat_DD_Y),
-         meanOptimal = as.numeric(meanOptimal), #UPDATE WITH NEW DATA
+         meanOut2 = as.numeric(meanOut2), #UPDATE WITH NEW DATA
          dplyr::across(
            where(is.character),
            ~ na_if(trimws(.x), "")
@@ -667,8 +688,8 @@ write_csv_chunks(
   df = temp_data,
   out_dir = paste0("../",Site_code, "_", Version,"/Output/Data files/", #Save location
                    #File name
-                   paste0(Site_code, "_", paste("flow_optimal_adult"))), #UPDATE WITH NEW DATA
-  prefix = "flow_optimal_adult" #UPDATE WITH NEW DATA
+                   paste0(Site_code, "_", paste("flow_outlier2"))), #UPDATE WITH NEW DATA
+  prefix = "flow_outlier2" #UPDATE WITH NEW DATA
 )
 #
 #

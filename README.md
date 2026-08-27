@@ -72,8 +72,10 @@ Location: HSM code; Project: HSM_and_mapping
 ### 3_HSM_Creation  
 Location: HSM_Code; Project: HSM_and_mapping
 - Once data has been gathered and curves have been established, use "3_HSM_Creation" to load the setup information and assign site and section designations to model grid area.
-- Data polygon layers can be assigned to model grid area using ... *In progress*
-- This process will be established to be used in place of spatial joins from other GIS software programs. 
+- Data polygon layers can be assigned to model grid area using *apply_polygon_overlap()* which assigns the specified column polygon values to grid cells and allows for a user-specified fill value for non-overlapping areas.
+- Data polygon buffer zones can be established and scored or valued using *apply_distance_buffers()* which creates buffers of user-specified size(s) around the polygon data and values the grid cell based on the buffer if falls within.
+- An additional function, *split_column_by_value()*, is provided to divide a column into multiple columns using column values such that a starting column with 3 values will result in 3 individual columns each containing the values for one of the three original values.
+- This process has been established to be used in place of spatial joins from other GIS software programs. 
 *In progress*
 
 ### 4_HSM_scoring_output
