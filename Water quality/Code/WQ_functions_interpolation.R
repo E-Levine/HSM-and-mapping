@@ -302,14 +302,24 @@ load_site_grid <- function(StateGrid, SiteArea, Alt_Grid = NA) {
     warning("Grid and SiteArea have different CRS; transforming SiteArea to match grid CRS.")
     SiteArea <- st_transform(SiteArea, st_crs(PicoGrid))
   }
+  #
+  # Columns required for the combined grid
+  required_cols <- c("PGID", "Lat_DD_Y", "Long_DD_X", "MGID", "Lat_DD_Y_M", "Long_DD_X_",
+                     "State_Ref", "Ref_Region", "FWC_Region", "StatePlane", "UTM_Zone",
+                     "County", "Shape_Leng", "Shape_Area", "geometry")
+  #
   # Filter by intersection
   PicoGrid_clipped <- PicoGrid[lengths(st_intersects(PicoGrid, SiteArea)) > 0, ]
+  PicoGrid_clipped <- PicoGrid[, required_cols]
+  PicoGrid_clipped$County <- as.character(PicoGrid_clipped$County)
   if (nrow(PicoGrid_clipped) == 0) {
     warning("No intersections found for primary grid.")
   }
   
   if (!is.na(Alt_Grid)) {
     Alt_PicoGrid_clipped <- Alt_PicoGrid[lengths(st_intersects(Alt_PicoGrid, SiteArea)) > 0, ]
+    Alt_PicoGrid_clipped <- Alt_PicoGrid_clipped[, required_cols]
+    Alt_PicoGrid_clipped$County <- as.character(Alt_PicoGrid_clipped$County)
     if (nrow(Alt_PicoGrid_clipped) == 0) {
       warning("No intersections found for alternative grid.")
     }

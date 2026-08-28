@@ -880,6 +880,11 @@ location_boundary <- function(SelectionType, SelectedStations, BoundingBox, Proj
       WQ_locations_t <- st_as_sf(Filtered_data, coords = c(9,8), crs = "+proj=longlat +datum=WGS84 +no_defs +type=crs") %>% st_transform(crs = st_crs(Estuary_area))
       Estuary_points <- WQ_locations_t[st_within(WQ_locations_t, Estuary_area, sparse = FALSE), ]
       WQ_stations_final <- Estuary_points
+      ##Get coordinates into columns
+      WQ_stations_final_df <- WQ_stations_final %>% st_transform(crs = "+proj=longlat +datum=WGS84 +no_defs +type=crs") %>%
+        mutate(Longitude = st_coordinates(.)[,1],
+               Latitude = st_coordinates(.)[,2]) %>% dplyr::select(-geometry)
+      
       if(Data_source == "Portal"){
         (map <- tmap_leaflet(tm_shape(Estuary_area) + tm_polygons(col = "lightblue")+ #Estuary area
                                tm_shape(FL_outline) + tm_borders()+ #Outline of shoreline
@@ -887,7 +892,7 @@ location_boundary <- function(SelectionType, SelectedStations, BoundingBox, Proj
                                tm_shape(Estuary_points,  "Selected stations") + tm_dots(col = "red", size = 0.75, legend.show = TRUE, popup.vars = c("StationID" = "MonitoringLocationIdentifier"))+
                                tm_layout(main.title = paste(Site_code, Data_source, "WQ Stations", Begin_data, "-", End_data, sep = " ")))) #Selected stations and buffer area
       }
-      return(list(BoundedStations = WQ_stations_final, BoundedMap = map))
+      return(list(BoundedStations = WQ_stations_final_df, BoundedMap = map))
     } else {
       #Other selection types
       paste("Code needs to be updated.")}

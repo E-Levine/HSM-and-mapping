@@ -17,7 +17,7 @@ pacman::p_load(plyr, tidyverse, data.table,#Df manipulation, basic summary
                install = TRUE) 
 #
 #
-Site_code <- c("SA")       #Two letter estuary code
+Site_code <- c("TB")       #Two letter estuary code
 Version <- c("v1")         #For saving plots
 Start_year <- c("2020")
 End_year <- c("2024")
@@ -33,8 +33,9 @@ library(dataRetrieval)
 #Parameter code: 00060 = mean daily discharge, 00061 = instantaneous discharge
 # 00480 = Salinity, 00095 = Specific conductance
 #Statistic_id: 00003 = Mean
-Site <- c("USGS-02359500", "USGS-295323085151700", 
-          "USGS-295308085143700", "USGS-301116085443000")
+Site <- c("USGS-02308950", "USGS-02307780", "USGS-02307674", "USGS-02309200", "USGS-02307498", 
+          "USGS-02307000", "USGS-02306647", "USGS-023066535", "USGS-02306000", "USGS-02301745",
+          "USGS-02301738", "USGS-02300700", "USGS-02300500", "USGS-02300082")
 #
 (temp_locations <- read_waterdata_monitoring_location(Site))
 #
@@ -52,7 +53,7 @@ WQ$clean_save_usgs_data(temp_data, temp_locations, "2020-01-01", "2024-12-31", "
 ### Data from cleaned Storet files ####
 # Name of file to use, Raw or Compiled folder to look in
 #
-WQ$clean_save_existing_data("SA_Portal_SAHSM_2020_2024", "Salinity", 
+WQ$clean_save_existing_data("TB_Portal_estuary_area_TBHSM_2020_2024", "Salinity", 
                             RawOrCompiled = "Compiled")
 #
 #
@@ -67,11 +68,11 @@ WQ$load_WQ_data(loadFromProject = "Yes")
 #
 # If many points, can simplify into groups with averaged values
 salinity_raw <- salinity_raw %>% 
-  left_join(Loggers %>% dplyr::select(-DataType, -Site), by = c("STATION" = "StationID"))
+  left_join(Loggers %>% dplyr::select(-DataType, -Site), by = c("STATION" = "StationID", "Latitude" = "Latitude", "Longitude" = "Longitude"))
 # library(geosphere, igraph, dplyr, leaflet)
 # df should have columns: ID, Latitude, Longitude, Value
 # distance_threshold in meters (e.g., 2000)
-sali_grps <- WQ$cluster_points(salinity_raw, 2500)
+sali_grps <- WQ$cluster_points(salinity_raw, 3000)
 # View the map: sali_grps$map
 # Access modified data: sali_grps$data
 # Access group summaries: sali_grps$groups
@@ -157,8 +158,8 @@ plot(Site_area[2])
 FL_outline <- st_read("../Data layers/FL_Outlines/FL_Outlines.shp")
 plot(FL_outline)
 ##Get Site area
-State_Grid <- c("C1") #E2, H4
-Alt_Grid <- c("C2")
+State_Grid <- c("F4") #E2, H4
+Alt_Grid <- c("F3")
 Site_Grid <- WQ2$load_site_grid(State_Grid, Site_area, Alt_Grid = Alt_Grid)
 Site_grid_sf <- st_as_sf(Site_Grid)
 #
@@ -170,7 +171,7 @@ ggplot()+
   #Individual station points if grouping:
   geom_point(data = Loggers %>% filter(DataType == "Flow"), aes(Longitude, Latitude), 
              color = "black", size =4, alpha = 0.6)+
-  geom_point(data = Loggers %>% dplyr::filter(grepl("SA", StationID)), aes(Longitude, Latitude),  
+  geom_point(data = Loggers %>% dplyr::filter(grepl("TB", StationID)), aes(Longitude, Latitude),  
              color = "coral", size = 3.5, shape = 17, alpha = 0.7)+
   #geom_point(data = Loggers, aes(Longitude, Latitude,  color = DataType, shape = DataType), alpha = 0.6, size = 4)+
   theme_classic()+
@@ -180,7 +181,8 @@ ggplot()+
         axis.title = element_text(size = 12, color = "black"), 
         axis.text =  element_text(size = 10, color = "black"))+
   coord_sf(xlim = c(st_bbox(Site_area)["xmin"]-0.05, st_bbox(Site_area)["xmax"]+0.15),
-           ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.05))
+           ylim = c(st_bbox(Site_area)["ymin"]-0.05, st_bbox(Site_area)["ymax"]+0.05))+
+  theme(axis.text.x = element_text(angle = 40, vjust = 0.5))
 #Save 800*auto, Output/Map files/Flow_sal_loggers
 #
 #
@@ -376,9 +378,12 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = A_optimal[,c("Longitude","Lati
 #
 AOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
 #
-WQ$plot_flow_interp(AOP_idw_data, "meanOptimal")
+p0 <- WQ$plot_flow_interp(AOP_idw_data, "meanOptimal")
+p_fast <- p0 +
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+ggsave(plot = p_fast,
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "adult_meanOptimal",".jpg", sep = ""), 
        dpi = 300)
 #
@@ -395,9 +400,12 @@ Site_data_spdf <- SpatialPointsDataFrame(coords = L_optimal[,c("Longitude","Lati
 #
 LOP_idw_data <- WQ$flow_idw_interpolation(Site_data_spdf, grid, Site_Grid_spdf, "meanOptimal")
 #
-WQ$plot_flow_interp(LOP_idw_data, "meanOptimal")
+p0 <- WQ$plot_flow_interp(LOP_idw_data, "meanOptimal")
+p_fast <- p0 +
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
-ggsave(path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
+ggsave(plot = p_fast,
+       path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "larval_meanOptimal",".jpg", sep = ""), 
        dpi = 300,
        device = ragg::agg_jpeg,
@@ -425,8 +433,10 @@ AnonSuper_idw_data <- WQ$flow_idw_interpolation(
   grid, Site_Grid_spdf, "meanDays")
 #
 p <- WQ$plot_flow_interp(AnonSub_idw_data, "meanDays")
+p_fast <- p +
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
-ggsave(plot = p,
+ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "adult_sub_meanDays",".jpg", sep = ""), 
        dpi = 300,
@@ -436,8 +446,10 @@ ggsave(plot = p,
        units = "in")
 #
 p <- WQ$plot_flow_interp(AnonSuper_idw_data, "meanDays")
+p_fast <- p +
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
-ggsave(plot = p,
+ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "adult_super_meanDays",".jpg", sep = ""), 
        dpi = 300,
@@ -468,8 +480,10 @@ LnonSuper_idw_data <- WQ$flow_idw_interpolation(
 #
 #
 p <- WQ$plot_flow_interp(LnonSub_idw_data, "meanDays")
+p_fast <- p +
+  ggrastr::rasterise(geom_sf(), dpi = 300)
 #
-ggsave(plot = p,
+ggsave(plot = p_fast,
        path = paste0("../", Site_code, "_", Version, "/Data/HSI curves/"), 
        filename = paste("Flow_salinity_curve_", "larval_sub_meanDays",".jpg", sep = ""), 
        dpi = 300,

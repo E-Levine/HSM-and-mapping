@@ -19,15 +19,15 @@ source("Code/WQ_functions.R")
 #
 #
 ###Setup - specs####
-Site_code <- c("SA")    #Two letter estuary code
+Site_code <- c("TB")    #Two letter estuary code
 Version <- c("v1")      #Version of HSM
 Data_source <- c("Portal") #Source of data: "Portal", "WA", "FIM"
 #
 #Number of files to combine (Enter 1 if only one file. Current max is 3 files):
 Filtered_files <- c(1)
 #Years of possible data (from file names). Start and end years required for each file. Use 'NA" for any unused files:
-Start_year <- c("2019")
-End_year <- c("2025")
+Start_year <- c("2020")
+End_year <- c("2024")
 Start_year_2 <- c(NA)
 End_year_2 <- c(NA)
 Start_year_3 <- c(NA)
@@ -173,7 +173,7 @@ To_exclude <- data.frame(StationID = c("21FLSFWM_WQX-18967", "	21FLSFWM_WQX-2822
 #
 ##Run to include/exclude stations as specified above and save output of final data:
 #Use same project code from above.
-Modified_data(Selection_Method, ProjectCode = "WCHSM")
+Modified_data(Selection_Method, ProjectCode = "TBHSM")
 #
 #
 #
